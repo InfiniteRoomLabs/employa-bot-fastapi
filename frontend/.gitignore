@@ -28,3 +28,10 @@ openapi.json
 /blob-report/
 /playwright/.cache/
 /playwright/.auth/
+
+# Storybook
+storybook-static
+*storybook.log
+
+# Vitest coverage
+/coverage/

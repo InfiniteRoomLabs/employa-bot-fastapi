@@ -1,0 +1,160 @@
+/* ============================================================
+   shadcn -> IRL token bridge
+   ------------------------------------------------------------
+   shadcn's generated CSS (src/styles/index.css) defines its own
+   semantic CSS variables (--background, --foreground, --primary,
+   --accent, --border, --ring, --radius, etc.) using neutral oklch
+   defaults. This file rewires every one of those variables so the
+   Tailwind utilities shadcn primitives consume (bg-primary,
+   text-foreground, ring-ring, ...) resolve through the Employa-Bot
+   design palette.
+
+   IMPORTANT design choice: shadcn's variable names collide with
+   several IRL semantic names (--accent, --border, --ring, --radius-*).
+   Chaining `--primary: var(--accent)` while also redeclaring
+   `--accent: var(--bg-subtle)` in the same block would cause
+   var(--primary) to resolve to bg-subtle, NOT lime, because CSS
+   variable lookup happens at use-time after the cascade settles.
+   To avoid that trap we reference IRL *palette* tokens directly
+   (--lime-300, --slate-50, --red-400, etc.) — these never collide
+   with shadcn names, so the indirection is unambiguous.
+
+   The IRL semantic tokens (--accent, --border, --ring, --radius-md)
+   were already clobbered by shadcn's init when it wrote index.css
+   in `:root`. Legacy `.btn--primary` and friends in app.css are
+   transitional and will be rebuilt on top of shadcn primitives in
+   Phase 7 — no attempt is made here to preserve them.
+
+   Import order in main.tsx MUST be:
+     1. tokens.css        (palette tokens: --lime-300, --slate-50, ...)
+     2. index.css         (shadcn defaults + @theme inline mappings)
+     3. shadcn-bridge.css (this file — rewrites shadcn defaults)
+     4. app.css           (legacy IRL component CSS)
+
+   When adding new shadcn primitives, do NOT introduce raw color
+   literals — keep using the Tailwind utility classes shadcn ships
+   with. They route through these variables.
+   ============================================================ */
+
+:root,
+:root[data-theme="light"] {
+  /* ----- Surfaces ----- */
+  --background: var(--canvas-50);
+  --foreground: var(--slate-900);
+
+  --card: #ffffff;
+  --card-foreground: var(--slate-900);
+
+  --popover: #ffffff;
+  --popover-foreground: var(--slate-900);
+
+  /* ----- Primary action (lime accent) ----- */
+  --primary: var(--lime-300);
+  --primary-foreground: var(--slate-950);
+
+  /* ----- Secondary surface (subtle panel) ----- */
+  --secondary: var(--slate-50);
+  --secondary-foreground: var(--slate-900);
+
+  /* ----- Muted (disabled fields, soft chips) ----- */
+  --muted: var(--slate-100);
+  --muted-foreground: var(--slate-600);
+
+  /*
+   * Design uses --accent as its lime brand token across atoms, badges,
+   * buttons, chips, bubbles, toasts, and stage steps. Keep that semantic
+   * in both modes -- shadcn primitives that consume `bg-accent` for hover
+   * surfaces become lime too, which is on-brand for this product.
+   */
+  --accent: var(--lime-300);
+  --accent-foreground: var(--slate-950);
+
+  /* ----- Destructive (red danger) ----- */
+  --destructive: var(--red-400);
+  --destructive-foreground: #ffffff;
+
+  /* ----- Borders + inputs ----- */
+  --border: var(--slate-200);
+  --input: var(--slate-200);
+
+  /* ----- Focus ring (color only; shadcn applies ring geometry) ----- */
+  --ring: var(--lime-300);
+
+  /* ----- Radius — design buttons are 6px ----- */
+  --radius: 0.375rem;
+
+  /* ----- Chart palette ----- */
+  --chart-1: var(--lime-500);
+  --chart-2: var(--sky-500);
+  --chart-3: var(--amber-500);
+  --chart-4: var(--red-500);
+  --chart-5: var(--slate-500);
+
+  /* ----- Sidebar (mirrors surface + accent vocab) ----- */
+  --sidebar: var(--slate-50);
+  --sidebar-foreground: var(--slate-900);
+  --sidebar-primary: var(--lime-300);
+  --sidebar-primary-foreground: var(--slate-950);
+  --sidebar-accent: #ffffff;
+  --sidebar-accent-foreground: var(--slate-900);
+  --sidebar-border: var(--slate-200);
+  --sidebar-ring: var(--lime-300);
+}
+
+/*
+ * Dark mode — shadcn toggles via the `.dark` class (see index.css
+ * @custom-variant dark). Our app drives theming with [data-theme="dark"]
+ * on <html>; cover both so the bridge works regardless of which
+ * selector wins.
+ */
+:root.dark,
+:root[data-theme="dark"],
+.dark {
+  --background: var(--slate-950);
+  --foreground: var(--slate-50);
+
+  --card: var(--slate-900);
+  --card-foreground: var(--slate-50);
+
+  --popover: var(--slate-900);
+  --popover-foreground: var(--slate-50);
+
+  --primary: var(--lime-300);
+  --primary-foreground: var(--slate-950);
+
+  --secondary: #10151b;
+  --secondary-foreground: var(--slate-50);
+
+  --muted: var(--slate-800);
+  --muted-foreground: var(--slate-300);
+
+  /* Same brand semantic in dark mode. Lime stays bright; on-accent text
+     stays the design's slate-950. */
+  --accent: var(--lime-300);
+  --accent-foreground: var(--slate-950);
+
+  --destructive: var(--red-400);
+  --destructive-foreground: #ffffff;
+
+  --border: var(--slate-800);
+  --input: var(--slate-800);
+
+  --ring: var(--lime-300);
+
+  --radius: 0.375rem;
+
+  --chart-1: var(--lime-400);
+  --chart-2: var(--sky-400);
+  --chart-3: var(--amber-400);
+  --chart-4: var(--red-400);
+  --chart-5: var(--slate-300);
+
+  --sidebar: #10151b;
+  --sidebar-foreground: var(--slate-50);
+  --sidebar-primary: var(--lime-300);
+  --sidebar-primary-foreground: var(--slate-950);
+  --sidebar-accent: var(--slate-900);
+  --sidebar-accent-foreground: var(--slate-50);
+  --sidebar-border: var(--slate-800);
+  --sidebar-ring: var(--lime-300);
+}

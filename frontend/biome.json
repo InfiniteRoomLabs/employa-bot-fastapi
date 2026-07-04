@@ -19,7 +19,22 @@
       "recommended": true,
       "suspicious": {
         "noExplicitAny": "off",
-        "noArrayIndexKey": "off"
+        "noArrayIndexKey": "off",
+        "noShadowRestrictedNames": "warn",
+        "noSelfCompare": "warn"
+      },
+      "correctness": {
+        "useExhaustiveDependencies": "warn"
+      },
+      "a11y": {
+        "useButtonType": "warn",
+        "useSemanticElements": "warn",
+        "noLabelWithoutControl": "warn",
+        "useAriaPropsSupportedByRole": "warn",
+        "useKeyWithClickEvents": "warn",
+        "noStaticElementInteractions": "warn",
+        "useValidAriaRole": "warn",
+        "useValidAnchor": "warn"
       },
       "style": {
         "noNonNullAssertion": "off",

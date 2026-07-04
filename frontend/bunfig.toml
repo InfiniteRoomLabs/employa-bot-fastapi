@@ -1,0 +1,19 @@
+# Project-local bun config for the Employa-Bot frontend.
+#
+# Intent: this dev app regularly adds/updates frontend deps, so frozen-lockfile
+# should not block local installs here.
+#
+# Caveat (bun 1.3.9): a local `frozenLockfile = false` does NOT override a
+# global `~/.bunfig.toml` that sets `frozenLockfile = true` -- the global value
+# wins. In practice `bun install` still succeeds under the global frozen policy
+# whenever the committed lockfile is already in sync with package.json (the
+# normal case). If you add a dependency and the global frozen gate rejects the
+# resulting lockfile change, generate the lockfile in an isolated HOME
+# (`HOME=$(mktemp -d) bun install`) or via your usual policy escape hatch, then
+# commit the updated root-level bun.lock.
+#
+# Supply-chain note: bun does NOT run postinstall scripts by default, and any
+# native build must be opted in per-package via `trustedDependencies` in
+# package.json. This file does not weaken those protections.
+[install]
+frozenLockfile = false
