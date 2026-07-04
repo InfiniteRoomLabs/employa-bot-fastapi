@@ -1,0 +1,664 @@
+# Operation-ownership manifest -- Slice 0 deliverable (mvp-plan.md, "Operation-ownership
+# manifest" bullet in Slice 0).
+#
+# Every operationId in mvp-api.yaml (89 total) appears exactly once below.
+# getCoachGreeting was removed from the contract entirely (founder-ruled
+# 2026-07-04, DECISIONS-NEEDED.md #5: canned client copy, not a backend op) --
+# it has no manifest entry.
+#
+# Fields per entry:
+#   slice:    owning slice number 1-6 per docs/mvp-plan.md "Build order"
+#   status:   planned | implemented | deferred (deferred ONLY for the 6 ids on the
+#             CONTRACT-NOTES.md DEFERRED list, post-ruling)
+#   ai:       true only for ops that invoke a model (frozen: runDeepMatchScore,
+#             deriveAccomplishmentFromProject; deferred-AI: proposeCoachEdit --
+#             see CONTRACT-NOTES.md AI-OPS table)
+#   consumer: frontend hook/screen from ../employa-bot-front-end/docs/wiring-guide.md,
+#             or "none (net-new)" for the one operation with no mockup consumer today
+#   tests:    required test tags. Baseline: every op = contract-fidelity. Id-addressed
+#             ops (cross-user access must 404) = + ownership-404. transitionApplication
+#             = + transition-matrix. AI ops = + ai-envelope, provider-unavailable.
+#             Error-specific envelopes (undo window, snapshot conflict, deep-score
+#             cap/queue) get their own tag. Deferred entries carry tests: [] -- no
+#             tests are required while an operation is not implementable; the tag set
+#             above applies once the founder rules and the op moves off deferred.
+#   reason:   deferred entries only -- founder-ruling reference into DECISIONS-NEEDED.md
+#
+# CI check: backend/tests/test_operation_manifest.py validates completeness
+# (every mvp-api.yaml operationId present exactly once, no orphans) and schema shape.
+
+operations:
+  # ---------------------------------------------------------- Slice 1: Foundation
+  getCurrentUser:
+    slice: 1
+    status: planned
+    ai: false
+    consumer: useCurrentUser / app shell + persona binding
+    tests: [contract-fidelity]
+
+  # ---------------------------------------------------------- Slice 2: Core loop
+  getSearches:
+    slice: 2
+    status: planned
+    ai: false
+    consumer: useSearches / searches screen
+    tests: [contract-fidelity]
+
+  createSearch:
+    slice: 2
+    status: planned
+    ai: false
+    consumer: createSearch / new-search flow (ADD-010)
+    tests: [contract-fidelity]
+
+  getSearch:
+    slice: 2
+    status: planned
+    ai: false
+    consumer: useSearch / search detail screen
+    tests: [contract-fidelity, ownership-404]
+
+  updateSearchCriteria:
+    slice: 2
+    status: planned
+    ai: false
+    consumer: updateSearchCriteria / search criteria edit form (ADD-006)
+    tests: [contract-fidelity, ownership-404]
+
+  getJobs:
+    slice: 2
+    status: planned
+    ai: false
+    consumer: getJobs / job detail lookups (ADR-006 canonical collection)
+    tests: [contract-fidelity]
+
+  getJobsInbox:
+    slice: 2
+    status: planned
+    ai: false
+    consumer: useJobsInbox / jobs inbox screen
+    tests: [contract-fidelity]
+
+  getJob:
+    slice: 2
+    status: planned
+    ai: false
+    consumer: getJob / job detail screen
+    tests: [contract-fidelity, ownership-404]
+
+  getShortlist:
+    slice: 2
+    status: planned
+    ai: false
+    consumer: useShortlist / shortlist screen
+    tests: [contract-fidelity]
+
+  addToShortlist:
+    slice: 2
+    status: planned
+    ai: false
+    consumer: addToShortlist / shortlist add action (ORI-014)
+    tests: [contract-fidelity]
+
+  dismissFromShortlist:
+    slice: 2
+    status: planned
+    ai: false
+    consumer: dismissFromShortlist / shortlist dismiss action
+    tests: [contract-fidelity, ownership-404]
+
+  getApplications:
+    slice: 2
+    status: planned
+    ai: false
+    consumer: useApplications / applications screen
+    tests: [contract-fidelity]
+
+  createApplication:
+    slice: 2
+    status: planned
+    ai: false
+    consumer: createApplication / job capture (manual/paste) flow (ORI-014)
+    tests: [contract-fidelity]
+
+  getApplication:
+    slice: 2
+    status: planned
+    ai: false
+    consumer: useApplication / application detail screen
+    tests: [contract-fidelity, ownership-404]
+
+  transitionApplication:
+    slice: 2
+    status: planned
+    ai: false
+    consumer: none (net-new) / application stage-tracker UI (adapter adds this fn)
+    tests: [contract-fidelity, ownership-404, transition-matrix]
+
+  getApplicationTimeline:
+    slice: 2
+    status: planned
+    ai: false
+    consumer: getApplicationTimeline / application timeline tab (TRK-118)
+    tests: [contract-fidelity, ownership-404]
+
+  dismissApplication:
+    slice: 2
+    status: planned
+    ai: false
+    consumer: dismissApplication / application dismiss action (D12)
+    tests: [contract-fidelity, ownership-404]
+
+  markWon:
+    slice: 2
+    status: planned
+    ai: false
+    consumer: markWon / application mark-won action (D18)
+    tests: [contract-fidelity, ownership-404]
+
+  undoMarkWon:
+    slice: 2
+    status: planned
+    ai: false
+    consumer: undoMarkWon / mark-won undo toast (D18)
+    tests: [contract-fidelity, ownership-404, undo-window-expired]
+
+  reactivateApplication:
+    slice: 2
+    status: planned
+    ai: false
+    consumer: reactivateApplication / archive reactivate action (D19)
+    tests: [contract-fidelity, ownership-404]
+
+  getInterviewRounds:
+    slice: 2
+    status: planned
+    ai: false
+    consumer: getInterviewRounds / interview rounds tab (TRK-117)
+    tests: [contract-fidelity, ownership-404]
+
+  patchInterviewRound:
+    slice: 2
+    status: planned
+    ai: false
+    consumer: patchInterviewRound / interview round edit (D3 / TRK-127)
+    tests: [contract-fidelity, ownership-404]
+
+  getArchive:
+    slice: 2
+    status: planned
+    ai: false
+    consumer: getArchive / archive screen (ORI-009)
+    tests: [contract-fidelity]
+
+  getArchiveCounts:
+    slice: 2
+    status: planned
+    ai: false
+    consumer: getArchiveCounts / archive badge counts
+    tests: [contract-fidelity]
+
+  # ---------------------------------------------------- Slice 3: Resumes + match
+  getResumes:
+    slice: 3
+    status: planned
+    ai: false
+    consumer: useResumes / resumes screen
+    tests: [contract-fidelity]
+
+  createResume:
+    slice: 3
+    status: planned
+    ai: false
+    consumer: createResume / resumes screen new-draft action (RES-019)
+    tests: [contract-fidelity]
+
+  getResume:
+    slice: 3
+    status: planned
+    ai: false
+    consumer: useResume / resume detail screen
+    tests: [contract-fidelity, ownership-404]
+
+  patchResume:
+    slice: 3
+    status: planned
+    ai: false
+    consumer: patchResume / resume editor (rename, body, scoring toggle)
+    tests: [contract-fidelity, ownership-404]
+
+  deleteResume:
+    slice: 3
+    status: planned
+    ai: false
+    consumer: deleteResume / resumes screen delete action (RES-019)
+    tests: [contract-fidelity, ownership-404, resume-lock-conflict]
+
+  duplicateResume:
+    slice: 3
+    status: planned
+    ai: false
+    consumer: duplicateResume / resumes screen duplicate action (RES-019)
+    tests: [contract-fidelity, ownership-404]
+
+  setDefaultResume:
+    slice: 3
+    status: planned
+    ai: false
+    consumer: setDefaultResume / resumes screen set-default action (RES-019)
+    tests: [contract-fidelity, ownership-404]
+
+  forkResumeAsDraft:
+    slice: 3
+    status: planned
+    ai: false
+    consumer: forkResumeAsDraft / job detail "tailor resume" action (CUR-020)
+    tests: [contract-fidelity, ownership-404]
+
+  getResumeUploads:
+    slice: 3
+    status: planned
+    ai: false
+    consumer: useResumeUploads / resume-lifecycle uploads screen (RES-030)
+    tests: [contract-fidelity]
+
+  getCareerHistory:
+    slice: 3
+    status: planned
+    ai: false
+    consumer: useCareerHistory / career history screen (RES-031)
+    tests: [contract-fidelity]
+
+  getResumeTemplates:
+    slice: 3
+    status: planned
+    ai: false
+    consumer: resume template picker (TPL-001)
+    tests: [contract-fidelity]
+
+  getResumeExports:
+    slice: 3
+    status: planned
+    ai: false
+    consumer: useResumeExports / resume exports screen (RES-037)
+    tests: [contract-fidelity]
+
+  getProjections:
+    slice: 3
+    status: planned
+    ai: false
+    consumer: useProjections / projections screen (RES-034)
+    tests: [contract-fidelity]
+
+  createProjection:
+    slice: 3
+    status: planned
+    ai: false
+    consumer: createProjection / projections screen create action (RES-034/035)
+    tests: [contract-fidelity]
+
+  assignTemplate:
+    slice: 3
+    status: planned
+    ai: false
+    consumer: assignTemplate / projection template assignment (TPL-002)
+    tests: [contract-fidelity, ownership-404]
+
+  renderExport:
+    slice: 3
+    status: planned
+    ai: false
+    consumer: renderExport / export render action (RES-037)
+    tests: [contract-fidelity]
+
+  regenerateExport:
+    slice: 3
+    status: planned
+    ai: false
+    consumer: regenerateExport / export regenerate action (RES-037 / D17)
+    tests: [contract-fidelity, ownership-404]
+
+  getResumeSnapshot:
+    slice: 3
+    status: planned
+    ai: false
+    consumer: getResumeSnapshot / application detail resume-snapshot tab (D10)
+    tests: [contract-fidelity, ownership-404, snapshot-conflict]
+
+  getMatchReport:
+    slice: 3
+    status: planned
+    ai: false
+    consumer: useMatchReport / match report screen
+    tests: [contract-fidelity]
+
+  previewDeepMatchScore:
+    slice: 3
+    status: planned
+    ai: false
+    consumer: previewDeepMatchScore / deep-score cost-preview dialog (D8b / D21)
+    tests: [contract-fidelity]
+
+  runDeepMatchScore:
+    slice: 3
+    status: planned
+    ai: true
+    consumer: runDeepMatchScore / deep-score action (D8 / D9a)
+    tests: [contract-fidelity, ownership-404, ai-envelope, provider-unavailable, cap-reached, rate-limited]
+
+  # ---------------------------------------------- Slice 4: Research + cost preview
+  deriveAccomplishmentFromProject:
+    slice: 4
+    status: planned
+    ai: true
+    consumer: deriveAccomplishmentFromProject / library project "derive accomplishment" action (ACC-002)
+    tests: [contract-fidelity, ownership-404, ai-envelope, provider-unavailable, rate-limited]
+
+  # ------------------------------------------------------------- Slice 5: Periphery
+  getNotifications:
+    slice: 5
+    status: planned
+    ai: false
+    consumer: useNotifications / notifications screen
+    tests: [contract-fidelity]
+
+  markNotificationRead:
+    slice: 5
+    status: planned
+    ai: false
+    consumer: markNotificationRead / notification row read action (ORI-012)
+    tests: [contract-fidelity, ownership-404]
+
+  markAllNotificationsRead:
+    slice: 5
+    status: planned
+    ai: false
+    consumer: markAllNotificationsRead / notifications mark-all action (ORI-012)
+    tests: [contract-fidelity]
+
+  getSettings:
+    slice: 5
+    status: planned
+    ai: false
+    consumer: useSettings / settings screen
+    tests: [contract-fidelity]
+
+  getUsageAggregate:
+    slice: 5
+    status: planned
+    ai: false
+    consumer: getUsageAggregate / settings usage tab
+    tests: [contract-fidelity]
+
+  requestDataExport:
+    slice: 5
+    status: planned
+    ai: false
+    consumer: requestDataExport / settings account data-export action
+    tests: [contract-fidelity]
+
+  deleteAccount:
+    slice: 5
+    status: planned
+    ai: false
+    consumer: deleteAccount / settings account delete action (ACC-danger)
+    tests: [contract-fidelity]
+
+  getContacts:
+    slice: 5
+    status: planned
+    ai: false
+    consumer: useContacts / library contacts screen
+    tests: [contract-fidelity]
+
+  createContact:
+    slice: 5
+    status: planned
+    ai: false
+    consumer: createContact / library contacts create (CON-001/002)
+    tests: [contract-fidelity]
+
+  getContact:
+    slice: 5
+    status: planned
+    ai: false
+    consumer: getContact / library contact detail
+    tests: [contract-fidelity, ownership-404]
+
+  updateContact:
+    slice: 5
+    status: planned
+    ai: false
+    consumer: updateContact / library contact edit
+    tests: [contract-fidelity, ownership-404]
+
+  deleteContact:
+    slice: 5
+    status: planned
+    ai: false
+    consumer: deleteContact / library contact soft-delete (D24)
+    tests: [contract-fidelity, ownership-404]
+
+  getAccomplishments:
+    slice: 5
+    status: planned
+    ai: false
+    consumer: useAccomplishments / library accomplishments screen
+    tests: [contract-fidelity]
+
+  createAccomplishment:
+    slice: 5
+    status: planned
+    ai: false
+    consumer: createAccomplishment / library accomplishments create (ACC-001)
+    tests: [contract-fidelity]
+
+  updateAccomplishment:
+    slice: 5
+    status: planned
+    ai: false
+    consumer: updateAccomplishment / library accomplishment edit
+    tests: [contract-fidelity, ownership-404]
+
+  deleteAccomplishment:
+    slice: 5
+    status: planned
+    ai: false
+    consumer: deleteAccomplishment / library accomplishment soft-delete (D24)
+    tests: [contract-fidelity, ownership-404]
+
+  getAnswers:
+    slice: 5
+    status: planned
+    ai: false
+    consumer: useAnswers / library answers screen
+    tests: [contract-fidelity]
+
+  createAnswer:
+    slice: 5
+    status: planned
+    ai: false
+    consumer: createAnswer / library answers create (ANS-001)
+    tests: [contract-fidelity]
+
+  updateAnswer:
+    slice: 5
+    status: planned
+    ai: false
+    consumer: updateAnswer / library answer edit
+    tests: [contract-fidelity, ownership-404]
+
+  deleteAnswer:
+    slice: 5
+    status: planned
+    ai: false
+    consumer: deleteAnswer / library answer soft-delete (D24)
+    tests: [contract-fidelity, ownership-404]
+
+  getProjects:
+    slice: 5
+    status: planned
+    ai: false
+    consumer: useProjects / library projects screen
+    tests: [contract-fidelity]
+
+  createProject:
+    slice: 5
+    status: planned
+    ai: false
+    consumer: createProject / library projects create (PRJ-001)
+    tests: [contract-fidelity]
+
+  updateProject:
+    slice: 5
+    status: planned
+    ai: false
+    consumer: updateProject / library project edit
+    tests: [contract-fidelity, ownership-404]
+
+  deleteProject:
+    slice: 5
+    status: planned
+    ai: false
+    consumer: deleteProject / library project soft-delete (D24)
+    tests: [contract-fidelity, ownership-404]
+
+  getCredentials:
+    slice: 5
+    status: planned
+    ai: false
+    consumer: useCredentials / library credentials screen (CRD-001, post-MVP display)
+    tests: [contract-fidelity]
+
+  getTrash:
+    slice: 5
+    status: planned
+    ai: false
+    consumer: getTrash / library trash screen (D24)
+    tests: [contract-fidelity]
+
+  restoreLibraryItem:
+    slice: 5
+    status: planned
+    ai: false
+    consumer: restoreLibraryItem / library trash restore action (D24)
+    tests: [contract-fidelity, ownership-404]
+
+  purgeLibraryItem:
+    slice: 5
+    status: planned
+    ai: false
+    consumer: purgeLibraryItem / library trash purge action (D24)
+    tests: [contract-fidelity, ownership-404]
+
+  getDeletionImpact:
+    slice: 5
+    status: planned
+    ai: false
+    consumer: getDeletionImpact / library delete typed-confirm dialog (D24)
+    tests: [contract-fidelity, ownership-404]
+
+  # -------------------------------------------------------- Slice 6: Coach + agents
+  getCoachThreads:
+    slice: 6
+    status: planned
+    ai: false
+    consumer: useCoachThreads / coach screen thread list
+    tests: [contract-fidelity]
+
+  getCoachThread:
+    slice: 6
+    status: planned
+    ai: false
+    consumer: useCoachThread / coach thread detail (COA-021)
+    tests: [contract-fidelity, ownership-404]
+
+  proposeCoachEdit:
+    slice: 6
+    status: deferred
+    ai: true
+    consumer: useCoachProposal().propose / coach proposal flow (COA-032 gate 1)
+    tests: []
+    reason: "founder ruled 2026-07-04: deferred, DECISIONS-NEEDED.md #1"
+
+  saveCoachProposal:
+    slice: 6
+    status: deferred
+    ai: false
+    consumer: useCoachProposal().save / coach proposal accept (COA-032 gate 2 / COA-033 / COA-036)
+    tests: []
+    reason: "founder ruled 2026-07-04: deferred, DECISIONS-NEEDED.md #1"
+
+  getAgents:
+    slice: 6
+    status: planned
+    ai: false
+    consumer: useAgents / agents screen
+    tests: [contract-fidelity]
+
+  getAgent:
+    slice: 6
+    status: planned
+    ai: false
+    consumer: useAgent / agent detail screen
+    tests: [contract-fidelity, ownership-404]
+
+  patchAgent:
+    slice: 6
+    status: planned
+    ai: false
+    consumer: patchAgent / agent pause / run-now action (ORI-014)
+    tests: [contract-fidelity, ownership-404]
+
+  getAgentPermissions:
+    slice: 6
+    status: planned
+    ai: false
+    consumer: getAgentPermissions / agent permissions tab (AGT-023)
+    tests: [contract-fidelity, ownership-404]
+
+  getAgentTrustTier:
+    slice: 6
+    status: planned
+    ai: false
+    consumer: getAgentTrustTier / agent trust-tier view (D25 / AGT-031)
+    tests: [contract-fidelity, ownership-404]
+
+  patchAgentTrustTier:
+    slice: 6
+    status: deferred
+    ai: false
+    consumer: patchAgentTrustTier / agent trust-tier action
+    tests: []
+    reason: "founder ruled 2026-07-04: deferred, DECISIONS-NEEDED.md #2"
+
+  getAgentLog:
+    slice: 6
+    status: planned
+    ai: false
+    consumer: useAgentLog / agent log screen
+    tests: [contract-fidelity]
+
+  getReviewQueue:
+    slice: 6
+    status: deferred
+    ai: false
+    consumer: getReviewQueue / agent review queue screen (AGT-021)
+    tests: []
+    reason: "founder ruled 2026-07-04: deferred, DECISIONS-NEEDED.md #1"
+
+  approveAgentAction:
+    slice: 6
+    status: deferred
+    ai: false
+    consumer: approveAgentAction / review queue approve action
+    tests: []
+    reason: "founder ruled 2026-07-04: deferred, DECISIONS-NEEDED.md #1"
+
+  rejectAgentAction:
+    slice: 6
+    status: deferred
+    ai: false
+    consumer: rejectAgentAction / review queue reject action
+    tests: []
+    reason: "founder ruled 2026-07-04: deferred, DECISIONS-NEEDED.md #1"

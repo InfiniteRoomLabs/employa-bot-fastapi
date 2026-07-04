@@ -1,0 +1,2974 @@
+openapi: 3.1.0
+info:
+  title: Employa-Bot API
+  version: 1.0.0-slice0
+  description: |
+    FROZEN CONTRACT (Slice 0, 2026-07-04). Derived from the mockup review
+    artifact, now normalized into an implementation-ready contract. Deferred
+    operations (pending founder ruling) are enumerated in DECISIONS-NEEDED.md
+    and marked in docs/operation-ownership.yaml; they are NOT frozen as
+    implementable.
+
+    Conventions:
+    - Lifecycle actions are plain path segments (`POST /resource/{id}/verb`,
+      e.g. `/applications/{id}/mark-won`) -- no Google-AIP `:verb` custom
+      methods. Sub-collections nest under their parent resource
+      (`/jobs/inbox`, `/agents/log`, `/resumes/uploads`).
+    - Resource ids are UUIDs (RFC 4122) EVERYWHERE. Static segments like
+      `/resumes/uploads` are unambiguous next to `/resumes/{id}` because a
+      UUID can never equal a static segment. The real backend resolves by
+      UUID ONLY -- the mock's legacy slug/name leniency is dropped from the
+      contract (the frontend keeps its own APP_UUID_BY_SLUG map client-side).
+    - Timestamps: ISO-8601 `format: date-time`, UTC, everywhere. No relative
+      strings ("just now", "2d ago"). Ages and durations are derived
+      client-side from timestamps (e.g. `Application.createdAt`).
+    - Money: plain JSON number in USD, field name suffixed `Usd`
+      (`costUsd`, `spendMoUsd`), up to 6 decimal places (LLM costs are
+      sub-cent). No currency objects, no formatted strings. Structured
+      compensation (`Salary`, integer dollars) stays structured -- it is
+      compensation data, not a cost.
+    - Tokens/counts: integers.
+    - Presentation removed: `icon` names, button/toggle copy, and preformatted
+      money/token strings. Semantic distinctions the UI branches on are
+      expressed as enums. The client owns copy, icons, and formatting.
+    - Errors use the shared `Error` envelope. `kind` -> HTTP status:
+      `not_found`->404, `unauthorized`->401, `validation_error`->422,
+      `conflict`->409, `cap_reached`->402, `undo_window_expired`->409,
+      `invalid_transition`->422, `rate_limited`->429,
+      `provider_unavailable`->503. Every operation carries a `default` Error
+      response; semantically notable statuses are also listed explicitly.
+      Transport failures (network/DNS/timeout) are mapped by the frontend
+      translator itself and are NOT part of the wire `kind` vocabulary.
+    - AI operations execute SYNCHRONOUSLY: they block and return their result
+      with an `AiRunEnvelope` (`aiRun`) embedded. No polling endpoints, no
+      `/ai-runs/{id}`, no product-visible queued states in MVP. Run records
+      still persist server-side as telemetry.
+    - Not modeled (mock-only, excluded from the contract): `getUserMenu`,
+      `getExtensionState`, `getBudgetSnapshot`, `__resetForTests`, failure
+      injection.
+
+servers:
+  - url: /api/v1
+
+tags:
+  - name: user
+  - name: applications
+  - name: archive
+  - name: interviews
+  - name: shortlist
+  - name: jobs
+  - name: match
+  - name: agents
+  - name: resumes
+  - name: resume-lifecycle
+  - name: coach
+  - name: library
+  - name: searches
+  - name: notifications
+  - name: settings
+  - name: account
+
+paths:
+  # ---------------------------------------------------------------- user
+  /user:
+    get:
+      tags: [user]
+      operationId: getCurrentUser
+      summary: Current user / persona
+      responses:
+        default: { $ref: '#/components/responses/DefaultError' }
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+
+  # -------------------------------------------------------- applications
+  /applications:
+    get:
+      tags: [applications]
+      operationId: getApplications
+      summary: Applications scoped to a saved search
+      description: When `searchId` is omitted, the canonical/default list ships.
+      parameters:
+        - name: searchId
+          in: query
+          schema: { type: string, format: uuid }
+      responses:
+        default: { $ref: '#/components/responses/DefaultError' }
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/ApplicationView' }
+    post:
+      tags: [applications]
+      operationId: createApplication
+      summary: Create an application (ORI-014)
+      description: |
+        Normalized create (ADR-006): mints a Job for the posting plus an
+        ids-only Application, returns the joined view. D15: when `searchId`
+        is omitted the capture lands in the last-used / auto-created
+        "My jobs" search.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateApplicationInput' }
+      responses:
+        default: { $ref: '#/components/responses/DefaultError' }
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApplicationView' }
+
+  /applications/{id}:
+    get:
+      tags: [applications]
+      operationId: getApplication
+      summary: One application (joined view)
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses:
+        default: { $ref: '#/components/responses/DefaultError' }
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApplicationView' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /applications/{id}/transitions:
+    post:
+      tags: [applications]
+      operationId: transitionApplication
+      summary: Apply a stage transition (append-only)
+      description: |
+        The general stage-transition operation (the core loop). Legal moves are
+        exactly those in the settled application-stage machine
+        (state-machines.md#application-stages); an illegal target -> 422
+        `invalid_transition`. Optimistic concurrency: `expectedVersion` must
+        equal the current `Application.version` or the call fails 409 `conflict`.
+
+        Side effect: a transition to `applied` materializes the immutable
+        resume snapshot (D10) from `resumeId` (required for that target) and
+        locks it; the snapshot is thereafter served by GET
+        /applications/{id}/snapshot. Every transition appends an immutable
+        StageTransition row; corrections are compensating transitions
+        (`source=user_correction`), never updates/deletes.
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TransitionInput' }
+      responses:
+        default: { $ref: '#/components/responses/DefaultError' }
+        '200':
+          description: Transition applied
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TransitionResult' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/InvalidTransition' }
+
+  /applications/{id}/snapshot:
+    get:
+      tags: [applications]
+      operationId: getResumeSnapshot
+      summary: Immutable submitted-resume snapshot (D10)
+      description: Materialized at the APPLIED transition; never changes afterward.
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses:
+        default: { $ref: '#/components/responses/DefaultError' }
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ResumeSnapshot' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: No submitted copy exists until the application reaches APPLIED (`conflict`).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /applications/{id}/mark-won:
+    post:
+      tags: [applications]
+      operationId: markWon
+      summary: Mark an application WON (D18)
+      description: |
+        Records the outcome, archives the active application, returns a
+        time-boxed undo token (300 s). After the window, correcting a win is
+        a deliberate OFFER_RESCINDED (see state-machines.md).
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MarkWonInput' }
+      responses:
+        default: { $ref: '#/components/responses/DefaultError' }
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MarkWonResult' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /applications/{id}/undo-mark-won:
+    post:
+      tags: [applications]
+      operationId: undoMarkWon
+      summary: Reverse a mark-won within the grace window (D18)
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [undoToken]
+              properties:
+                undoToken: { type: string, format: uuid }
+      responses:
+        default: { $ref: '#/components/responses/DefaultError' }
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApplicationView' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Undo window expired (`undo_window_expired`).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /applications/{id}/reactivate:
+    post:
+      tags: [applications]
+      operationId: reactivateApplication
+      summary: Reactivate a closed/archived application (D19)
+      description: Clears the terminal outcome and re-enters the pipeline at APPLIED.
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses:
+        default: { $ref: '#/components/responses/DefaultError' }
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApplicationView' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /applications/{id}/dismiss:
+    post:
+      tags: [applications]
+      operationId: dismissApplication
+      summary: Dismiss an application (D12)
+      description: |
+        Pre-commit (SAVED/DRAFT) the application is removed outright.
+        Post-APPLIED it maps to WITHDREW with reason chips and archives --
+        a committed application is never silently deleted.
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reasons:
+                  type: array
+                  items: { type: string }
+      responses:
+        default: { $ref: '#/components/responses/DefaultError' }
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DismissResult' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /applications/{id}/timeline:
+    get:
+      tags: [applications]
+      operationId: getApplicationTimeline
+      summary: Append-only audit timeline (TRK-118)
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses:
+        default: { $ref: '#/components/responses/DefaultError' }
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/TimelineEvent' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /applications/{id}/interviews:
+    get:
+      tags: [interviews]
+      operationId: getInterviewRounds
+      summary: Interview rounds for an application (TRK-117)
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses:
+        default: { $ref: '#/components/responses/DefaultError' }
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/InterviewRound' }
+
+  /applications/{appId}/interviews/{roundId}:
+    patch:
+      tags: [interviews]
+      operationId: patchInterviewRound
+      summary: Update an interview round (D3 / TRK-127)
+      description: Only date/type/format/status are mutable; other keys are dropped.
+      parameters:
+        - { name: appId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: roundId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                date: { type: string, format: date-time }
+                type: { $ref: '#/components/schemas/InterviewType' }
+                format: { $ref: '#/components/schemas/InterviewFormat' }
+                status: { $ref: '#/components/schemas/InterviewStatus' }
+      responses:
+        default: { $ref: '#/components/responses/DefaultError' }
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/InterviewRound' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # -------------------------------------------------------------- archive
+  /archive:
+    get:
+      tags: [archive]
+      operationId: getArchive
+      summary: Archived applications by outcome bucket (ORI-009)
+      parameters:
+        - name: kind
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [won, passed]
+          description: won -> outcome=won; passed -> outcome in (rejected, withdrawn).
+      responses:
+        default: { $ref: '#/components/responses/DefaultError' }
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/ApplicationView' }
+
+  /archive/counts:
+    get:
+      tags: [archive]
+      operationId: getArchiveCounts
+      summary: Live archive badge counts
+      responses:
+        default: { $ref: '#/components/responses/DefaultError' }
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [won, passed]
+                properties:
+                  won: { type: integer }
+                  passed: { type: integer }
+
+  # ------------------------------------------------------------ shortlist
+  /shortlist:
+    get:
+      tags: [shortlist]
+      operationId: getShortlist
+      summary: Shortlist entries (optionally per-search)
+      parameters:
+        - name: searchId
+          in: query
+          schema: { type: string, format: uuid }
+      responses:
+        default: { $ref: '#/components/responses/DefaultError' }
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/ShortlistEntry' }
+    post:
+      tags: [shortlist]
+      operationId: addToShortlist
+      summary: Add a job to the shortlist (ORI-014)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [company, role, location, salary, match]
+              properties:
+                jobId: { type: string, format: uuid }
+                company: { type: string }
+                role: { type: string }
+                location: { type: string }
+                salary:
+                  oneOf:
+                    - { $ref: '#/components/schemas/Salary' }
+                    - { type: 'null' }
+                match: { type: integer }
+      responses:
+        default: { $ref: '#/components/responses/DefaultError' }
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ShortlistEntry' }
+
+  /shortlist/{id}:
+    delete:
+      tags: [shortlist]
+      operationId: dismissFromShortlist
+      summary: Remove a shortlist entry by UUID
+      description: >
+        UUID-ified: keyed by the shortlist entry id (the mock's role-string key
+        is dropped from the contract).
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses:
+        default: { $ref: '#/components/responses/DefaultError' }
+        '204': { description: Removed. }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ----------------------------------------------------------------- jobs
+  /jobs:
+    get:
+      tags: [jobs]
+      operationId: getJobs
+      summary: All captured postings (ADR-006 canonical collection)
+      responses:
+        default: { $ref: '#/components/responses/DefaultError' }
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Job' }
+
+  /jobs/inbox:
+    get:
+      tags: [ jobs ]
+      operationId: getJobsInbox
+      summary: Jobs inbox (optionally per-search)
+      parameters:
+        - name: searchId
+          in: query
+          schema: { type: string, format: uuid }
+      responses:
+        default: { $ref: '#/components/responses/DefaultError' }
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/JobInboxItem' }
+
+  /jobs/{id}:
+    get:
+      tags: [jobs]
+      operationId: getJob
+      summary: One captured posting
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses:
+        default: { $ref: '#/components/responses/DefaultError' }
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Job' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /jobs/{id}/preview-deep-score:
+    post:
+      tags: [match]
+      operationId: previewDeepMatchScore
+      summary: Cost preview for a deep (paid) match score (D8b / D21)
+      description: |
+        NON-AI: pure cost arithmetic (no model invocation). One itemized line
+        per resume; free rough heuristic scores never appear here.
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [resumeIds]
+              properties:
+                resumeIds:
+                  type: array
+                  items: { type: string, format: uuid }
+      responses:
+        default: { $ref: '#/components/responses/DefaultError' }
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CostPreview' }
+
+  /jobs/{id}/deep-score:
+    post:
+      tags: [match]
+      operationId: runDeepMatchScore
+      summary: Run a deep (paid) match score (D8 / D9a)
+      description: |
+        AI operation (synchronous). Completes on the chosen provider and
+        returns the result with `aiRun` embedded. If the monthly cap is
+        reached it fails with `cap_reached` so the UI can re-consent -- never a
+        silent model downgrade. Bounded-concurrency queue overflow -> 429
+        `rate_limited`; provider unavailable/failed -> 503 `provider_unavailable`.
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [resumeId]
+              properties:
+                resumeId: { type: string, format: uuid }
+      responses:
+        default: { $ref: '#/components/responses/DefaultError' }
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DeepMatchResult' }
+        '402':
+          description: Monthly LLM cap reached (`cap_reached`).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/ProviderUnavailable' }
+
+  /match-report:
+    get:
+      tags: [match]
+      operationId: getMatchReport
+      summary: Match report for a (resume, job) pair
+      parameters:
+        - { name: resumeId, in: query, required: true, schema: { type: string, format: uuid } }
+        - { name: jobId, in: query, required: true, schema: { type: string, format: uuid } }
+      responses:
+        default: { $ref: '#/components/responses/DefaultError' }
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MatchReport' }
+
+  # --------------------------------------------------------------- agents
+  /agents:
+    get:
+      tags: [agents]
+      operationId: getAgents
+      summary: All agents
+      responses:
+        default: { $ref: '#/components/responses/DefaultError' }
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Agent' }
+
+  /agents/{id}:
+    get:
+      tags: [agents]
+      operationId: getAgent
+      summary: One agent
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses:
+        default: { $ref: '#/components/responses/DefaultError' }
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Agent' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [agents]
+      operationId: patchAgent
+      summary: Patch mutable agent fields (ORI-014 pause / run-now)
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                state: { $ref: '#/components/schemas/AgentState' }
+                live: { type: boolean }
+      responses:
+        default: { $ref: '#/components/responses/DefaultError' }
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Agent' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /agents/{id}/permissions:
+    get:
+      tags: [agents]
+      operationId: getAgentPermissions
+      summary: Per-agent permission grants (AGT-023)
+      description: Each grant is enriched with its `requiredTier` (D25 / AGT-031).
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses:
+        default: { $ref: '#/components/responses/DefaultError' }
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/AgentPermission' }
+
+  /agents/{id}/trust-tier:
+    get:
+      tags: [agents]
+      operationId: getAgentTrustTier
+      summary: Agent trust standing + ladder (D25 / AGT-031)
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses:
+        default: { $ref: '#/components/responses/DefaultError' }
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AgentTrustTierView' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [agents]
+      operationId: patchAgentTrustTier
+      summary: Set an agent's trust tier (soft-gated)
+      description: |
+        Founder ruled 2026-07-04: DEFERRED (DECISIONS-NEEDED #2). Granted-vs-pending
+        semantics depend on the unresolved proposal-approval machine; not
+        implementable in MVP.
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [targetTier]
+              properties:
+                targetTier: { $ref: '#/components/schemas/AgentTrustTier' }
+      responses:
+        default: { $ref: '#/components/responses/DefaultError' }
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AgentTrustTierUpdate' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /agents/log:
+    get:
+      tags: [agents]
+      operationId: getAgentLog
+      summary: Agent activity log
+      parameters:
+        - { name: agentId, in: query, schema: { type: string, format: uuid } }
+        - name: kind
+          in: query
+          schema: { $ref: '#/components/schemas/AgentLogKind' }
+      responses:
+        default: { $ref: '#/components/responses/DefaultError' }
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/AgentLogEntry' }
+
+  /agents/review-queue:
+    get:
+      tags: [agents]
+      operationId: getReviewQueue
+      summary: Agent actions awaiting human approval (AGT-021)
+      description: 'Founder ruled 2026-07-04: DEFERRED (DECISIONS-NEEDED #1). Proposal-approval machine unresolved.'
+      responses:
+        default: { $ref: '#/components/responses/DefaultError' }
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/ReviewQueueItem' }
+
+  /agents/review-queue/{id}/approve:
+    post:
+      tags: [agents]
+      operationId: approveAgentAction
+      summary: Approve a queued agent action
+      description: 'Founder ruled 2026-07-04: DEFERRED (DECISIONS-NEEDED #1). Proposal-approval machine unresolved.'
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses:
+        default: { $ref: '#/components/responses/DefaultError' }
+        '204': { description: Approved. }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /agents/review-queue/{id}/reject:
+    post:
+      tags: [agents]
+      operationId: rejectAgentAction
+      summary: Reject a queued agent action
+      description: 'Founder ruled 2026-07-04: DEFERRED (DECISIONS-NEEDED #1). Proposal-approval machine unresolved.'
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses:
+        default: { $ref: '#/components/responses/DefaultError' }
+        '204': { description: Rejected. }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # -------------------------------------------------------------- resumes
+  /resumes:
+    get:
+      tags: [resumes]
+      operationId: getResumes
+      summary: All resumes
+      responses:
+        default: { $ref: '#/components/responses/DefaultError' }
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Resume' }
+    post:
+      tags: [resumes]
+      operationId: createResume
+      summary: Create a blank draft resume (RES-019)
+      responses:
+        default: { $ref: '#/components/responses/DefaultError' }
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Resume' }
+
+  /resumes/{id}:
+    get:
+      tags: [resumes]
+      operationId: getResume
+      summary: One resume
+      description: 'MOCK QUIRK: the mock also resolves by name or array index for backwards compat; the real API resolves by id only.'
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses:
+        default: { $ref: '#/components/responses/DefaultError' }
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Resume' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [resumes]
+      operationId: patchResume
+      summary: Patch a resume (rename / save body / toggle scoring)
+      description: |
+        Collapses three mock mutations onto one PATCH:
+        `renameResume` (name), `saveResumeBody` (body, serialized editor HTML,
+        RES-022), `patchResumeScoring` (scoringEnabled, D21).
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                body: { type: string }
+                scoringEnabled: { type: boolean }
+      responses:
+        default: { $ref: '#/components/responses/DefaultError' }
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Resume' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [resumes]
+      operationId: deleteResume
+      summary: Delete a resume (RES-019)
+      description: Guards locked resumes (TAILORED / MASTER / DEFAULT / usedIn > 0).
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses:
+        default: { $ref: '#/components/responses/DefaultError' }
+        '204': { description: Deleted. }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Resume is locked.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /resumes/{id}/duplicate:
+    post:
+      tags: [resumes]
+      operationId: duplicateResume
+      summary: Duplicate a resume as a DRAFT (RES-019)
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses:
+        default: { $ref: '#/components/responses/DefaultError' }
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Resume' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /resumes/{id}/set-default:
+    post:
+      tags: [resumes]
+      operationId: setDefaultResume
+      summary: Set a resume as the default (RES-019)
+      description: Demotes the previous DEFAULT to VARIANT; returns the full updated collection.
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses:
+        default: { $ref: '#/components/responses/DefaultError' }
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Resume' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /resumes/{id}/fork:
+    post:
+      tags: [resumes]
+      operationId: forkResumeAsDraft
+      summary: Fork a resume as a tailored draft for a job (CUR-020)
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [jobId]
+              properties:
+                jobId: { type: string, format: uuid }
+      responses:
+        default: { $ref: '#/components/responses/DefaultError' }
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Resume' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ----------------------------------------------- resume lifecycle (ADR-008)
+  /resumes/uploads:
+    get:
+      tags: [resume-lifecycle]
+      operationId: getResumeUploads
+      summary: Uploaded resume files (RES-030, immutable)
+      responses:
+        default: { $ref: '#/components/responses/DefaultError' }
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/ResumeUpload' }
+
+  /career-history:
+    get:
+      tags: [resume-lifecycle]
+      operationId: getCareerHistory
+      summary: Parsed career-history items (RES-031), ordered by ordinal
+      responses:
+        default: { $ref: '#/components/responses/DefaultError' }
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/CareerHistoryItem' }
+
+  /resumes/templates:
+    get:
+      tags: [resume-lifecycle]
+      operationId: getResumeTemplates
+      summary: Resume layout templates (TPL-001)
+      responses:
+        default: { $ref: '#/components/responses/DefaultError' }
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/ResumeTemplate' }
+
+  /resumes/exports:
+    get:
+      tags: [resume-lifecycle]
+      operationId: getResumeExports
+      summary: Rendered exports (RES-037, one-way)
+      responses:
+        default: { $ref: '#/components/responses/DefaultError' }
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/ResumeExport' }
+
+  /projections:
+    get:
+      tags: [resume-lifecycle]
+      operationId: getProjections
+      summary: Projections = non-FORMAT resumes (RES-034)
+      responses:
+        default: { $ref: '#/components/responses/DefaultError' }
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Resume' }
+    post:
+      tags: [resume-lifecycle]
+      operationId: createProjection
+      summary: Create a master/variant projection (RES-034/035)
+      description: New career history never auto-injects into existing projections (pinning).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, itemIds]
+              properties:
+                name: { type: string }
+                targetRole: { type: string }
+                itemIds:
+                  type: array
+                  items: { type: string, format: uuid }
+                templateId: { type: string, format: uuid }
+                sourceUploadId: { type: string, format: uuid }
+      responses:
+        default: { $ref: '#/components/responses/DefaultError' }
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Resume' }
+
+  /projections/{id}/template:
+    put:
+      tags: [resume-lifecycle]
+      operationId: assignTemplate
+      summary: Assign a template to a projection (TPL-002)
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [templateId]
+              properties:
+                templateId: { type: string, format: uuid }
+      responses:
+        default: { $ref: '#/components/responses/DefaultError' }
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Resume' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /exports:
+    post:
+      tags: [resume-lifecycle]
+      operationId: renderExport
+      summary: Render a projection through its template into an export (RES-037)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [projectionId]
+              properties:
+                projectionId: { type: string, format: uuid }
+      responses:
+        default: { $ref: '#/components/responses/DefaultError' }
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ResumeExport' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /exports/{id}/regenerate:
+    post:
+      tags: [resume-lifecycle]
+      operationId: regenerateExport
+      summary: Regenerate an export at the current template version (RES-037 / D17)
+      description: Creates a NEW export; the original keeps its own provenance -- never silently restyled.
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses:
+        default: { $ref: '#/components/responses/DefaultError' }
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ResumeExport' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ---------------------------------------------------------------- coach
+  /coach/threads:
+    get:
+      tags: [coach]
+      operationId: getCoachThreads
+      summary: Coach threads
+      responses:
+        default: { $ref: '#/components/responses/DefaultError' }
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/CoachThread' }
+
+  /coach/threads/{id}:
+    get:
+      tags: [coach]
+      operationId: getCoachThread
+      summary: One thread with messages + context cards (COA-021)
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses:
+        default: { $ref: '#/components/responses/DefaultError' }
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [thread, messages, context]
+                properties:
+                  thread: { $ref: '#/components/schemas/CoachThread' }
+                  messages:
+                    type: array
+                    items: { $ref: '#/components/schemas/CoachMessage' }
+                  context:
+                    type: array
+                    items: { $ref: '#/components/schemas/ContextCard' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # /coach/greeting REMOVED (founder ruled 2026-07-04, DECISIONS-NEEDED #5):
+  # greetings are canned client copy -- ships with the frontend, no backend
+  # route (same treatment as getUserMenu / getExtensionState).
+
+  /coach/proposals:
+    post:
+      tags: [coach]
+      operationId: proposeCoachEdit
+      summary: Coach drafts a change proposal (COA-032, gate 1)
+      description: |
+        Founder ruled 2026-07-04: DEFERRED (DECISIONS-NEEDED #1). Proposal-approval
+        machine unresolved (state-machines.md stub). This IS an AI op (drives an
+        AIProvider method), but it is not implementable in MVP; the AiRunEnvelope
+        embedding lands if/when the machine is drawn.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CoachSubject' }
+      responses:
+        default: { $ref: '#/components/responses/DefaultError' }
+        '201':
+          description: Pending proposal
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CoachProposal' }
+
+  /coach/proposals/{id}/accept:
+    post:
+      tags: [coach]
+      operationId: saveCoachProposal
+      summary: Persist an accepted proposal (COA-032 gate 2 / COA-033 / COA-036)
+      description: 'Founder ruled 2026-07-04: DEFERRED (DECISIONS-NEEDED #1). Proposal-approval machine unresolved; not implementable in MVP.'
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CoachProposal' }
+      responses:
+        default: { $ref: '#/components/responses/DefaultError' }
+        '200':
+          description: Attributed audit event
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TimelineEvent' }
+
+  # -------------------------------------------------------------- library
+  /contacts:
+    get:
+      tags: [library]
+      operationId: getContacts
+      summary: Contacts (soft-deleted excluded, D24)
+      responses:
+        default: { $ref: '#/components/responses/DefaultError' }
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Contact' }
+    post:
+      tags: [library]
+      operationId: createContact
+      summary: Create a contact (CON-001/002)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ContactDraft' }
+      responses:
+        default: { $ref: '#/components/responses/DefaultError' }
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Contact' }
+
+  /contacts/{id}:
+    get:
+      tags: [library]
+      operationId: getContact
+      summary: One contact
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses:
+        default: { $ref: '#/components/responses/DefaultError' }
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Contact' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [library]
+      operationId: updateContact
+      summary: Update a contact
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ContactDraft' }
+      responses:
+        default: { $ref: '#/components/responses/DefaultError' }
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Contact' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [library]
+      operationId: deleteContact
+      summary: Soft-delete a contact into the trash (D24)
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses:
+        default: { $ref: '#/components/responses/DefaultError' }
+        '204': { description: Soft-deleted. }
+
+  /accomplishments:
+    get:
+      tags: [library]
+      operationId: getAccomplishments
+      summary: Accomplishments (soft-deleted excluded, D24)
+      responses:
+        default: { $ref: '#/components/responses/DefaultError' }
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Accomplishment' }
+    post:
+      tags: [library]
+      operationId: createAccomplishment
+      summary: Create an accomplishment (ACC-001)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AccomplishmentDraft' }
+      responses:
+        default: { $ref: '#/components/responses/DefaultError' }
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Accomplishment' }
+
+  /accomplishments/{id}:
+    patch:
+      tags: [library]
+      operationId: updateAccomplishment
+      summary: Update an accomplishment
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AccomplishmentDraft' }
+      responses:
+        default: { $ref: '#/components/responses/DefaultError' }
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Accomplishment' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [library]
+      operationId: deleteAccomplishment
+      summary: Soft-delete an accomplishment (D24)
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses:
+        default: { $ref: '#/components/responses/DefaultError' }
+        '204': { description: Soft-deleted. }
+
+  /accomplishments/derive-from-project:
+    post:
+      tags: [library]
+      operationId: deriveAccomplishmentFromProject
+      summary: Distill a Project into a NEW accomplishment (ACC-002)
+      description: |
+        AI operation (synchronous): the model distills the Project into a new
+        accomplishment (snapshot + backlink `source.projectId`, not live-bound).
+        Response embeds `aiRun`. Provider unavailable -> 503; queue overflow -> 429.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [projectId]
+              properties:
+                projectId: { type: string, format: uuid }
+      responses:
+        default: { $ref: '#/components/responses/DefaultError' }
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AccomplishmentDeriveResult' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/ProviderUnavailable' }
+
+  /answers:
+    get:
+      tags: [library]
+      operationId: getAnswers
+      summary: Saved answers (soft-deleted excluded, D24)
+      responses:
+        default: { $ref: '#/components/responses/DefaultError' }
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Answer' }
+    post:
+      tags: [library]
+      operationId: createAnswer
+      summary: Create an answer (ANS-001)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AnswerDraft' }
+      responses:
+        default: { $ref: '#/components/responses/DefaultError' }
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Answer' }
+
+  /answers/{id}:
+    patch:
+      tags: [library]
+      operationId: updateAnswer
+      summary: Update an answer
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AnswerDraft' }
+      responses:
+        default: { $ref: '#/components/responses/DefaultError' }
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Answer' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [library]
+      operationId: deleteAnswer
+      summary: Soft-delete an answer (D24)
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses:
+        default: { $ref: '#/components/responses/DefaultError' }
+        '204': { description: Soft-deleted. }
+
+  /projects:
+    get:
+      tags: [library]
+      operationId: getProjects
+      summary: Projects (soft-deleted excluded, D24)
+      responses:
+        default: { $ref: '#/components/responses/DefaultError' }
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Project' }
+    post:
+      tags: [library]
+      operationId: createProject
+      summary: Create a project (PRJ-001)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProjectDraft' }
+      responses:
+        default: { $ref: '#/components/responses/DefaultError' }
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Project' }
+
+  /projects/{id}:
+    patch:
+      tags: [library]
+      operationId: updateProject
+      summary: Update a project
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProjectDraft' }
+      responses:
+        default: { $ref: '#/components/responses/DefaultError' }
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Project' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [library]
+      operationId: deleteProject
+      summary: Soft-delete a project (D24)
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses:
+        default: { $ref: '#/components/responses/DefaultError' }
+        '204': { description: Soft-deleted. }
+
+  /credentials:
+    get:
+      tags: [library]
+      operationId: getCredentials
+      summary: Credentials (CRD-001, Post-MVP)
+      responses:
+        default: { $ref: '#/components/responses/DefaultError' }
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Credential' }
+
+  /library/trash:
+    get:
+      tags: [library]
+      operationId: getTrash
+      summary: All soft-deleted Library entities, newest-deleted first (D24)
+      responses:
+        default: { $ref: '#/components/responses/DefaultError' }
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/TrashEntry' }
+
+  /library/{kind}/{id}/restore:
+    post:
+      tags: [library]
+      operationId: restoreLibraryItem
+      summary: Restore a soft-deleted Library item (D24)
+      parameters:
+        - { $ref: '#/components/parameters/libraryKind' }
+        - { $ref: '#/components/parameters/id' }
+      responses:
+        default: { $ref: '#/components/responses/DefaultError' }
+        '204': { description: Restored. }
+
+  /library/{kind}/{id}/purge:
+    delete:
+      tags: [library]
+      operationId: purgeLibraryItem
+      summary: Permanently purge a soft-deleted item -- frees quota (D24)
+      parameters:
+        - { $ref: '#/components/parameters/libraryKind' }
+        - { $ref: '#/components/parameters/id' }
+      responses:
+        default: { $ref: '#/components/responses/DefaultError' }
+        '204': { description: Purged. }
+
+  /library/{kind}/{id}/deletion-impact:
+    get:
+      tags: [library]
+      operationId: getDeletionImpact
+      summary: Dependent-count report before a delete (D24)
+      description: Drives the typed-count confirm dialog.
+      parameters:
+        - { $ref: '#/components/parameters/libraryKind' }
+        - { $ref: '#/components/parameters/id' }
+      responses:
+        default: { $ref: '#/components/responses/DefaultError' }
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DeletionImpact' }
+
+  # ------------------------------------------------------------- searches
+  /searches:
+    get:
+      tags: [searches]
+      operationId: getSearches
+      summary: Saved searches
+      responses:
+        default: { $ref: '#/components/responses/DefaultError' }
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Search' }
+    post:
+      tags: [searches]
+      operationId: createSearch
+      summary: Create a saved search (ADD-010)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateSearchInput' }
+      responses:
+        default: { $ref: '#/components/responses/DefaultError' }
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Search' }
+
+  /searches/{id}:
+    get:
+      tags: [searches]
+      operationId: getSearch
+      summary: One saved search
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses:
+        default: { $ref: '#/components/responses/DefaultError' }
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Search' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [searches]
+      operationId: updateSearchCriteria
+      summary: Update search criteria in-place (ADD-006)
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [criteria]
+              properties:
+                criteria: { $ref: '#/components/schemas/SearchCriteria' }
+      responses:
+        default: { $ref: '#/components/responses/DefaultError' }
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Search' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # -------------------------------------------------------- notifications
+  /notifications:
+    get:
+      tags: [notifications]
+      operationId: getNotifications
+      summary: Notifications
+      responses:
+        default: { $ref: '#/components/responses/DefaultError' }
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Notification' }
+
+  /notifications/{id}/read:
+    post:
+      tags: [notifications]
+      operationId: markNotificationRead
+      summary: Mark one notification read (ORI-012)
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses:
+        default: { $ref: '#/components/responses/DefaultError' }
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Notification' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /notifications/mark-all-read:
+    post:
+      tags: [notifications]
+      operationId: markAllNotificationsRead
+      summary: Mark all notifications read (ORI-012)
+      responses:
+        default: { $ref: '#/components/responses/DefaultError' }
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Notification' }
+
+  # ------------------------------------------------------ settings/account
+  /settings:
+    get:
+      tags: [settings]
+      operationId: getSettings
+      summary: Full settings bundle
+      responses:
+        default: { $ref: '#/components/responses/DefaultError' }
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Settings' }
+
+  /usage-aggregate:
+    get:
+      tags: [settings]
+      operationId: getUsageAggregate
+      summary: Aggregated token-usage summary for the current billing period
+      responses:
+        default: { $ref: '#/components/responses/DefaultError' }
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UsageAggregate' }
+
+  /account/data-export:
+    post:
+      tags: [account]
+      operationId: requestDataExport
+      summary: Request a full account data export (ACC-export)
+      responses:
+        default: { $ref: '#/components/responses/DefaultError' }
+        '202':
+          description: Export created; returns a signed download URL.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DataExportRequest' }
+
+  /account/delete:
+    post:
+      tags: [account]
+      operationId: deleteAccount
+      summary: Initiate account deletion with a 30-day grace period (ACC-danger)
+      responses:
+        default: { $ref: '#/components/responses/DefaultError' }
+        '202':
+          description: Deletion scheduled.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [gracePeriodEndsAt]
+                properties:
+                  gracePeriodEndsAt: { type: string, format: date-time }
+
+components:
+  parameters:
+    id:
+      name: id
+      in: path
+      required: true
+      description: >
+        Resource UUID (RFC 4122). Resolved by UUID only -- the mock's legacy
+        slug/name leniency is not part of the contract.
+      schema: { type: string, format: uuid }
+    libraryKind:
+      name: kind
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/LibraryKind' }
+
+  responses:
+    DefaultError:
+      description: Error envelope (`kind` -> HTTP status per info.description).
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    NotFound:
+      description: Resource not found (`not_found`).
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Conflict:
+      description: Version/state conflict (`conflict`).
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    InvalidTransition:
+      description: Illegal stage transition (`invalid_transition`).
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    ProviderUnavailable:
+      description: AI provider unavailable or failed (`provider_unavailable`).
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    RateLimited:
+      description: AI queue overflow / too many requests (`rate_limited`).
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+
+  schemas:
+    Error:
+      type: object
+      required: [kind, path]
+      properties:
+        kind:
+          type: string
+          enum:
+            - not_found
+            - unauthorized
+            - validation_error
+            - conflict
+            - cap_reached
+            - undo_window_expired
+            - invalid_transition
+            - rate_limited
+            - provider_unavailable
+        path: { type: string }
+        message: { type: string }
+
+    # ------------------------------------------------ AI run envelope
+    AiRunStatus:
+      type: string
+      description: >
+        Wire status is always terminal (synchronous execution). The full
+        5-state lifecycle (queued/running/...) is a server-side telemetry
+        concern on the persisted run record, not exposed on the response.
+      enum: [succeeded, failed, cancelled]
+
+    AiRunEnvelope:
+      type: object
+      description: >
+        Telemetry envelope embedded (as `aiRun`) in every AI operation's
+        response. Execution is synchronous; `status` is terminal
+        (`succeeded`/`failed`/`cancelled`) by the time the response returns.
+      required: [provider, model, status, estimatedCostUsd, synthetic]
+      properties:
+        provider: { type: string, description: e.g. claude_cli, fake. }
+        model: { type: string }
+        status: { $ref: '#/components/schemas/AiRunStatus' }
+        startedAt: { type: [string, 'null'], format: date-time }
+        finishedAt: { type: [string, 'null'], format: date-time }
+        durationMs: { type: [integer, 'null'] }
+        estimatedCostUsd: { type: number }
+        actualCostUsd: { type: [number, 'null'] }
+        synthetic:
+          type: boolean
+          description: True iff produced by the FakeProvider (never satisfies evidence/approval).
+
+    # ------------------------------------------------------------- user
+    User:
+      type: object
+      required: [name, email, initials, city, current, years, comp_floor, target_titles]
+      properties:
+        name: { type: string }
+        email: { type: string, format: email }
+        initials: { type: string }
+        city: { type: string }
+        current: { type: string }
+        years: { type: number }
+        comp_floor: { type: number }
+        target_titles:
+          type: array
+          items: { type: string }
+
+    # ----------------------------------------------------- applications
+    Stage:
+      type: string
+      description: >
+        Settled application-stage taxonomy (state-machines.md#application-stages
+        is normative over the mock's coarser 8-value enum). Lowercase wire
+        values; multiword stages use snake_case.
+      enum:
+        - saved
+        - drafting
+        - applied
+        - screening
+        - interview
+        - offer
+        - won
+        - rejected
+        - ghosted
+        - withdrew
+        - dismissed
+        - offer_rescinded
+
+    TransitionSource:
+      type: string
+      description: Who/what drove the transition (aligned with the settled machine sources).
+      enum: [user, user_correction, user_reactivation, system]
+
+    StageTransition:
+      type: object
+      description: >
+        One appended, immutable row of an application's stage-transition audit
+        log. Corrections are compensating transitions referencing the prior row.
+      required: [id, applicationId, toStage, source, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        applicationId: { type: string, format: uuid }
+        fromStage:
+          oneOf:
+            - { $ref: '#/components/schemas/Stage' }
+            - { type: 'null' }
+          description: Prior stage; null for the initial SAVED/DRAFTING entry.
+        toStage: { $ref: '#/components/schemas/Stage' }
+        source: { $ref: '#/components/schemas/TransitionSource' }
+        reason: { type: string }
+        reasons:
+          type: array
+          items: { type: string }
+          maxItems: 8
+          description: D16 chip reasons (dismiss/withdraw).
+        resumeId:
+          type: [string, 'null']
+          format: uuid
+          description: Resume snapshotted at APPLIED (required by the request when target is APPLIED).
+        createdAt: { type: string, format: date-time }
+
+    TransitionInput:
+      type: object
+      required: [targetStage, expectedVersion]
+      properties:
+        targetStage: { $ref: '#/components/schemas/Stage' }
+        expectedVersion:
+          type: integer
+          description: Optimistic-concurrency guard; must equal Application.version or 409 `conflict`.
+        source:
+          allOf:
+            - { $ref: '#/components/schemas/TransitionSource' }
+          default: user
+        reason: { type: string }
+        reasons:
+          type: array
+          items: { type: string }
+          maxItems: 8
+        resumeId:
+          type: string
+          format: uuid
+          description: Required when `targetStage` = applied (locks the submitted-resume snapshot).
+      if:
+        properties:
+          targetStage: { const: applied }
+        required: [targetStage]
+      then:
+        required: [resumeId]
+
+    TransitionResult:
+      type: object
+      required: [application, transition]
+      properties:
+        application: { $ref: '#/components/schemas/ApplicationView' }
+        transition: { $ref: '#/components/schemas/StageTransition' }
+
+    ApplicationFlag:
+      type: string
+      enum: [stale, offer]
+
+    SalaryPoint:
+      type: object
+      required: [value, extra]
+      properties:
+        value: { type: integer, description: Full dollars. }
+        extra:
+          type: array
+          items: { type: string }
+
+    SalaryRange:
+      type: object
+      required: [min, max, extra]
+      properties:
+        min: { type: integer, description: Full dollars. }
+        max: { type: integer, description: Full dollars. }
+        extra:
+          type: array
+          items: { type: string }
+
+    Salary:
+      description: Structured compensation; null on the wire means undisclosed.
+      oneOf:
+        - { $ref: '#/components/schemas/SalaryPoint' }
+        - { $ref: '#/components/schemas/SalaryRange' }
+
+    Application:
+      type: object
+      description: Stored application record (ADR-006 stage 3, fully normalized).
+      required: [id, jobId, resumeId, stage, version, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        jobId: { type: string, format: uuid, description: FK -> Job.id. }
+        resumeId:
+          type: [string, 'null']
+          format: uuid
+          description: FK -> Resume.id; null when none yet.
+        stage: { $ref: '#/components/schemas/Stage' }
+        version:
+          type: integer
+          description: Optimistic-concurrency counter; bumped on every transition (see TransitionInput.expectedVersion).
+        createdAt:
+          type: string
+          format: date-time
+          description: Replaces the mock's relative `days`; the client derives age.
+        flag: { $ref: '#/components/schemas/ApplicationFlag' }
+        contact: { type: string }
+        coachNudge: { type: boolean }
+        resurrected: { type: boolean }
+        outcome:
+          type: string
+          enum: [won, rejected, withdrawn]
+          description: ORI-009 archive bucket; present only on archived entries.
+        outcomeAt: { type: string, format: date-time }
+        outcomeReason: { type: string }
+        outcomeReasons:
+          type: array
+          items: { type: string }
+          maxItems: 8
+          description: D16 user-chosen reason chips (max 8).
+        systemReasons:
+          type: array
+          items: { type: string }
+          description: D16 system-applied chips -- separate tier, not counted in the user 8.
+        submittedSnapshotId:
+          type: string
+          description: D10 FK -> ResumeSnapshot.id, set at APPLIED.
+        searchId:
+          type: string
+          format: uuid
+          description: D15 FK -> Search.id (non-null in practice).
+
+    ApplicationView:
+      description: >
+        Read model -- an Application joined with its Job and Resume
+        (equivalent of GET /applications/{id}?expand=job,resume) with the
+        job's display fields flattened on.
+      allOf:
+        - { $ref: '#/components/schemas/Application' }
+        - type: object
+          required: [job, resume, company, role, location, salary, match, source, resumeName]
+          properties:
+            job: { $ref: '#/components/schemas/Job' }
+            resume:
+              oneOf:
+                - { $ref: '#/components/schemas/Resume' }
+                - { type: 'null' }
+            company: { type: string }
+            role: { type: string }
+            location: { type: string }
+            salary:
+              oneOf:
+                - { $ref: '#/components/schemas/Salary' }
+                - { type: 'null' }
+            match: { type: integer }
+            source: { type: string, description: Origin ATS/board (greenhouse, workday, ...). }
+            resumeName: { type: string }
+
+    CreateApplicationInput:
+      type: object
+      required: [company, role, location, salary, match, source]
+      properties:
+        company: { type: string }
+        role: { type: string }
+        location: { type: string }
+        salary:
+          oneOf:
+            - { $ref: '#/components/schemas/Salary' }
+            - { type: 'null' }
+        match: { type: integer }
+        source: { type: string }
+        resumeId:
+          type: [string, 'null']
+          format: uuid
+          description: Selected resume; null when none yet.
+        searchId:
+          type: string
+          format: uuid
+          description: D15 target saved search; defaults to last-used / auto-created "My jobs".
+
+    MarkWonInput:
+      type: object
+      properties:
+        startDate: { type: string, format: date }
+        negotiatedComp:
+          description: Negotiated compensation; structured Salary carries qualifiers (equity, sign-on) via SalaryPoint.extra.
+          oneOf:
+            - { $ref: '#/components/schemas/Salary' }
+            - { type: 'null' }
+        whatWorked: { type: string }
+
+    MarkWonResult:
+      type: object
+      required: [application, undoToken, undoExpiresAt, undoWindowSeconds]
+      properties:
+        application: { $ref: '#/components/schemas/ApplicationView' }
+        undoToken: { type: string, format: uuid }
+        undoExpiresAt: { type: string, format: date-time }
+        undoWindowSeconds: { type: integer, description: 300 in the mock. }
+
+    DismissResult:
+      type: object
+      required: [outcome]
+      properties:
+        outcome:
+          type: string
+          enum: [removed, withdrew]
+          description: removed = pre-commit delete; withdrew = post-APPLIED archive.
+
+    TimelineEvent:
+      type: object
+      required: [id, time, who, message]
+      properties:
+        id: { type: string, format: uuid }
+        time: { type: string, format: date-time }
+        who: { type: string }
+        message: { type: string }
+        actor:
+          type: string
+          enum: [you, coach-on-behalf, agent]
+          description: COA-036 structured attribution (client renders the badge copy).
+
+    InterviewType:
+      type: string
+      enum: [recruiter-screen, technical, onsite, final]
+
+    InterviewFormat:
+      type: string
+      enum: [video, phone, onsite]
+
+    InterviewStatus:
+      type: string
+      enum: [scheduled, completed, cancelled]
+
+    InterviewRound:
+      type: object
+      required: [id, appId, date, type, format, status]
+      properties:
+        id: { type: string, format: uuid }
+        appId: { type: string, format: uuid }
+        date: { type: string, format: date-time }
+        type: { $ref: '#/components/schemas/InterviewType' }
+        format: { $ref: '#/components/schemas/InterviewFormat' }
+        status: { $ref: '#/components/schemas/InterviewStatus' }
+
+    ResumeSnapshot:
+      type: object
+      description: D10 immutable copy of the resume captured at APPLIED.
+      required: [id, applicationId, resumeId, name, body, templateVersion, capturedAt]
+      properties:
+        id: { type: string, format: uuid }
+        applicationId: { type: string, format: uuid }
+        resumeId: { type: string, format: uuid }
+        name: { type: string }
+        body: { type: string }
+        templateVersion: { type: string, description: D17 provenance. }
+        capturedAt: { type: string, format: date-time }
+
+    # -------------------------------------------------------- shortlist
+    ShortlistEntry:
+      type: object
+      required: [id, company, role, location, salary, match, saved, source]
+      properties:
+        id: { type: string, format: uuid, description: 'Shortlist entry id (DELETE /shortlist/{id}).' }
+        jobId: { type: string, format: uuid, description: FK -> Job.id (ADR-006). }
+        company: { type: string }
+        role: { type: string }
+        location: { type: string }
+        salary:
+          oneOf:
+            - { $ref: '#/components/schemas/Salary' }
+            - { type: 'null' }
+        match: { type: integer }
+        saved: { type: string, format: date-time }
+        source: { type: string, enum: [you] }
+        why: { type: string }
+        stale: { type: boolean }
+
+    # ------------------------------------------------------------- jobs
+    JobCaptureMethod:
+      type: string
+      enum: [url, jd-text, extension, email-forward]
+
+    JobWorkMode:
+      type: string
+      enum: [remote, hybrid, onsite]
+
+    JobInboxItem:
+      type: object
+      required: [company, role, location, salary, match, source, posted]
+      properties:
+        jobId: { type: string, format: uuid }
+        company: { type: string }
+        role: { type: string }
+        location: { type: string }
+        salary:
+          oneOf:
+            - { $ref: '#/components/schemas/Salary' }
+            - { type: 'null' }
+        match: { type: integer }
+        source: { type: string, description: Origin board (greenhouse, workday, hospital, ...). }
+        isNew: { type: boolean }
+        posted: { type: string, format: date-time }
+        capturedVia: { $ref: '#/components/schemas/JobCaptureMethod' }
+        capturedAt: { type: string, format: date-time }
+        sourceUrl: { type: string, format: uri }
+        workMode: { $ref: '#/components/schemas/JobWorkMode' }
+        employmentType: { type: string }
+        seniority: { type: string }
+        summary: { type: string }
+        tags:
+          type: array
+          items: { type: string }
+        requirements:
+          type: array
+          items: { type: string }
+        strengths:
+          type: array
+          items: { type: string }
+        gaps:
+          type: array
+          items: { type: string }
+        jd: { type: string, description: Raw JD text, preserved verbatim at capture. }
+
+    Employment:
+      type: object
+      description: ADR-006 -- three independent atomic axes.
+      required: [classification, cadence, commitment]
+      properties:
+        classification:
+          type: string
+          enum: [w2, contract, '1099']
+        cadence:
+          type: string
+          enum: [hourly, salary]
+        commitment:
+          type: string
+          enum: [full-time, part-time]
+
+    JobLocation:
+      type: object
+      required: [raw]
+      properties:
+        raw: { type: string }
+        locality: { type: string }
+        region: { type: string }
+        country: { type: string }
+
+    JobSource:
+      type: object
+      required: [board, channel, capturedAt]
+      properties:
+        board: { type: string }
+        channel: { $ref: '#/components/schemas/JobCaptureMethod' }
+        url: { type: string, format: uri }
+        capturedAt: { type: string, format: date-time }
+
+    JobMatch:
+      type: object
+      required: [score, strengths, gaps]
+      properties:
+        score: { type: integer }
+        strengths:
+          type: array
+          items: { type: string }
+        gaps:
+          type: array
+          items: { type: string }
+        kind:
+          type: string
+          enum: [rough, deep]
+          description: D8 -- rough = free local heuristic; deep = paid LLM. Absent = rough.
+
+    Job:
+      type: object
+      description: A captured posting -- the canonical resource (ADR-006).
+      required: [id, company, title, location, workMode, employment, compensation, source, posted]
+      properties:
+        id: { type: string, format: uuid }
+        company: { type: string }
+        title: { type: string }
+        location: { $ref: '#/components/schemas/JobLocation' }
+        workMode: { $ref: '#/components/schemas/JobWorkMode' }
+        employment: { $ref: '#/components/schemas/Employment' }
+        compensation:
+          oneOf:
+            - { $ref: '#/components/schemas/Salary' }
+            - { type: 'null' }
+        seniority: { type: string }
+        source: { $ref: '#/components/schemas/JobSource' }
+        isNew: { type: boolean }
+        posted: { type: string, format: date-time }
+        summary: { type: string }
+        tags:
+          type: array
+          items: { type: string }
+        requirements:
+          type: array
+          items: { type: string }
+        description: { type: string, description: Verbatim JD text. }
+        match: { $ref: '#/components/schemas/JobMatch' }
+
+    # ------------------------------------------------------------ match
+    MatchRubricRow:
+      type: object
+      required: [label, score, note]
+      properties:
+        label: { type: string }
+        score: { type: integer }
+        note: { type: string }
+
+    MatchGap:
+      type: object
+      required: [severity, text]
+      properties:
+        severity:
+          type: string
+          enum: [high, medium, low]
+        text: { type: string }
+
+    MatchReport:
+      type: object
+      required: [resumeId, jobId, score, rubric, gaps, strengths]
+      properties:
+        resumeId: { type: string, format: uuid }
+        jobId: { type: string, format: uuid }
+        score: { type: integer }
+        rubric:
+          type: array
+          items: { $ref: '#/components/schemas/MatchRubricRow' }
+        gaps:
+          type: array
+          items: { $ref: '#/components/schemas/MatchGap' }
+        strengths:
+          type: array
+          items: { type: string }
+
+    CostPreviewItem:
+      type: object
+      required: [resumeId, model, estCostUsd]
+      properties:
+        resumeId: { type: string, format: uuid, description: The resume this line prices (label was UI copy). }
+        model: { type: string }
+        estCostUsd: { type: number }
+
+    CostPreview:
+      type: object
+      description: D8b consent panel payload, returned before any paid LLM run.
+      required: [items, totalUsd, capRemainingUsd, overCap]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/CostPreviewItem' }
+        totalUsd: { type: number }
+        capRemainingUsd: { type: number }
+        overCap: { type: boolean }
+
+    DeepMatchResult:
+      type: object
+      required: [jobId, resumeId, score, kind, strengths, gaps, costUsd, aiRun]
+      properties:
+        jobId: { type: string, format: uuid }
+        resumeId: { type: string, format: uuid }
+        score: { type: integer }
+        kind: { type: string, enum: [deep] }
+        strengths:
+          type: array
+          items: { type: string }
+        gaps:
+          type: array
+          items: { type: string }
+        costUsd: { type: number }
+        aiRun: { $ref: '#/components/schemas/AiRunEnvelope' }
+
+    # ----------------------------------------------------------- agents
+    AgentState:
+      type: string
+      enum: [running, demand, paused, error]
+
+    AgentTrustTier:
+      type: string
+      enum: [observe, suggest, act-with-approval, autonomous]
+
+    Agent:
+      type: object
+      required: [id, name, state, lastActivity, actions, costUsd, description]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        state: { $ref: '#/components/schemas/AgentState' }
+        lastActivity: { type: string, format: date-time }
+        actions: { type: integer }
+        costUsd: { type: number, description: Agent's month-to-date cost, USD (was preformatted "$0.00"). }
+        description: { type: string }
+        live: { type: boolean }
+        trustTier: { $ref: '#/components/schemas/AgentTrustTier' }
+
+    TrustTierRung:
+      type: object
+      description: One rung of the ladder. label/blurb were UI copy (client-owned).
+      required: [tier]
+      properties:
+        tier: { $ref: '#/components/schemas/AgentTrustTier' }
+
+    AgentTrustTierView:
+      type: object
+      required: [agentId, currentTier, ladder]
+      properties:
+        agentId: { type: string, format: uuid }
+        currentTier: { $ref: '#/components/schemas/AgentTrustTier' }
+        unlockedAt: { type: string, format: date-time }
+        ladder:
+          type: array
+          items: { $ref: '#/components/schemas/TrustTierRung' }
+
+    AgentTrustTierUpdate:
+      type: object
+      required: [agentId, currentTier, status, message]
+      properties:
+        agentId: { type: string, format: uuid }
+        currentTier: { $ref: '#/components/schemas/AgentTrustTier' }
+        status:
+          type: string
+          description: State model DEFERRED (founder ruled 2026-07-04, DECISIONS-NEEDED #2); values not enumerated.
+        message: { type: string }
+
+    AgentLogKind:
+      type: string
+      enum: [auto, await, success, skipped]
+
+    AgentLogEntry:
+      type: object
+      required: [time, agentId, kind, message, ref]
+      properties:
+        time: { type: string, format: date-time }
+        agentId: { type: string, format: uuid }
+        kind: { $ref: '#/components/schemas/AgentLogKind' }
+        message: { type: string }
+        ref: { type: string, description: Opaque cross-reference to the acted-upon entity. }
+
+    AgentPermission:
+      type: object
+      required: [permission, granted]
+      properties:
+        permission: { type: string }
+        granted: { type: boolean }
+        requiredTier: { $ref: '#/components/schemas/AgentTrustTier' }
+
+    ReviewQueueItem:
+      type: object
+      required: [id, agentId, message, time]
+      properties:
+        id: { type: string, format: uuid, description: 'Queue entry id (approve/reject by /agents/review-queue/{id}).' }
+        agentId: { type: string, format: uuid }
+        message: { type: string }
+        time: { type: string, format: date-time }
+
+    # ---------------------------------------------------------- resumes
+    ResumeTag:
+      type: string
+      enum: [MASTER, DEFAULT, VARIANT, TAILORED, DRAFT, FORMAT]
+
+    Resume:
+      type: object
+      description: >
+        In the resume-lifecycle model (RES-034, ADR-007/008) a non-FORMAT
+        Resume IS a projection -- a curated selection over career history.
+      required: [id, name, subtitle, version, usedIn, updated, tag]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        subtitle: { type: string, description: User-visible resume descriptor (data, not UI chrome). }
+        version: { type: string }
+        usedIn: { type: integer }
+        updated: { type: string, format: date-time }
+        tag: { $ref: '#/components/schemas/ResumeTag' }
+        match: { type: integer }
+        body: { type: string }
+        sourceUploadId: { type: string, format: uuid, description: RES-034 upload provenance. }
+        templateId: { type: string, format: uuid, description: TPL-002 render template. }
+        targetRole: { type: string }
+        scoringEnabled:
+          type: boolean
+          description: D21 -- participates in match scoring; default ON, MASTER-only.
+
+    ResumeUpload:
+      type: object
+      required: [id, filename, uploadedAt, parsed, sizeBytes]
+      properties:
+        id: { type: string, format: uuid }
+        filename: { type: string }
+        uploadedAt: { type: string, format: date-time }
+        parsed: { type: boolean }
+        sizeBytes: { type: integer }
+
+    CareerHistoryItem:
+      type: object
+      required: [id, kind, title, bullets, ordinal, sourceUploadIds]
+      properties:
+        id: { type: string, format: uuid }
+        kind:
+          type: string
+          enum: [experience, education, skill, project, summary]
+        title: { type: string }
+        org: { type: string }
+        bullets:
+          type: array
+          items: { type: string }
+        ordinal: { type: integer }
+        sourceUploadIds:
+          type: array
+          items: { type: string, format: uuid }
+          description: RES-038 merge provenance.
+
+    ResumeExport:
+      type: object
+      required: [id, projectionId, templateId, templateVersion, filename, generatedAt, regenerable]
+      properties:
+        id: { type: string, format: uuid }
+        projectionId: { type: string, format: uuid }
+        templateId: { type: string, format: uuid }
+        templateVersion: { type: string, description: D17 -- frozen per export. }
+        filename: { type: string }
+        generatedAt: { type: string, format: date-time }
+        regenerable: { type: boolean }
+
+    ResumeTemplate:
+      type: object
+      required: [id, name, previewKind, description]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        previewKind:
+          type: string
+          enum: [single-column, two-column, compact, modern]
+        description: { type: string }
+
+    # ------------------------------------------------------------ coach
+    CoachThreadScope:
+      type: string
+      description: Note `résumé` with é -- verbatim from source; fixtures depend on the spelling.
+      enum:
+        - application
+        - résumé
+        - career-history
+        - projection
+        - contact
+        - answer
+        - project
+        - accomplishment
+        - prep
+        - general
+
+    CoachThread:
+      type: object
+      required: [id, title, scope, when]
+      properties:
+        id: { type: string, format: uuid }
+        title: { type: string, description: Thread title (data, client-owned copy stays as-is). }
+        scope: { $ref: '#/components/schemas/CoachThreadScope' }
+        when: { type: string, format: date-time }
+        active: { type: boolean }
+
+    CoachMessage:
+      type: object
+      required: [id, author, text]
+      properties:
+        id: { type: string }
+        author:
+          type: string
+          enum: [user, bot]
+        text: { type: string }
+        draft: { type: string }
+        draftAttachments:
+          type: array
+          description: COA-024 -- items to attach when sending from the user's OWN email client.
+          items:
+            type: object
+            required: [name, kind]
+            properties:
+              name: { type: string }
+              kind:
+                type: string
+                enum: [resume, cover-letter, file]
+        typing: { type: boolean }
+
+    ContextCard:
+      type: object
+      required: [label, body]
+      properties:
+        label: { type: string }
+        body: { type: string }
+
+    CoachSubject:
+      type: object
+      description: COA-031 -- the live "what am I looking at" descriptor.
+      required: [scope, label]
+      properties:
+        scope: { $ref: '#/components/schemas/CoachThreadScope' }
+        id: { type: string }
+        label: { type: string }
+
+    CoachDiff:
+      type: object
+      required: [field, before, after]
+      properties:
+        field: { type: string }
+        before: { type: string }
+        after: { type: string }
+
+    CoachProposal:
+      type: object
+      description: COA-032 -- reviewed (gate 1) before it is saved (gate 2).
+      required: [id, subject, summary, diff, status]
+      properties:
+        id: { type: string }
+        subject: { $ref: '#/components/schemas/CoachSubject' }
+        summary: { type: string }
+        diff:
+          type: array
+          items: { $ref: '#/components/schemas/CoachDiff' }
+        status:
+          type: string
+          description: State model DEFERRED (founder ruled 2026-07-04, DECISIONS-NEEDED #1); values not enumerated.
+
+    # CoachGreeting schema REMOVED with /coach/greeting (founder ruled
+    # 2026-07-04, DECISIONS-NEEDED #5): canned client copy, no backend route.
+
+    # ---------------------------------------------------------- library
+    Contact:
+      allOf:
+        - { $ref: '#/components/schemas/ContactDraft' }
+        - type: object
+          required: [id, updated]
+          properties:
+            id: { type: string, format: uuid }
+            updated: { type: string, format: date-time }
+            deletedAt:
+              type: string
+              format: date-time
+              description: D24 soft-delete marker; set = in the trash.
+
+    ContactDraft:
+      type: object
+      required: [name, role, org, email, phone, relationship, isReference, tags, links, notes]
+      properties:
+        name: { type: string }
+        role: { type: string }
+        org: { type: string }
+        email: { type: string }
+        phone: { type: string }
+        relationship: { type: string }
+        isReference: { type: boolean, description: References are a tagged role (CON-002). }
+        tags:
+          type: array
+          items: { type: string }
+        links:
+          type: array
+          items:
+            type: object
+            required: [label, url]
+            properties:
+              label: { type: string }
+              url: { type: string, format: uri }
+        notes: { type: string }
+
+    Accomplishment:
+      allOf:
+        - { $ref: '#/components/schemas/AccomplishmentDraft' }
+        - type: object
+          required: [id, usedIn, updated]
+          properties:
+            id: { type: string, format: uuid }
+            usedIn: { type: integer }
+            updated: { type: string, format: date-time }
+            deletedAt: { type: string, format: date-time }
+
+    AccomplishmentDraft:
+      type: object
+      required: [title, summary, tags, source]
+      properties:
+        title: { type: string }
+        summary: { type: string }
+        tags:
+          type: array
+          items: { type: string }
+        source:
+          description: ACC-002 -- set when distilled from a Project (snapshot + backlink), else null.
+          oneOf:
+            - type: object
+              required: [projectId]
+              properties:
+                projectId: { type: string, format: uuid }
+            - { type: 'null' }
+
+    AccomplishmentDeriveResult:
+      type: object
+      description: Response of deriveAccomplishmentFromProject (AI op); the accomplishment plus its run telemetry.
+      required: [accomplishment, aiRun]
+      properties:
+        accomplishment: { $ref: '#/components/schemas/Accomplishment' }
+        aiRun: { $ref: '#/components/schemas/AiRunEnvelope' }
+
+    Answer:
+      allOf:
+        - { $ref: '#/components/schemas/AnswerDraft' }
+        - type: object
+          required: [id, updated]
+          properties:
+            id: { type: string, format: uuid }
+            updated: { type: string, format: date-time }
+            deletedAt: { type: string, format: date-time }
+
+    AnswerDraft:
+      type: object
+      required: [question, body, category, tags]
+      properties:
+        question: { type: string }
+        body: { type: string }
+        category:
+          type: string
+          enum: [compensation, motivation, work-authorization, logistics, eeo, other]
+        tags:
+          type: array
+          items: { type: string }
+
+    Project:
+      allOf:
+        - { $ref: '#/components/schemas/ProjectDraft' }
+        - type: object
+          required: [id, updated]
+          properties:
+            id: { type: string, format: uuid }
+            updated: { type: string, format: date-time }
+            deletedAt: { type: string, format: date-time }
+
+    ProjectDraft:
+      type: object
+      description: PRJ-001 -- a per-employer brain-dump / evidence reservoir.
+      required: [title, employer, body, tags]
+      properties:
+        title: { type: string }
+        employer: { type: string }
+        body: { type: string }
+        tags:
+          type: array
+          items: { type: string }
+
+    Credential:
+      type: object
+      required: [id, name, type, issuer, fileRef, updated]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        type:
+          type: string
+          enum: [license, certification, transcript, portfolio, other]
+        issuer: { type: string }
+        expiry: { type: string, format: date }
+        fileRef: { type: string }
+        updated: { type: string, format: date-time }
+
+    LibraryKind:
+      type: string
+      enum: [contact, accomplishment, answer, project]
+
+    TrashEntry:
+      type: object
+      required: [kind, id, label, deletedAt]
+      properties:
+        kind: { $ref: '#/components/schemas/LibraryKind' }
+        id: { type: string, format: uuid }
+        label: { type: string }
+        deletedAt: { type: string, format: date-time }
+
+    DeletionImpact:
+      type: object
+      required: [kind, id, dependents, total]
+      properties:
+        kind: { $ref: '#/components/schemas/LibraryKind' }
+        id: { type: string, format: uuid }
+        dependents:
+          type: array
+          items:
+            type: object
+            required: [kind, count, items]
+            properties:
+              kind: { $ref: '#/components/schemas/LibraryKind' }
+              count: { type: integer }
+              items:
+                type: array
+                items:
+                  type: object
+                  required: [id, label]
+                  properties:
+                    id: { type: string, format: uuid }
+                    label: { type: string }
+        total: { type: integer }
+
+    # --------------------------------------------------------- searches
+    SearchCriteria:
+      type: object
+      required:
+        - titlesInclude
+        - titlesExclude
+        - locations
+        - remotePolicy
+        - maxCommuteMin
+        - baseFloorUsd
+        - baseCeilingUsd
+      properties:
+        titlesInclude:
+          type: array
+          items: { type: string }
+        titlesExclude:
+          type: array
+          items: { type: string }
+        locations:
+          type: array
+          items: { type: string }
+        remotePolicy:
+          type: string
+          description: Machine tokens; client maps to display copy.
+          enum: [remote-ok, hybrid-ok, required]
+        maxCommuteMin: { type: integer }
+        baseFloorUsd: { type: number, description: Base salary floor, USD (was string "$..."). }
+        baseCeilingUsd: { type: number, description: Base salary ceiling, USD. }
+        yearsExperienceMin: { type: integer, description: Lower bound of the years-experience band (was string "8-14 yrs"). }
+        yearsExperienceMax: { type: integer, description: Upper bound of the years-experience band. }
+        scoringResumeIds:
+          type: array
+          items: { type: string, format: uuid }
+          description: D21 per-search override -- REPLACES the global eligible master set.
+
+    Search:
+      type: object
+      required: [id, name, criteria, jobsInInbox, activeApplications, shortlisted, offers, spendMoUsd]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        state:
+          type: string
+          enum: [active, paused]
+          description: Defaults to active when absent. No pause/activate mutation is frozen (see DECISIONS-NEEDED.md).
+        criteria: { $ref: '#/components/schemas/SearchCriteria' }
+        jobsInInbox: { type: integer }
+        activeApplications: { type: integer }
+        shortlisted: { type: integer }
+        offers: { type: integer }
+        spendMoUsd: { type: number, description: Month-to-date spend for this search, USD (was "$0.00"). }
+
+    CreateSearchInput:
+      type: object
+      required: [name, criteria]
+      properties:
+        name: { type: string }
+        criteria:
+          description: Partial criteria; unset fields take blank defaults.
+          $ref: '#/components/schemas/SearchCriteria'
+
+    # ---------------------------------------------------- notifications
+    Notification:
+      type: object
+      required: [id, kind, title, message, actor]
+      properties:
+        id: { type: string, format: uuid }
+        kind:
+          type: string
+          enum: [reply, agent, match, cal]
+        title: { type: string }
+        message: { type: string }
+        actor: { type: string }
+        unread: { type: boolean }
+
+    # --------------------------------------------------------- settings
+    IntegrationRow:
+      type: object
+      required: [name, description, state]
+      properties:
+        name: { type: string }
+        description: { type: string }
+        state:
+          type: string
+          enum: [connected, not-connected, auto]
+        account: { type: string }
+        lastSync: { type: string, format: date-time }
+
+    ProviderRow:
+      type: object
+      required: [provider, model, state]
+      properties:
+        provider: { type: string }
+        model: { type: string }
+        state:
+          type: string
+          enum: [connected, not-connected, error]
+        balanceUsd: { type: number, description: Prepaid provider balance, USD (was "$..."). }
+        error: { type: string }
+
+    RoutingRow:
+      type: object
+      description: Per-task provider routing (label/value were generic display pairs; now semantic).
+      required: [task, model]
+      properties:
+        task: { type: string, description: Task key, e.g. "Match scoring". }
+        model: { type: string, description: Model routed to that task. }
+
+    UsageRow:
+      type: object
+      required: [service, model, count, tokens, costUsd]
+      properties:
+        service: { type: string }
+        model: { type: string }
+        count: { type: integer }
+        tokens: { type: integer }
+        costUsd: { type: number }
+
+    PrivacyToggle:
+      type: object
+      description: >
+        Toggle STATE is data; the title/description copy is client-owned,
+        keyed off `key`.
+      required: [key, 'on']
+      properties:
+        key: { type: string, description: Stable toggle key the client maps to copy. }
+        'on': { type: boolean }
+
+    InvoiceRow:
+      type: object
+      required: [date, description, amountUsd]
+      properties:
+        date: { type: string, format: date-time }
+        description: { type: string }
+        amountUsd: { type: number }
+
+    NotifPref:
+      type: object
+      required: [id, category, emailEnabled, inAppEnabled]
+      properties:
+        id: { type: string }
+        category: { type: string, description: Category key (data; client owns the consequence copy). }
+        emailEnabled: { type: boolean }
+        inAppEnabled: { type: boolean }
+        emailLocked: { type: boolean }
+
+    ExtensionToken:
+      type: object
+      required: [id, label, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        label: { type: string }
+        createdAt: { type: string, format: date-time }
+        revokedAt: { type: string, format: date-time }
+
+    EmailParserFallback:
+      type: object
+      description: D9b -- parser behavior once the monthly cap is hit.
+      required: [mode]
+      properties:
+        mode:
+          type: string
+          enum: [deterministic, cheap-model]
+        model:
+          type: string
+          description: Cheap model id, present when mode = cheap-model.
+
+    Settings:
+      type: object
+      required:
+        - profile
+        - integrations
+        - providers
+        - routing
+        - usage
+        - monthSpendUsd
+        - monthlyCapUsd
+        - privacy
+        - privacyLastUpdated
+        - plan
+        - invoices
+        - notifPrefs
+        - extensionTokens
+        - emailParserFallback
+      properties:
+        profile:
+          type: object
+          required: [name, email, phone, timezone, currentRole, targetTitles, compFloorUsd]
+          properties:
+            name: { type: string }
+            email: { type: string, format: email }
+            phone: { type: string }
+            timezone: { type: string }
+            currentRole: { type: string }
+            targetTitles:
+              type: array
+              items: { type: string }
+            compFloorUsd: { type: number, description: Compensation floor, USD (was string). }
+        integrations:
+          type: array
+          items: { $ref: '#/components/schemas/IntegrationRow' }
+        providers:
+          type: array
+          items: { $ref: '#/components/schemas/ProviderRow' }
+        routing:
+          type: array
+          items: { $ref: '#/components/schemas/RoutingRow' }
+        usage:
+          type: array
+          items: { $ref: '#/components/schemas/UsageRow' }
+        monthSpendUsd: { type: number }
+        monthlyCapUsd: { type: number }
+        privacy:
+          type: array
+          items: { $ref: '#/components/schemas/PrivacyToggle' }
+        privacyLastUpdated: { type: string, format: date-time }
+        plan:
+          type: object
+          required: [name, priceUsd, description, nextCharge]
+          properties:
+            name: { type: string }
+            priceUsd: { type: number }
+            description: { type: string }
+            nextCharge: { type: string, format: date-time }
+        invoices:
+          type: array
+          items: { $ref: '#/components/schemas/InvoiceRow' }
+        notifPrefs:
+          type: array
+          items: { $ref: '#/components/schemas/NotifPref' }
+        extensionTokens:
+          type: array
+          items: { $ref: '#/components/schemas/ExtensionToken' }
+        emailParserFallback: { $ref: '#/components/schemas/EmailParserFallback' }
+
+    UsageAggregate:
+      type: object
+      required: [monthSpendUsd, monthlyCapUsd, tokensIn, tokensOut, avgPerSessionUsd]
+      properties:
+        monthSpendUsd: { type: number }
+        monthlyCapUsd: { type: number }
+        tokensIn: { type: integer }
+        tokensOut: { type: integer }
+        avgPerSessionUsd: { type: number, description: Average spend per session, USD. }
+
+    DataExportRequest:
+      type: object
+      required: [url, requestedAt]
+      properties:
+        url: { type: string, format: uri }
+        requestedAt: { type: string, format: date-time }
