@@ -1,0 +1,17 @@
+"""Aggregate router for all scaffold resource routers.
+
+``scaffold_router`` is included in ``app.api.main`` so every scaffold route
+inherits the ``/api/v1`` prefix (``app.main`` mounts ``api_router`` there).
+
+Phase-2 agents: import your resource router and add one ``include_router``
+line below. Keep this file a pure aggregator -- no route logic here.
+"""
+
+from __future__ import annotations
+
+from fastapi import APIRouter
+
+from app.scaffold.routes import searches
+
+scaffold_router = APIRouter()
+scaffold_router.include_router(searches.router)
