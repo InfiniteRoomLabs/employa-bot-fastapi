@@ -11,7 +11,9 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from app.scaffold.routes import searches
+from app.scaffold.routes import agents, coach, searches
 
 scaffold_router = APIRouter()
 scaffold_router.include_router(searches.router)
+scaffold_router.include_router(agents.router)
+scaffold_router.include_router(coach.router)
