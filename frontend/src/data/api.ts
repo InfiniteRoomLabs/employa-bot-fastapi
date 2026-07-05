@@ -1,107 +1,35 @@
 /**
- * Internal -- consumers MUST go through `src/hooks/`. Direct imports from this
- * file outside `src/hooks/` are a layer violation. This is the swap-seam:
- * replacing these functions with a real fetch client (or TanStack Query, SWR,
- * etc.) is the only surface the future Symfony + API Platform consumer needs
- * to touch.
+ * Data seam -- HTTP adapter against the scaffold FastAPI backend.
  *
- * Every function is async, awaits `simulateLatency()`, and surfaces failures
- * through `MockApiError`. Failure injection is toggled by the
- * `VITE_MOCK_FAIL` env var (comma-separated `path:kind` pairs, e.g.
- * `applications:rate_limited,coach/threads/:id:network`). Tests use `vi.stubEnv` to
- * exercise error states.
+ * Consumers MUST go through `src/hooks/`. This file is the swap-seam: every
+ * exported function keeps its old signature (hooks/screens/tests are unchanged)
+ * but the body now speaks HTTP against the frozen `mvp-api.yaml` contract
+ * (`/api/v1/...`, camelCase wire, ISO-8601 timestamps, USD numbers, the
+ * 12-value stage machine, machine-token enums, `{kind, path, message}` errors).
  *
- * MUTABLE STORE DESIGN
- * --------------------
- * Module-level `let` arrays shadow the read-only fixture constants.
- * - They are lazily initialized from the frozen fixture on first use.
- * - Mutations (create/update/delete) write directly to these arrays.
- * - `getXxx()` functions read from the mutable copy, so a `refetch()` call
- *   after a mutation picks up the new state within the same browser session.
- * - `__resetForTests()` reinitializes every mutable array from the frozen
- *   seed, giving Vitest a clean slate between test runs.
- * - State resets on page reload (no localStorage) -- this is explicit and
- *   documented as mockup-correct behavior.
+ * The wire<->app difference is absorbed by `./wire` (scalar transforms +
+ * client-owned presentation constants) and the per-op mappers below; app-facing
+ * shapes come straight from the frozen `./types`.
  */
 
-import { simulateLatency } from "../lib/latency"
-import { MockApiError, type MockApiErrorKind } from "../lib/mock-api-error"
+import { httpErrorToMockApiError, MockApiError } from "../lib/mock-api-error"
+import { formatSalary } from "../lib/salary"
 import {
-  ACCOMPLISHMENTS,
-  AGENT_LOG,
-  AGENTS_DATA,
-  ANSWERS,
-  APP_SLUG_BY_UUID,
-  APP_UUID_BY_SLUG,
-  APPS,
-  APPS_AI_INFRA,
-  APPS_BACKEND,
-  ARCHIVE_APPS,
-  applicationView,
-  BLANK_CRITERIA,
   BUDGET_TOTAL,
   BUDGET_USED,
-  CAREER_HISTORY,
-  COACH_CONTEXT_BY_THREAD,
-  COACH_CONTEXT_CARDS,
   COACH_GREETING_BY_SCOPE,
-  COACH_MESSAGES,
-  COACH_PROPOSAL_FIXTURES,
-  COACH_THREADS,
-  CONTACTS,
-  CREDENTIALS,
+  DANGER_ACTIONS,
   EXTENSION_RECENT_CAPTURES,
-  EXTENSION_STATES,
-  INBOX_BY_SEARCH,
-  INTERVIEW_ROUNDS,
-  JOBS,
-  JOBS_BY_ID,
-  JOBS_INBOX,
-  LLM_TASK_COST_USD,
-  MATCH_GAPS,
-  MATCH_REPORT_META,
-  MATCH_RUBRIC,
-  MATCH_STRENGTHS,
-  NOTIFICATIONS,
-  PER_AGENT_PERMISSIONS,
-  PERMISSION_REQUIRED_TIER,
-  PROJECTS,
-  REMY,
-  RESUME_EXPORTS,
-  RESUME_TEMPLATES,
-  RESUME_UPLOADS,
-  RESUMES,
-  SEARCH_ID_AI_INFRA,
-  SEARCH_ID_BACKEND,
-  SEARCHES,
-  SETTINGS_DANGER,
-  SETTINGS_EMAIL_PARSER_FALLBACK,
-  SETTINGS_EXTENSION_TOKENS,
-  SETTINGS_INTEGRATIONS,
-  SETTINGS_INVOICES,
-  SETTINGS_NOTIFICATION_PREFS,
-  SETTINGS_PLAN,
-  SETTINGS_PRIVACY,
-  SETTINGS_PRIVACY_LAST_UPDATED,
-  SETTINGS_PROFILE,
-  SETTINGS_PROVIDERS,
-  SETTINGS_ROUTING,
-  SETTINGS_USAGE,
-  SETTINGS_USAGE_META,
-  SETTINGS_USAGE_TOTALS,
-  SHORTLIST_BY_SEARCH,
-  SHORTLIST_DATA,
-  TEMPLATE_ID_CLASSIC,
-  TIMELINE_BY_APP,
-  TRUST_TIER_LADDER,
+  EXTENSION_STATE_LABELS,
   USER_MENU_ROWS,
-} from "./fixtures"
+} from "./client-constants"
 import type {
   Accomplishment,
   Agent,
   AgentLogEntry,
   AgentLogFilter,
   AgentPermission,
+  AgentState,
   AgentTrustTier,
   AgentTrustTierUpdate,
   AgentTrustTierView,
@@ -118,6 +46,7 @@ import type {
   Contact,
   ContextCard,
   CostPreview,
+  CostPreviewItem,
   CreateSearchInput,
   Credential,
   DataExportRequest,
@@ -125,244 +54,366 @@ import type {
   DeletionImpact,
   ExtensionRecentCapture,
   ExtensionState,
+  IntegrationRow,
   InterviewRound,
   Job,
   JobInboxItem,
   LibraryKind,
   MatchReport,
   Notification,
+  NotifPref,
+  PrivacyToggle,
   Project,
+  ProviderRow,
   Resume,
   ResumeExport,
   ResumeSnapshot,
   ResumeTemplate,
   ResumeUpload,
   ReviewQueueItem,
+  RoutingRow,
   Salary,
   Search,
+  SearchCriteria,
   Settings,
   ShortlistEntry,
+  Stage,
   TimelineEvent,
   TrashEntry,
   UpdateSearchCriteriaInput,
   UsageAggregate,
+  UsageRow,
   User,
   UserMenuRow,
 } from "./types"
+import {
+  abbreviateTokens,
+  agentIcon,
+  agentStateLabel,
+  daysSince,
+  displayToYearsBand,
+  formatUsd,
+  integrationIcon,
+  moneyStringToNumber,
+  notificationIcon,
+  parseNegotiatedComp,
+  privacyCopy,
+  relativeAge,
+  remotePolicyAppToWire,
+  remotePolicyWireToApp,
+  searchEyebrow,
+  stageAppToWire,
+  stageLabel,
+  stageWireToApp,
+  trustTierRung,
+  type WireStage,
+  yearsBandToDisplay,
+} from "./wire"
 
-// ---------------------------------------------------------------------------
-// Failure injection
-// ---------------------------------------------------------------------------
+// ===========================================================================
+// HTTP core
+// ===========================================================================
 
-const KNOWN_KINDS: readonly MockApiErrorKind[] = [
-  "not_found",
-  "unauthorized",
-  "validation_error",
-  "conflict",
-  "cap_reached",
-  "undo_window_expired",
-  "invalid_transition",
-  "rate_limited",
-  "network",
-  "unknown",
-]
+// Base URL follows the template convention: the generated OpenAPI client keys
+// off `VITE_API_URL` (fed by compose/.env). Empty string => same-origin.
+const API_ROOT = (import.meta.env.VITE_API_URL as string | undefined) ?? ""
+const API_BASE = `${API_ROOT}/api/v1`
 
-/**
- * Determines if a specific failure kind should be injected for a given API path based on environment configuration.
- *
- * @param {string} path - The API path to check for an injected failure kind.
- * @return {MockApiErrorKind | null} The matched failure kind to inject if found, or null if no match exists.
- */
-function injectedFailureFor(path: string): MockApiErrorKind | null {
-  const env = import.meta.env as Record<string, string | undefined>
-  const raw = env.VITE_MOCK_FAIL
-  if (typeof raw !== "string" || raw.length === 0) {
-    return null
+/** Server-side CORS (BACKEND_CORS_ORIGINS) allows the dev origins; no proxy. */
+async function call<T>(path: string, init?: RequestInit): Promise<T> {
+  let res: Response
+  try {
+    const hasBody = init?.body !== undefined && init?.body !== null
+    res = await fetch(`${API_BASE}${path}`, {
+      ...init,
+      headers: {
+        Accept: "application/json",
+        ...(hasBody ? { "Content-Type": "application/json" } : {}),
+        ...init?.headers,
+      },
+    })
+  } catch {
+    // fetch reject / DNS / TCP -> client-synthesized transport kind.
+    throw MockApiError.network(path)
   }
-  for (const entry of raw.split(",")) {
-    const trimmed = entry.trim()
-    if (trimmed.length === 0) {
-      continue
+  if (res.status === 204) {
+    return undefined as T
+  }
+  if (!res.ok) {
+    let body: { kind?: string; path?: string; message?: string } | null = null
+    try {
+      body = (await res.json()) as { kind?: string; message?: string }
+    } catch {
+      body = null
     }
-    const index = trimmed.lastIndexOf(":")
-    if (index <= 0) {
-      continue
-    }
-    const target = trimmed.slice(0, index)
-    const kind = trimmed.slice(index + 1) as MockApiErrorKind
-    if (target === path && (KNOWN_KINDS as readonly string[]).includes(kind)) {
-      return kind
+    throw httpErrorToMockApiError(res.status, path, body)
+  }
+  try {
+    return (await res.json()) as T
+  } catch {
+    return undefined as T
+  }
+}
+
+function get<T>(path: string): Promise<T> {
+  return call<T>(path)
+}
+function post<T>(path: string, body?: unknown): Promise<T> {
+  return call<T>(path, {
+    method: "POST",
+    body: body === undefined ? undefined : JSON.stringify(body),
+  })
+}
+function patch<T>(path: string, body?: unknown): Promise<T> {
+  return call<T>(path, {
+    method: "PATCH",
+    body: body === undefined ? undefined : JSON.stringify(body),
+  })
+}
+function put<T>(path: string, body?: unknown): Promise<T> {
+  return call<T>(path, {
+    method: "PUT",
+    body: body === undefined ? undefined : JSON.stringify(body),
+  })
+}
+function del(path: string): Promise<void> {
+  return call<void>(path, { method: "DELETE" })
+}
+
+function qs(params: Record<string, string | undefined>): string {
+  const sp = new URLSearchParams()
+  for (const [k, v] of Object.entries(params)) {
+    if (v !== undefined && v !== null && v !== "") {
+      sp.set(k, v)
     }
   }
-  return null
+  const s = sp.toString()
+  return s ? `?${s}` : ""
 }
 
-/**
- * Triggers an error based on the injected failure type for the given path.
- *
- * @param {string} path - The input path used to determine the type of failure.
- * @return {void} This method does not return a value.
- */
-function throwInjected(path: string): void {
-  const kind = injectedFailureFor(path)
-  if (kind === null) {
-    return
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+function isUuid(s: string): boolean {
+  return UUID_RE.test(s)
+}
+
+// ===========================================================================
+// Wire response shapes (only where they differ from the app type)
+// ===========================================================================
+
+type WApplication = Omit<Application, "stage" | "stageLabel" | "days"> & {
+  stage: string
+  version: number
+  createdAt: string
+}
+type WJob = Omit<Job, never>
+type WResume = Resume
+type WApplicationView = WApplication & {
+  job: WJob
+  resume: WResume | null
+  company: string
+  role: string
+  location: string
+  salary: Salary | null
+  match: number
+  source: string
+  resumeName: string
+}
+type WAgent = Omit<Agent, "icon" | "stateLabel" | "cost"> & { costUsd: number }
+type WShortlistEntry = Omit<ShortlistEntry, "compensation"> & {
+  id: string
+  salary: Salary | null
+}
+type WJobInboxItem = Omit<JobInboxItem, "compensation"> & {
+  salary: Salary | null
+}
+type WSearchCriteria = Omit<
+  SearchCriteria,
+  "remotePolicy" | "baseFloor" | "baseCeiling" | "yearsExperience"
+> & {
+  remotePolicy: string
+  baseFloorUsd: number
+  baseCeilingUsd: number
+  yearsExperienceMin?: number | null
+  yearsExperienceMax?: number | null
+}
+type WSearch = Omit<Search, "eyebrow" | "spendMo" | "criteria"> & {
+  spendMoUsd: number
+  criteria: WSearchCriteria
+}
+type WTrustTierView = Omit<AgentTrustTierView, "ladder"> & {
+  ladder: { tier: AgentTrustTier }[]
+}
+type WTimelineEvent = Omit<TimelineEvent, "badge">
+type WReviewQueueItem = {
+  id: string
+  agentId: string
+  message: string
+  time: string
+}
+type WTrashEntry = TrashEntry
+
+// ===========================================================================
+// Wire -> app mappers
+// ===========================================================================
+
+function appJob(w: WJob): Job {
+  return {
+    ...w,
+    posted: relativeAge(w.posted),
+    source: { ...w.source, capturedAt: relativeAge(w.source.capturedAt) },
   }
-  // Every kind shares the same (kind, path) constructor; no per-kind branch needed.
-  throw new MockApiError(kind, path)
 }
 
-async function begin(path: string): Promise<void> {
-  await simulateLatency()
-  throwInjected(path)
+function appResume(w: WResume): Resume {
+  return { ...w, updated: relativeAge(w.updated) }
 }
 
-// ---------------------------------------------------------------------------
-// MUTABLE STORES
-// Each store is initialized as a spread of its seed fixture. __resetForTests
-// reinitializes all of them together.
-// ---------------------------------------------------------------------------
-
-let _notifications: Notification[] = [...NOTIFICATIONS]
-let _resumes: Resume[] = [...RESUMES]
-let _agents: Agent[] = [...AGENTS_DATA]
-let _shortlist: ShortlistEntry[] = [...SHORTLIST_DATA]
-// APPS is spread per-list to allow cross-list mutations
-let _apps: Application[] = [...APPS]
-let _appsRemote: Application[] = [...APPS_BACKEND]
-let _appsAiInfra: Application[] = [...APPS_AI_INFRA]
-let _searches: Search[] = [...SEARCHES]
-// ORI-009: separate archive pool (never mixed into _apps)
-let _archive: Application[] = [...ARCHIVE_APPS]
-let _interviewRounds: InterviewRound[] = [...INTERVIEW_ROUNDS]
-// ADR-006 stage 3: postings created at runtime (createApplication). getJob and
-// the ApplicationView join consult these in addition to the seeded JOBS_BY_ID.
-let _dynamicJobs: Record<string, Job> = {}
-// 2026-06-02 round: Library artifacts + resume lifecycle stores.
-let _contacts: Contact[] = [...CONTACTS]
-let _accomplishments: Accomplishment[] = [...ACCOMPLISHMENTS]
-let _answers: Answer[] = [...ANSWERS]
-let _projects: Project[] = [...PROJECTS]
-let _credentials: Credential[] = [...CREDENTIALS]
-let _resumeUploads: ResumeUpload[] = [...RESUME_UPLOADS]
-let _careerHistory: CareerHistoryItem[] = [...CAREER_HISTORY]
-let _resumeExports: ResumeExport[] = [...RESUME_EXPORTS]
-
-/**
- * Retrieves a combined collection of job data, merging predefined job records
- * with dynamically generated job entries.
- *
- * @return {Record<string, Job>} A record where the keys are job identifiers
- * and the values are corresponding job objects.
- */
-function jobLookup(): Record<string, Job> {
-  return { ...JOBS_BY_ID, ..._dynamicJobs }
+function appApplication(w: WApplication): Application {
+  const stage: Stage = stageWireToApp(w.stage)
+  return {
+    ...w,
+    stage,
+    stageLabel: stageLabel(stage),
+    days: daysSince(w.createdAt),
+    outcomeAt: w.outcomeAt ? relativeAge(w.outcomeAt) : w.outcomeAt,
+  }
 }
 
-/**
- * Finds a stored application by its UUID or legacy slug. This method resolves a legacy slug to
- * a UUID and searches across multiple data stores to locate the application, including archived applications.
- *
- * @param {string} idOrSlug - The UUID or legacy slug of the application to be found.
- * @return {Application | undefined} The application object if found, or undefined if no application is found.
- */
-function findStoredApplication(idOrSlug: string): Application | undefined {
-  // Accept a UUID id or a legacy slug (resolved to the id) so deep-links and
-  // hardcoded demo references keep working post-normalization.
-  const id = APP_UUID_BY_SLUG[idOrSlug] ?? idOrSlug
-  return (
-    _apps.find((application) => application.id === id) ??
-    _appsRemote.find((application) => application.id === id) ??
-    _appsAiInfra.find((application) => application.id === id) ??
-    _archive.find((application) => application.id === id)
-  )
+function appApplicationView(w: WApplicationView): ApplicationView {
+  return {
+    ...appApplication(w),
+    job: appJob(w.job),
+    resume: w.resume ? appResume(w.resume) : null,
+    company: w.company,
+    role: w.role,
+    location: w.location,
+    salary: w.salary,
+    match: w.match,
+    source: w.source,
+    resumeName: w.resumeName,
+  }
 }
 
-// ---------------------------------------------------------------------------
+function appAgent(w: WAgent): Agent {
+  const { costUsd, ...rest } = w
+  return {
+    ...rest,
+    icon: agentIcon(w.name),
+    stateLabel: agentStateLabel(w.state),
+    cost: formatUsd(costUsd),
+    lastActivity: relativeAge(w.lastActivity),
+  }
+}
+
+function appShortlistEntry(w: WShortlistEntry): ShortlistEntry {
+  const { id: _id, salary, ...rest } = w
+  void _id
+  return {
+    ...rest,
+    compensation: formatSalary(salary),
+    saved: relativeAge(w.saved),
+  }
+}
+
+function appJobInboxItem(w: WJobInboxItem): JobInboxItem {
+  const { salary, ...rest } = w
+  return {
+    ...rest,
+    compensation: formatSalary(salary),
+    posted: relativeAge(w.posted),
+    capturedAt: w.capturedAt ? relativeAge(w.capturedAt) : w.capturedAt,
+  }
+}
+
+function appCriteria(w: WSearchCriteria): SearchCriteria {
+  return {
+    titlesInclude: w.titlesInclude,
+    titlesExclude: w.titlesExclude,
+    locations: w.locations,
+    remotePolicy: remotePolicyWireToApp(w.remotePolicy),
+    maxCommuteMin: w.maxCommuteMin,
+    baseFloor: formatUsd(w.baseFloorUsd),
+    baseCeiling: formatUsd(w.baseCeilingUsd),
+    yearsExperience: yearsBandToDisplay(
+      w.yearsExperienceMin,
+      w.yearsExperienceMax,
+    ),
+    scoringResumeIds: w.scoringResumeIds,
+  }
+}
+
+function appSearch(w: WSearch): Search {
+  const { spendMoUsd, criteria, ...rest } = w
+  return {
+    ...rest,
+    eyebrow: searchEyebrow(w.state),
+    spendMo: formatUsd(spendMoUsd),
+    criteria: appCriteria(criteria),
+  }
+}
+
+function appTimelineEvent(w: WTimelineEvent): TimelineEvent {
+  return { ...w, time: relativeAge(w.time) }
+}
+
+// --- resume name/index resolution (backend is UUID-only; sec 5/9) ---
+
+async function resolveResumeId(nameOrId: string | number): Promise<string> {
+  if (typeof nameOrId === "number") {
+    const list = await getResumes()
+    const hit = list[nameOrId]
+    if (!hit) {
+      throw MockApiError.notFound(`resumes/${nameOrId}`)
+    }
+    return hit.id
+  }
+  if (isUuid(nameOrId)) {
+    return nameOrId
+  }
+  const list = await getResumes()
+  const hit =
+    list.find((r) => r.id === nameOrId) ??
+    list.find((r) => nameOrId.startsWith(r.name)) ??
+    list.find((r) => r.name === nameOrId)
+  if (!hit) {
+    throw MockApiError.notFound(`resumes/${nameOrId}`)
+  }
+  return hit.id
+}
+
+// ===========================================================================
 // User / persona
-// ---------------------------------------------------------------------------
+// ===========================================================================
 
-export async function getCurrentUser(): Promise<User> {
-  await begin("user")
-  return REMY
+export function getCurrentUser(): Promise<User> {
+  return get<User>("/user")
 }
 
-// ---------------------------------------------------------------------------
+// ===========================================================================
 // Applications
-// ---------------------------------------------------------------------------
+// ===========================================================================
 
-/**
- * Returns the applications scoped to a saved search. `searchId` is the
- * search UUID (matching the `Search.id` field). When omitted the
- * canonical platform-search list ships -- same legacy behaviour the
- * top-level `/applications` route always rendered.
- */
 export async function getApplications(
   searchId?: string,
 ): Promise<readonly ApplicationView[]> {
-  await begin("applications")
-  const lookup = jobLookup()
-  let pool: Application[]
-  if (searchId === SEARCH_ID_BACKEND) {
-    pool = _appsRemote
-  } else if (searchId === SEARCH_ID_AI_INFRA) {
-    pool = _appsAiInfra
-  } else {
-    pool = _apps
-  }
-  return pool.map((application) => applicationView(application, lookup))
+  const rows = await get<WApplicationView[]>(`/applications${qs({ searchId })}`)
+  return rows.map(appApplicationView)
 }
 
 export async function getApplication(id: string): Promise<ApplicationView> {
-  const path = "applications/:id"
-  await begin(path)
-  const hit = findStoredApplication(id)
-  if (!hit) {
-    throw MockApiError.notFound(`applications/${id}`)
-  }
-  return applicationView(hit, jobLookup())
+  return appApplicationView(await get<WApplicationView>(`/applications/${id}`))
 }
 
-// ---------------------------------------------------------------------------
-// Archive (ORI-009)
-// ---------------------------------------------------------------------------
-
-/**
- * Returns the subset of the archive pool matching `kind`.
- * won  -> outcome === 'won'
- * passed -> outcome === 'rejected' || outcome === 'withdrawn'
- */
 export async function getArchive(
   kind: "won" | "passed",
 ): Promise<readonly ApplicationView[]> {
-  await begin("archive")
-  return _archive
-    .filter((application) =>
-      kind === "won"
-        ? application.outcome === "won"
-        : application.outcome === "rejected" ||
-          application.outcome === "withdrawn",
-    )
-    .map((application) => applicationView(application, jobLookup()))
+  const rows = await get<WApplicationView[]>(`/archive${qs({ kind })}`)
+  return rows.map(appApplicationView)
 }
 
-/**
- * Returns the live badge counts derived from the archive pool.
- * Sidebar badges consume this so they always match rendered row counts.
- */
-export async function getArchiveCounts(): Promise<{
-  won: number
-  passed: number
-}> {
-  await begin("archive")
-  const won = _archive.filter(
-    (application) => application.outcome === "won",
-  ).length
-  const passed = _archive.filter(
-    (application) =>
-      application.outcome === "rejected" || application.outcome === "withdrawn",
-  ).length
-  return { won, passed }
+export function getArchiveCounts(): Promise<{ won: number; passed: number }> {
+  return get<{ won: number; passed: number }>("/archive/counts")
 }
 
 /** Input for createApplication -- posting display fields + lifecycle (ADR-006). */
@@ -377,141 +428,39 @@ export interface CreateApplicationInput {
   resume?: string | null
   stageLabel?: string
   days?: number
-  /** D15: target saved search. Defaults to last-used / auto-created 'My jobs' when omitted. */
+  /** D15: target saved search. */
   searchId?: string
 }
 
-/**
- * Create a new application (ORI-014). Normalized: this mints a Job for the
- * posting (registered in the dynamic job store) plus an ids-only Application,
- * and returns the joined view.
- */
 export async function createApplication(
   draft: CreateApplicationInput,
 ): Promise<ApplicationView> {
-  await begin("applications")
-  const jobId = crypto.randomUUID()
-  _dynamicJobs[jobId] = {
-    id: jobId,
-    company: draft.company,
-    title: draft.role,
-    location: {
-      raw: draft.location,
-    },
-    workMode: "onsite",
-    employment: {
-      classification: "w2",
-      cadence: "salary",
-      commitment: "full-time",
-    },
-    compensation: draft.salary,
-    source: {
-      board: draft.source,
-      channel: "url",
-      capturedAt: "just now",
-    },
-    posted: "just now",
-    match: {
-      score: draft.match,
-      strengths: [],
-      gaps: [],
-    },
-  }
-  /**
-   * Represents the unique identifier of a resume linked to the draft.
-   * The value is determined based on whether a draft's `resume` property is defined.
-   * - If `draft.resume` is defined, the `resumeId` is set to the ID of the first matching resume
-   *   from the `_resumes` list whose name starts with the `draft.resume` value, or null if no match is found.
-   * - If `draft.resume` is not defined, the value of `resumeId` is null.
-   */
-  let resumeId: null | string = null
+  let resumeId: string | null = null
   if (draft.resume) {
-    resumeId =
-      _resumes.find((resume) => draft.resume!.startsWith(resume.name))?.id ??
-      null
+    try {
+      resumeId = await resolveResumeId(draft.resume)
+    } catch {
+      resumeId = null
+    }
   }
-
-  const newApp: Application = {
-    id: crypto.randomUUID(),
-    jobId,
+  const body = {
+    company: draft.company,
+    role: draft.role,
+    location: draft.location,
+    salary: draft.salary,
+    match: draft.match,
+    source: draft.source,
     resumeId,
-    stage: "draft",
-    stageLabel: draft.stageLabel ?? "drafting",
-    days: draft.days ?? 0,
-    // D15: a capture always lands in a search; default to last-used / 'My jobs'.
-    searchId: draft.searchId ?? ensureDefaultSearch().id,
+    searchId: draft.searchId,
   }
-  _apps.push(newApp)
-  return applicationView(newApp, jobLookup())
+  return appApplicationView(await post<WApplicationView>("/applications", body))
 }
 
-/**
- * The immutable resume snapshot submitted with an application (D10). Synthesized
- * from the application's selected resume; in a real backend this row is
- * materialized at the APPLIED transition and never changes afterward. Throws
- * `conflict` before APPLIED (no submitted copy exists yet).
- *
- * REST: GET /applications/{id}/snapshot -> ResumeSnapshot
- */
 export async function getResumeSnapshot(
   appId: string,
 ): Promise<ResumeSnapshot> {
-  await begin("applications/:id/snapshot")
-  // Resolve slug-or-uuid across every pool, mirroring getApplication.
-  const app = findStoredApplication(appId)
-  if (!app) {
-    throw MockApiError.notFound(`applications/${appId}/snapshot`)
-  }
-  if (app.stage === "saved" || app.stage === "draft") {
-    throw MockApiError.conflict(
-      `applications/${appId}/snapshot`,
-      "No submitted copy exists until the application reaches APPLIED.",
-    )
-  }
-  const resume = app.resumeId
-    ? _resumes.find((candidate) => candidate.id === app.resumeId)
-    : undefined
-  return {
-    id: app.submittedSnapshotId ?? `snap-${appId}`,
-    applicationId: appId,
-    resumeId: app.resumeId ?? "",
-    name: resume?.name ?? "Submitted resume",
-    body: resume?.body ?? "Submitted resume content -- locked at APPLIED.",
-    templateVersion: "v1",
-    capturedAt: "at submission",
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Application lifecycle transitions (D12 / D15 / D18 / D19)
-// State-machine rules live in docs/product/story-map/state-machines.md.
-// ---------------------------------------------------------------------------
-
-/** D15: the saved search a capture lands in when none is specified. */
-function ensureDefaultSearch(): Search {
-  const existing = _searches.find((search) => search.name === "My jobs")
-  if (existing) {
-    return existing
-  }
-  // Multi-search -> last-used (here, most recently added). No saved search at
-  // all -> auto-create the 'My jobs' sentinel so search_id is never null.
-  if (_searches.length > 0) {
-    return _searches[_searches.length - 1]
-  }
-  const sentinel: Search = {
-    id: crypto.randomUUID(),
-    name: "My jobs",
-    state: "active",
-    eyebrow: "Default search",
-    criteria: { ...BLANK_CRITERIA },
-    jobsInInbox: 0,
-    activeApplications: 0,
-    shortlisted: 0,
-    offers: 0,
-    spendMo: "$0.00",
-  }
-  _searches.push(sentinel)
-  return sentinel
+  const w = await get<ResumeSnapshot>(`/applications/${appId}/snapshot`)
+  return { ...w, capturedAt: relativeAge(w.capturedAt) }
 }
 
 export interface MarkWonInput {
@@ -522,248 +471,209 @@ export interface MarkWonInput {
 
 export interface MarkWonResult {
   application: ApplicationView
-  /** Token that reverses the win within the grace window (D18). */
   undoToken: string
-  /** ISO-8601 expiry of the undo window. */
   undoExpiresAt: string
-  /** Length of the undo window in seconds, for the countdown UI. */
   undoWindowSeconds: number
 }
 
-const WIN_UNDO_WINDOW_SECONDS = 300
-const _winUndo = new Map<string, { app: Application; expiresAt: number }>()
-
-/**
- * Mark an application WON (D18). Records the outcome, archives the active app,
- * and returns a time-boxed undo token (~5 min). Reversible via undoMarkWon
- * within the window; after that, correcting a win is a deliberate
- * OFFER_RESCINDED (see state-machines.md).
- *
- * REST: POST /applications/{id}/mark-won body MarkWonInput -> MarkWonResult
- */
 export async function markWon(
   appId: string,
   input: MarkWonInput,
 ): Promise<MarkWonResult> {
-  await begin("applications/:id/mark-won")
-  const id = APP_UUID_BY_SLUG[appId] ?? appId
-  const index = _apps.findIndex((application) => application.id === id)
-  if (index === -1) {
-    throw MockApiError.notFound(`applications/${appId}/mark-won`)
+  const body = {
+    startDate: input.startDate,
+    negotiatedComp: parseNegotiatedComp(input.negotiatedComp),
+    whatWorked: input.whatWorked,
   }
-  const original = _apps[index]
-  const wonApp: Application = {
-    ...original,
-    outcome: "won",
-    outcomeAt: "just now",
-    outcomeReason: input.whatWorked,
-  }
-  _apps.splice(index, 1)
-  _archive.push(wonApp)
-  const undoToken = crypto.randomUUID()
-  const expiresAt = Date.now() + WIN_UNDO_WINDOW_SECONDS * 1000
-  _winUndo.set(undoToken, { app: original, expiresAt })
+  const w = await post<{
+    application: WApplicationView
+    undoToken: string
+    undoExpiresAt: string
+    undoWindowSeconds: number
+  }>(`/applications/${appId}/mark-won`, body)
   return {
-    application: applicationView(wonApp, jobLookup()),
-    undoToken,
-    undoExpiresAt: new Date(expiresAt).toISOString(),
-    undoWindowSeconds: WIN_UNDO_WINDOW_SECONDS,
+    application: appApplicationView(w.application),
+    undoToken: w.undoToken,
+    undoExpiresAt: w.undoExpiresAt,
+    undoWindowSeconds: w.undoWindowSeconds,
   }
 }
 
-/**
- * Reverse a mark-won within the grace window (D18, source=user_correction).
- * Throws undo_window_expired once the window has passed.
- *
- * REST: POST /applications/{id}/undo-mark-won  body {undoToken} -> ApplicationView
- */
 export async function undoMarkWon(
   appId: string,
   undoToken: string,
 ): Promise<ApplicationView> {
-  await begin("applications/:id/undo-mark-won")
-  const entry = _winUndo.get(undoToken)
-  if (!entry) {
-    throw MockApiError.notFound(`applications/${appId}/undo-mark-won`)
-  }
-  if (Date.now() > entry.expiresAt) {
-    _winUndo.delete(undoToken)
-    throw MockApiError.undoWindowExpired(`applications/${appId}/undo-mark-won`)
-  }
-  _archive = _archive.filter((application) => application.id !== entry.app.id)
-  _apps.push(entry.app)
-  _winUndo.delete(undoToken)
-  return applicationView(entry.app, jobLookup())
+  const w = await post<WApplicationView>(
+    `/applications/${appId}/undo-mark-won`,
+    { undoToken },
+  )
+  return appApplicationView(w)
 }
 
-/**
- * Reactivate a closed/archived application back into the active pipeline (D19,
- * source=user_reactivation). Clears the terminal outcome and re-enters at APPLIED.
- *
- * REST: POST /applications/{id}/reactivate -> ApplicationView
- */
 export async function reactivateApplication(
   appId: string,
 ): Promise<ApplicationView> {
-  await begin("applications/:id/reactivate")
-  const id = APP_UUID_BY_SLUG[appId] ?? appId
-  const index = _archive.findIndex((application) => application.id === id)
-  if (index === -1) {
-    throw MockApiError.notFound(`applications/${appId}/reactivate`)
-  }
-  const archived = _archive[index]
-  const revived: Application = {
-    ...archived,
-    outcome: undefined,
-    outcomeAt: undefined,
-    outcomeReason: undefined,
-    outcomeReasons: undefined,
-    stage: "applied",
-    stageLabel: "reactivated",
-    resurrected: true,
-  }
-  _archive.splice(index, 1)
-  _apps.push(revived)
-  return applicationView(revived, jobLookup())
+  return appApplicationView(
+    await post<WApplicationView>(`/applications/${appId}/reactivate`),
+  )
 }
 
-/** Result of dismissApplication: removed pre-commit, or withdrawn post-APPLIED. */
 export interface DismissResult {
   outcome: "removed" | "withdrew"
 }
 
-/**
- * Dismiss an application (D12). Pre-commit (SAVED/DRAFT) it is removed outright
- * (the posting-level DISMISSED concept). Post-APPLIED it maps to WITHDREW with
- * reason chips and lands in the archive -- a committed application is never
- * silently deleted. See state-machines.md.
- *
- * REST: POST /applications/{id}/dismiss  body {reasons?} -> DismissResult
- */
-export async function dismissApplication(
+export function dismissApplication(
   appId: string,
   reasons?: readonly string[],
 ): Promise<DismissResult> {
-  await begin("applications/:id/dismiss")
-  const id = APP_UUID_BY_SLUG[appId] ?? appId
-  const index = _apps.findIndex((application) => application.id === id)
-  if (index === -1) {
-    throw MockApiError.notFound(`applications/${appId}/dismiss`)
-  }
-  const app = _apps[index]
-  if (app.stage === "saved" || app.stage === "draft") {
-    _apps.splice(index, 1)
-    return { outcome: "removed" }
-  }
-  const withdrawn: Application = {
-    ...app,
-    outcome: "withdrawn",
-    outcomeAt: "just now",
-    outcomeReasons: reasons,
-    outcomeReason: reasons?.[0],
-  }
-  _apps.splice(index, 1)
-  _archive.push(withdrawn)
-  return { outcome: "withdrew" }
+  return post<DismissResult>(`/applications/${appId}/dismiss`, {
+    reasons: reasons ?? undefined,
+  })
 }
 
-// ---------------------------------------------------------------------------
-// Application timeline (TRK-118)
-// ---------------------------------------------------------------------------
+// --- transitions (net-new contract op, sec 6a) ---
+
+/** Input for the generic forward-transition op. `targetStage` is a wire stage. */
+export interface TransitionInput {
+  targetStage: WireStage | Stage
+  expectedVersion: number
+  source?: "user" | "user_correction" | "user_reactivation" | "system"
+  reason?: string
+  reasons?: readonly string[]
+  resumeId?: string
+}
+
+/** One appended stage-transition audit row (app-shaped). */
+export interface TransitionRecord {
+  id: string
+  applicationId: string
+  fromStage: Stage | null
+  toStage: Stage
+  source: string
+  reason?: string
+  reasons?: readonly string[]
+  resumeId?: string | null
+  createdAt: string
+}
+
+export interface TransitionResult {
+  application: ApplicationView
+  transition: TransitionRecord
+}
+
+const WIRE_STAGES: readonly string[] = [
+  "saved",
+  "drafting",
+  "applied",
+  "screening",
+  "interview",
+  "offer",
+  "won",
+  "rejected",
+  "ghosted",
+  "withdrew",
+  "dismissed",
+  "offer_rescinded",
+]
+
+/**
+ * Move an application along the settled stage machine (sec 6a). Accepts either
+ * a wire stage token (won/withdrew/...) or an app Stage (draft/screen/...),
+ * normalizing to the wire enum. `resumeId` is required when targeting `applied`.
+ */
+export async function transitionApplication(
+  id: string,
+  input: TransitionInput,
+): Promise<TransitionResult> {
+  const targetStage: WireStage = WIRE_STAGES.includes(input.targetStage)
+    ? (input.targetStage as WireStage)
+    : stageAppToWire(input.targetStage as Stage)
+  const body = {
+    targetStage,
+    expectedVersion: input.expectedVersion,
+    source: input.source,
+    reason: input.reason,
+    reasons: input.reasons,
+    resumeId: input.resumeId,
+  }
+  const w = await post<{
+    application: WApplicationView
+    transition: {
+      id: string
+      applicationId: string
+      fromStage: string | null
+      toStage: string
+      source: string
+      reason?: string | null
+      reasons?: string[] | null
+      resumeId?: string | null
+      createdAt: string
+    }
+  }>(`/applications/${id}/transitions`, body)
+  return {
+    application: appApplicationView(w.application),
+    transition: {
+      id: w.transition.id,
+      applicationId: w.transition.applicationId,
+      fromStage: w.transition.fromStage
+        ? stageWireToApp(w.transition.fromStage)
+        : null,
+      toStage: stageWireToApp(w.transition.toStage),
+      source: w.transition.source,
+      reason: w.transition.reason ?? undefined,
+      reasons: w.transition.reasons ?? undefined,
+      resumeId: w.transition.resumeId ?? undefined,
+      createdAt: relativeAge(w.transition.createdAt),
+    },
+  }
+}
+
+// ===========================================================================
+// Application timeline / interviews
+// ===========================================================================
 
 export async function getApplicationTimeline(
   appId: string,
 ): Promise<readonly TimelineEvent[]> {
-  await begin("applications/:id/timeline")
-  // TIMELINE_BY_APP is keyed by the original slug; resolve from the UUID id.
-  const slug = APP_SLUG_BY_UUID[appId] ?? appId
-  const events = TIMELINE_BY_APP[slug]
-  if (events) {
-    return events
-  }
-  // Synthetic fallback: look up the application + its job and produce one event.
-  const application = findStoredApplication(appId)
-  if (!application) {
-    throw MockApiError.notFound(`applications/${appId}`)
-  }
-  const view = applicationView(application, jobLookup())
-  return [
-    {
-      id: `tl-${appId}-apply`,
-      time: "applied",
-      who: "You",
-      message: `Applied via ${view.source}`,
-    },
-  ]
+  const rows = await get<WTimelineEvent[]>(`/applications/${appId}/timeline`)
+  return rows.map(appTimelineEvent)
 }
 
-// ---------------------------------------------------------------------------
-// Interview rounds (TRK-117)
-// ---------------------------------------------------------------------------
-
-export async function getInterviewRounds(
+export function getInterviewRounds(
   appId: string,
 ): Promise<readonly InterviewRound[]> {
-  await begin("applications/:id/interviews")
-  const slug = APP_SLUG_BY_UUID[appId] ?? appId
-  return _interviewRounds.filter((round) => round.appId === slug)
+  return get<InterviewRound[]>(`/applications/${appId}/interviews`)
 }
 
-/**
- * Update an interview record (D3 / TRK-127). Only the allowlisted fields
- * (date, type, format, status) are mutable; id/appId are fixed. Non-permitted
- * keys are dropped defensively.
- *
- * REST: PATCH /applications/{appId}/interviews/{roundId} -> InterviewRound
- */
-export async function patchInterviewRound(
+export function patchInterviewRound(
   appId: string,
   roundId: string,
-  patch: Partial<Pick<InterviewRound, "date" | "type" | "format" | "status">>,
-): Promise<InterviewRound> {
-  await begin("applications/:id/interviews/:roundId")
-  const index = _interviewRounds.findIndex((round) => round.id === roundId)
-  if (index === -1) {
-    throw MockApiError.notFound(`applications/${appId}/interviews/${roundId}`)
-  }
-  const allowed: Partial<
+  patchBody: Partial<
     Pick<InterviewRound, "date" | "type" | "format" | "status">
-  > = {}
-  if (patch.date !== undefined) {
-    allowed.date = patch.date
-  }
-  if (patch.type !== undefined) {
-    allowed.type = patch.type
-  }
-  if (patch.format !== undefined) {
-    allowed.format = patch.format
-  }
-  if (patch.status !== undefined) {
-    allowed.status = patch.status
-  }
-  _interviewRounds[index] = { ..._interviewRounds[index], ...allowed }
-  return _interviewRounds[index]
+  >,
+): Promise<InterviewRound> {
+  const body: Record<string, unknown> = {}
+  if (patchBody.date !== undefined) body.date = patchBody.date
+  if (patchBody.type !== undefined) body.type = patchBody.type
+  if (patchBody.format !== undefined) body.format = patchBody.format
+  if (patchBody.status !== undefined) body.status = patchBody.status
+  return patch<InterviewRound>(
+    `/applications/${appId}/interviews/${roundId}`,
+    body,
+  )
 }
 
-// ---------------------------------------------------------------------------
+// ===========================================================================
 // Shortlist
-// ---------------------------------------------------------------------------
+// ===========================================================================
 
-/**
- * NOTE: `searchId` is the wiring seam for the future API -- the design only
- * ships one search's shortlist, so the param is currently ignored.
- */
 export async function getShortlist(
   searchId?: string,
 ): Promise<readonly ShortlistEntry[]> {
-  await begin("shortlist")
-  if (searchId && searchId in SHORTLIST_BY_SEARCH) {
-    return SHORTLIST_BY_SEARCH[searchId]
-  }
-  return _shortlist
+  const rows = await get<WShortlistEntry[]>(`/shortlist${qs({ searchId })}`)
+  return rows.map(appShortlistEntry)
 }
 
-/** Add a job to the shortlist (ORI-014). */
 export async function addToShortlist(
   entry: Pick<
     ShortlistEntry,
@@ -771,379 +681,183 @@ export async function addToShortlist(
   > &
     Partial<Pick<ShortlistEntry, "jobId">>,
 ): Promise<ShortlistEntry> {
-  await begin("shortlist")
-  const newEntry: ShortlistEntry = {
-    ...entry,
-    saved: "just now",
-    source: "you",
+  const body = {
+    jobId: entry.jobId,
+    company: entry.company,
+    role: entry.role,
+    location: entry.location,
+    salary: parseNegotiatedComp(entry.compensation),
+    match: entry.match,
   }
-  _shortlist.push(newEntry)
-  return newEntry
+  return appShortlistEntry(await post<WShortlistEntry>("/shortlist", body))
 }
 
-/** Remove a job from the shortlist by role name (ORI-014). */
+/** Remove a shortlist entry by role (resolved client-side to its wire id). */
 export async function dismissFromShortlist(entryRole: string): Promise<void> {
-  await begin("shortlist")
-  const index = _shortlist.findIndex((entry) => entry.role === entryRole)
-  if (index !== -1) {
-    _shortlist.splice(index, 1)
+  const rows = await get<WShortlistEntry[]>("/shortlist")
+  const hit = rows.find((r) => r.role === entryRole)
+  if (!hit) {
+    // Mock was idempotent; the entry is already gone.
+    return
   }
+  await del(`/shortlist/${hit.id}`)
 }
 
-// ---------------------------------------------------------------------------
-// Jobs inbox
-// ---------------------------------------------------------------------------
+// ===========================================================================
+// Jobs
+// ===========================================================================
 
 export async function getJobsInbox(
   searchId?: string,
 ): Promise<readonly JobInboxItem[]> {
-  await begin("jobs/inbox")
-  if (searchId && searchId in INBOX_BY_SEARCH) {
-    return INBOX_BY_SEARCH[searchId]
-  }
-  return JOBS_INBOX
+  const rows = await get<WJobInboxItem[]>(`/jobs/inbox${qs({ searchId })}`)
+  return rows.map(appJobInboxItem)
 }
 
-// ---------------------------------------------------------------------------
-// Jobs (ADR-006: first-class posting resource)
-// ---------------------------------------------------------------------------
-
-/** All captured jobs (the canonical posting collection). */
 export async function getJobs(): Promise<readonly Job[]> {
-  await begin("jobs")
-  return JOBS
+  const rows = await get<WJob[]>("/jobs")
+  return rows.map(appJob)
 }
 
-/** A single captured job by UUID. Drives the standalone `/jobs/:id` detail page.
- *  Resolves seeded postings, application-derived postings, and runtime-created
- *  postings (createApplication) -- so the app-detail "View job posting" hop works. */
 export async function getJob(id: string): Promise<Job> {
-  await begin("jobs/:id")
-  const hit = jobLookup()[id]
-  if (!hit) {
-    throw MockApiError.notFound(`jobs/${id}`)
-  }
-  return hit
+  return appJob(await get<WJob>(`/jobs/${id}`))
 }
 
-// ---------------------------------------------------------------------------
+// ===========================================================================
 // Agents
-// ---------------------------------------------------------------------------
+// ===========================================================================
 
 export async function getAgents(): Promise<readonly Agent[]> {
-  await begin("agents")
-  return _agents
+  const rows = await get<WAgent[]>("/agents")
+  return rows.map(appAgent)
 }
 
 export async function getAgent(id: string): Promise<Agent> {
-  const path = "agents/:id"
-  await begin(path)
-  const hit = _agents.find((agent) => agent.id === id)
-  if (!hit) {
-    throw MockApiError.notFound(`agents/${id}`)
-  }
-  return hit
+  return appAgent(await get<WAgent>(`/agents/${id}`))
 }
 
-/** Patch an agent's mutable fields (ORI-014 Pause / Run now). */
 export async function patchAgent(
   id: string,
-  patch: Partial<Pick<Agent, "state" | "stateLabel" | "live">>,
+  patchBody: Partial<Pick<Agent, "state" | "stateLabel" | "live">>,
 ): Promise<Agent> {
-  await begin("agents/:id")
-  const index = _agents.findIndex((agent) => agent.id === id)
-  if (index === -1) {
-    throw MockApiError.notFound(`agents/${id}`)
-  }
-  _agents[index] = { ..._agents[index], ...patch }
-  return _agents[index]
+  const body: { state?: AgentState; live?: boolean } = {}
+  if (patchBody.state !== undefined) body.state = patchBody.state
+  if (patchBody.live !== undefined) body.live = patchBody.live
+  return appAgent(await patch<WAgent>(`/agents/${id}`, body))
 }
 
 export async function getAgentLog(
   filter?: AgentLogFilter,
 ): Promise<readonly AgentLogEntry[]> {
-  await begin("agents/log")
-  if (!filter) {
-    return AGENT_LOG
-  }
-  return AGENT_LOG.filter((entry) => {
-    if (filter.agentId && entry.agentId !== filter.agentId) {
-      return false
-    }
-    if (filter.kind && entry.kind !== filter.kind) {
-      return false
-    }
-    return true
-  })
+  const rows = await get<AgentLogEntry[]>(
+    `/agents/log${qs({ agentId: filter?.agentId, kind: filter?.kind })}`,
+  )
+  return rows.map((e) => ({ ...e, time: relativeAge(e.time) }))
 }
 
-/**
- * Per-agent permissions (AGT-023). Each grant is enriched with its `requiredTier`
- * (D25 / AGT-031) so the UI can soft-gate above-tier permissions. Unknown
- * permissions default to 'observe' (ungated).
- *
- * REST: GET /agents/{id}/permissions
- */
-export async function getAgentPermissions(
+export function getAgentPermissions(
   agentId: string,
 ): Promise<readonly AgentPermission[]> {
-  await begin("agents/:id/permissions")
-  const perms = PER_AGENT_PERMISSIONS[agentId] ?? []
-  return perms.map((p) => ({
-    ...p,
-    requiredTier:
-      p.requiredTier ?? PERMISSION_REQUIRED_TIER[p.permission] ?? "observe",
-  }))
+  return get<AgentPermission[]>(`/agents/${agentId}/permissions`)
 }
 
-/**
- * Agent trust standing + the full ladder for display (D25 / AGT-031).
- *
- * REST: GET /agents/{id}/trust-tier -> AgentTrustTierView
- */
 export async function getAgentTrustTier(
   agentId: string,
 ): Promise<AgentTrustTierView> {
-  await begin("agents/:id/trust-tier")
-  const agent = _agents.find((a) => a.id === agentId)
-  if (!agent) {
-    throw MockApiError.notFound(`agents/${agentId}/trust-tier`)
-  }
+  const w = await get<WTrustTierView>(`/agents/${agentId}/trust-tier`)
   return {
-    agentId,
-    currentTier: agent.trustTier ?? "observe",
-    ladder: TRUST_TIER_LADDER,
+    agentId: w.agentId,
+    currentTier: w.currentTier,
+    unlockedAt: w.unlockedAt ? relativeAge(w.unlockedAt) : undefined,
+    ladder: w.ladder.map((r) => trustTierRung(r.tier)),
   }
 }
 
-/**
- * Set an agent's trust tier (D25 / AGT-031). Soft-gate: the mock grants
- * immediately; a real backend may return status 'pending' for review. The UI
- * frames the request as backend-gated regardless.
- *
- * REST: PATCH /agents/{id}/trust-tier  body {targetTier} -> AgentTrustTierUpdate
- */
-export async function patchAgentTrustTier(
+export function patchAgentTrustTier(
   agentId: string,
   targetTier: AgentTrustTier,
 ): Promise<AgentTrustTierUpdate> {
-  await begin("agents/:id/trust-tier")
-  const index = _agents.findIndex((a) => a.id === agentId)
-  if (index === -1) {
-    throw MockApiError.notFound(`agents/${agentId}/trust-tier`)
-  }
-  _agents[index] = { ..._agents[index], trustTier: targetTier }
-  return {
-    agentId,
-    currentTier: targetTier,
-    status: "granted",
-    message: `Trust tier set to ${targetTier}.`,
-  }
+  return patch<AgentTrustTierUpdate>(`/agents/${agentId}/trust-tier`, {
+    targetTier,
+  })
 }
 
-// ---------------------------------------------------------------------------
+// ===========================================================================
 // Resumes
-// ---------------------------------------------------------------------------
+// ===========================================================================
 
 export async function getResumes(): Promise<readonly Resume[]> {
-  await begin("resumes")
-  return _resumes
+  const rows = await get<WResume[]>("/resumes")
+  return rows.map(appResume)
 }
 
-/**
- * D21: toggle whether a (master) resume participates in match scoring. Default
- * ON; turning masters off shrinks the eligible scoring set.
- *
- * REST: PATCH /resumes/{id}  body {scoringEnabled} -> Resume
- */
 export async function patchResumeScoring(
   id: string,
   scoringEnabled: boolean,
 ): Promise<Resume> {
-  await begin("resumes/:id")
-  const index = _resumes.findIndex((resume) => resume.id === id)
-  if (index === -1) {
-    throw MockApiError.notFound(`resumes/${id}`)
-  }
-  _resumes[index] = { ..._resumes[index], scoringEnabled }
-  return _resumes[index]
+  return appResume(await patch<WResume>(`/resumes/${id}`, { scoringEnabled }))
 }
 
 export async function getResume(nameOrId: string | number): Promise<Resume> {
-  const path = "resumes/:nameOrId"
-  await begin(path)
-  if (typeof nameOrId === "number") {
-    const hit = _resumes[nameOrId]
-    if (!hit) {
-      throw MockApiError.notFound(`resumes/${nameOrId}`)
-    }
-    return hit
-  }
-  // Try id first, then name for backwards compat
-  const hit =
-    _resumes.find((resume) => resume.id === nameOrId) ??
-    _resumes.find((resume) => resume.name === nameOrId)
-  if (!hit) {
-    throw MockApiError.notFound(`resumes/${nameOrId}`)
-  }
-  return hit
+  const id = await resolveResumeId(nameOrId)
+  return appResume(await get<WResume>(`/resumes/${id}`))
 }
 
-/** Create a new blank draft resume (RES-019). */
 export async function createResume(): Promise<Resume> {
-  await begin("resumes/create")
-  const newResume: Resume = {
-    id: crypto.randomUUID(),
-    name: "Untitled revision",
-    subtitle: "",
-    version: "v1",
-    usedIn: 0,
-    updated: "just now",
-    tag: "DRAFT",
-    body: "",
-  }
-  _resumes.push(newResume)
-  return newResume
+  return appResume(await post<WResume>("/resumes"))
 }
 
-/** Rename a resume by id (RES-019). */
 export async function renameResume(id: string, name: string): Promise<Resume> {
-  await begin("resumes/:id/rename")
-  const index = _resumes.findIndex((resume) => resume.id === id)
-  if (index === -1) {
-    throw MockApiError.notFound(`resumes/${id}`)
-  }
-  _resumes[index] = { ..._resumes[index], name }
-  return _resumes[index]
+  return appResume(await patch<WResume>(`/resumes/${id}`, { name }))
 }
 
-/**
- * Persist a resume's edited body (RES-022). `body` is the editor's serialized
- * HTML so formatting round-trips. Swap-seam: this is the `PATCH /resume/:id`
- * the real backend implements. Mockup persistence lives in `_resumes` (session
- * only; cleared on reload / `__resetForTests`).
- */
 export async function saveResumeBody(
   id: string,
   body: string,
 ): Promise<Resume> {
-  await begin("resumes/:id/save")
-  const index = _resumes.findIndex((resume) => resume.id === id)
-  if (index === -1) {
-    throw MockApiError.notFound(`resumes/${id}`)
-  }
-  _resumes[index] = { ..._resumes[index], body }
-  return _resumes[index]
+  return appResume(await patch<WResume>(`/resumes/${id}`, { body }))
 }
 
-/** Duplicate a resume (RES-019). */
 export async function duplicateResume(id: string): Promise<Resume> {
-  await begin("resumes/:id/duplicate")
-  const source = _resumes.find((resume) => resume.id === id)
-  if (!source) {
-    throw MockApiError.notFound(`resumes/${id}`)
-  }
-  const copy: Resume = {
-    ...source,
-    id: `${id}-copy-${Date.now()}`,
-    name: `${source.name} (copy)`,
-    tag: "DRAFT",
-    usedIn: 0,
-    updated: "just now",
-  }
-  _resumes.push(copy)
-  return copy
+  return appResume(await post<WResume>(`/resumes/${id}/duplicate`))
 }
 
-/** Set a resume as the default (RES-019). */
 export async function setDefaultResume(id: string): Promise<readonly Resume[]> {
-  await begin("resumes/:id/set-default")
-  const index = _resumes.findIndex((resume) => resume.id === id)
-  if (index === -1) {
-    throw MockApiError.notFound(`resumes/${id}`)
-  }
-  _resumes = _resumes.map((resume) => ({
-    ...resume,
-    tag: resume.tag === "DEFAULT" ? ("VARIANT" as const) : resume.tag,
-  }))
-  _resumes[index] = { ..._resumes[index], tag: "DEFAULT" }
-  return _resumes
+  const rows = await post<WResume[]>(`/resumes/${id}/set-default`)
+  return rows.map(appResume)
 }
 
-/** Delete a resume (RES-019). Guards locked resumes. */
-export async function deleteResume(id: string): Promise<void> {
-  await begin("resumes/:id/delete")
-  const resume = _resumes.find((resume) => resume.id === id)
-  if (!resume) {
-    throw MockApiError.notFound(`resumes/${id}`)
-  }
-  if (
-    resume.tag === "TAILORED" ||
-    resume.tag === "MASTER" ||
-    resume.tag === "DEFAULT" ||
-    resume.usedIn > 0
-  ) {
-    throw MockApiError.unknown(`resumes/${id}/delete`, "locked")
-  }
-  _resumes = _resumes.filter((resume) => resume.id !== id)
+export function deleteResume(id: string): Promise<void> {
+  return del(`/resumes/${id}`)
 }
 
-/** Fork a resume as a tailored draft for a job (CUR-020). */
 export async function forkResumeAsDraft(
   basisId: string,
   jobId: string,
 ): Promise<Resume> {
-  await begin("resumes/:id/fork")
-  const basis = _resumes.find((resume) => resume.id === basisId)
-  if (!basis) {
-    throw MockApiError.notFound(`resumes/${basisId}`)
-  }
-  const fork: Resume = {
-    ...basis,
-    id: crypto.randomUUID(),
-    name: `${basis.name} - tailored draft`,
-    tag: "DRAFT",
-    usedIn: 0,
-    updated: "just now",
-    body: basis.body,
-  }
-  // jobId is used for the seam -- in a real API this would associate the draft
-  void jobId
-  _resumes.push(fork)
-  return fork
+  return appResume(await post<WResume>(`/resumes/${basisId}/fork`, { jobId }))
 }
 
-// ---------------------------------------------------------------------------
+// ===========================================================================
 // Match report
-// ---------------------------------------------------------------------------
+// ===========================================================================
 
-/**
- * NOTE: the design renders only one match report (Wes x Stripe). For now,
- * `args` is ignored and the canonical fixture is returned. The seam stays so
- * the future API can fan this out by `(resumeId, jobId)`.
- */
-export async function getMatchReport(args: {
+export function getMatchReport(args: {
   resumeId: string
   jobId: string
 }): Promise<MatchReport> {
-  await begin("match-report")
-  return {
-    resumeId: args.resumeId,
-    jobId: args.jobId,
-    score: MATCH_REPORT_META.score,
-    rubric: [...MATCH_RUBRIC],
-    gaps: [...MATCH_GAPS],
-    strengths: [...MATCH_STRENGTHS],
-  }
+  return get<MatchReport>(
+    `/match-report${qs({ resumeId: args.resumeId, jobId: args.jobId })}`,
+  )
 }
 
-// ---------------------------------------------------------------------------
+// ===========================================================================
 // Coach
-// ---------------------------------------------------------------------------
+// ===========================================================================
 
 export async function getCoachThreads(): Promise<readonly CoachThread[]> {
-  await begin("coach/threads")
-  return COACH_THREADS
+  const rows = await get<CoachThread[]>("/coach/threads")
+  return rows.map((t) => ({ ...t, when: relativeAge(t.when) }))
 }
 
 export async function getCoachThread(id: string): Promise<{
@@ -1151,437 +865,420 @@ export async function getCoachThread(id: string): Promise<{
   messages: readonly CoachMessage[]
   context: readonly ContextCard[]
 }> {
-  const path = "coach/threads/:id"
-  await begin(path)
-  const thread = COACH_THREADS.find((thread) => thread.id === id)
-  if (!thread) {
-    throw MockApiError.notFound(`coach/threads/${id}`)
+  const w = await get<{
+    thread: CoachThread
+    messages: CoachMessage[]
+    context: ContextCard[]
+  }>(`/coach/threads/${id}`)
+  return {
+    thread: { ...w.thread, when: relativeAge(w.thread.when) },
+    messages: w.messages,
+    context: w.context,
   }
-  // The design only realizes the active "stripe-followup" thread messages.
-  // Other threads correctly return empty -- CUR-024 empty-state handles them.
-  const messages = id === "stripe-followup" ? [...COACH_MESSAGES] : []
-  // Per-thread context cards (COA-021). Falls back to canonical if unknown.
-  const context = COACH_CONTEXT_BY_THREAD[id] ?? COACH_CONTEXT_CARDS
-  return { thread, messages, context }
 }
 
-// ---------------------------------------------------------------------------
-// Notifications (ORI-012 -- mutable read-state)
-// ---------------------------------------------------------------------------
+export function getCoachGreeting(
+  scope: CoachThreadScope,
+): Promise<CoachGreeting> {
+  // Founder ruling 2026-07-04: canned client copy, no HTTP.
+  return Promise.resolve(
+    COACH_GREETING_BY_SCOPE[scope] ?? COACH_GREETING_BY_SCOPE.general,
+  )
+}
+
+export function proposeCoachEdit(
+  subject: CoachSubject,
+): Promise<CoachProposal> {
+  return post<CoachProposal>("/coach/proposals", subject)
+}
+
+export async function saveCoachProposal(
+  proposal: CoachProposal,
+): Promise<TimelineEvent> {
+  const w = await post<WTimelineEvent>(
+    `/coach/proposals/${proposal.id}/accept`,
+    proposal,
+  )
+  return appTimelineEvent(w)
+}
+
+// ===========================================================================
+// Notifications
+// ===========================================================================
 
 export async function getNotifications(): Promise<readonly Notification[]> {
-  await begin("notifications")
-  return _notifications
+  const rows = await get<Omit<Notification, "icon">[]>("/notifications")
+  return rows.map((n) => ({ ...n, icon: notificationIcon(n.kind, n.title) }))
 }
 
-/** Mark a single notification as read (ORI-012). */
 export async function markNotificationRead(id: string): Promise<Notification> {
-  await begin("notifications/:id/read")
-  const index = _notifications.findIndex(
-    (notification) => notification.id === id,
-  )
-  if (index === -1) {
-    throw MockApiError.notFound(`notifications/${id}`)
-  }
-  _notifications[index] = { ..._notifications[index], unread: false }
-  return _notifications[index]
+  const n = await post<Omit<Notification, "icon">>(`/notifications/${id}/read`)
+  return { ...n, icon: notificationIcon(n.kind, n.title) }
 }
 
-/** Mark all notifications as read (ORI-012). */
 export async function markAllNotificationsRead(): Promise<
   readonly Notification[]
 > {
-  await begin("notifications/mark-all-read")
-  _notifications = _notifications.map((notification) => ({
-    ...notification,
-    unread: false,
-  }))
-  return _notifications
+  const rows = await post<Omit<Notification, "icon">[]>(
+    "/notifications/mark-all-read",
+  )
+  return rows.map((n) => ({ ...n, icon: notificationIcon(n.kind, n.title) }))
 }
 
-// ---------------------------------------------------------------------------
-// User menu rows
-// ---------------------------------------------------------------------------
+// ===========================================================================
+// User menu (client-local, no HTTP)
+// ===========================================================================
 
-export async function getUserMenu(): Promise<readonly UserMenuRow[]> {
-  await begin("user-menu")
-  return USER_MENU_ROWS
+export function getUserMenu(): Promise<readonly UserMenuRow[]> {
+  return Promise.resolve(USER_MENU_ROWS)
 }
 
-// ---------------------------------------------------------------------------
-// Searches (ADD-006, ADD-010)
-// ---------------------------------------------------------------------------
+// ===========================================================================
+// Searches
+// ===========================================================================
 
 export async function getSearches(): Promise<readonly Search[]> {
-  await begin("searches")
-  return _searches
+  const rows = await get<WSearch[]>("/searches")
+  return rows.map(appSearch)
 }
 
 export async function getSearch(id: string): Promise<Search> {
-  const path = "searches/:id"
-  await begin(path)
-  const hit = _searches.find((search) => search.id === id)
-  if (!hit) {
-    throw MockApiError.notFound(`searches/${id}`)
-  }
-  return hit
+  return appSearch(await get<WSearch>(`/searches/${id}`))
 }
 
-/** Create a new saved search (ADD-010). */
+function wireCriteria(c: Partial<SearchCriteria>): WSearchCriteria {
+  const band = displayToYearsBand(c.yearsExperience)
+  return {
+    titlesInclude: c.titlesInclude ?? [],
+    titlesExclude: c.titlesExclude ?? [],
+    locations: c.locations ?? [],
+    remotePolicy: remotePolicyAppToWire(c.remotePolicy ?? "OK"),
+    maxCommuteMin: c.maxCommuteMin ?? 0,
+    baseFloorUsd: moneyStringToNumber(c.baseFloor),
+    baseCeilingUsd: moneyStringToNumber(c.baseCeiling),
+    yearsExperienceMin: band.min ?? null,
+    yearsExperienceMax: band.max ?? null,
+    scoringResumeIds: c.scoringResumeIds,
+  }
+}
+
 export async function createSearch(input: CreateSearchInput): Promise<Search> {
-  await begin("searches/create")
-  const newSearch: Search = {
-    id: crypto.randomUUID(),
-    name: input.name,
-    state: "active",
-    eyebrow: `Saved search - started today`,
-    criteria: { ...BLANK_CRITERIA, ...input.criteria },
-    jobsInInbox: 0,
-    activeApplications: 0,
-    shortlisted: 0,
-    offers: 0,
-    spendMo: "$0.00",
-  }
-  _searches.push(newSearch)
-  return newSearch
+  const body = { name: input.name, criteria: wireCriteria(input.criteria) }
+  return appSearch(await post<WSearch>("/searches", body))
 }
 
-/** Update search criteria in-place (ADD-006). */
 export async function updateSearchCriteria(
   input: UpdateSearchCriteriaInput,
 ): Promise<Search> {
-  await begin("searches/:id")
-  const index = _searches.findIndex((search) => search.id === input.id)
-  if (index === -1) {
-    throw MockApiError.notFound(`searches/${input.id}`)
-  }
-  _searches[index] = {
-    ..._searches[index],
-    criteria: { ..._searches[index].criteria, ...input.criteria },
-  }
-  return _searches[index]
+  // Body(embed=True) -> `{ "criteria": {...} }`.
+  const body = { criteria: wireCriteria(input.criteria) }
+  return appSearch(await patch<WSearch>(`/searches/${input.id}`, body))
 }
 
-// ---------------------------------------------------------------------------
+// ===========================================================================
 // Settings
-// ---------------------------------------------------------------------------
+// ===========================================================================
+
+interface WSettings {
+  profile: {
+    name: string
+    email: string
+    phone: string
+    timezone: string
+    currentRole: string
+    targetTitles: string[]
+    compFloorUsd: number
+  }
+  integrations: (Omit<IntegrationRow, "icon" | "lastSync"> & {
+    lastSync?: string | null
+  })[]
+  providers: (Omit<ProviderRow, "balance"> & { balanceUsd?: number | null })[]
+  routing: { task: string; model: string }[]
+  usage: (Omit<UsageRow, "tokens" | "cost"> & {
+    tokens: number
+    costUsd: number
+  })[]
+  monthSpendUsd: number
+  monthlyCapUsd: number
+  privacy: { key: string; on: boolean }[]
+  privacyLastUpdated: string
+  plan: {
+    name: string
+    priceUsd: number
+    description: string
+    nextCharge: string
+  }
+  invoices: { date: string; description: string; amountUsd: number }[]
+  notifPrefs: (Omit<NotifPref, "consequence"> & Record<string, unknown>)[]
+  extensionTokens: {
+    id: string
+    label: string
+    createdAt: string
+    revokedAt?: string | null
+  }[]
+  emailParserFallback: Settings["emailParserFallback"]
+}
 
 export async function getSettings(): Promise<Settings> {
-  await begin("settings")
+  const w = await get<WSettings>("/settings")
+  const integrations: IntegrationRow[] = w.integrations.map((row) => ({
+    name: row.name,
+    description: row.description,
+    state: row.state,
+    icon: integrationIcon(row.name),
+    account: row.account,
+    lastSync: row.lastSync ? relativeAge(row.lastSync) : undefined,
+  }))
+  const providers: ProviderRow[] = w.providers.map((row) => ({
+    provider: row.provider,
+    model: row.model,
+    state: row.state,
+    balance: row.balanceUsd != null ? formatUsd(row.balanceUsd) : undefined,
+    error: row.error,
+  }))
+  const routing: RoutingRow[] = w.routing.map((row) => ({
+    label: row.task,
+    value: row.model,
+  }))
+  const usage: UsageRow[] = w.usage.map((row) => ({
+    service: row.service,
+    model: row.model,
+    count: row.count,
+    tokens: abbreviateTokens(row.tokens),
+    cost: formatUsd(row.costUsd),
+  }))
+  const privacy: PrivacyToggle[] = w.privacy.map((row) => {
+    const copy = privacyCopy(row.key)
+    return { title: copy.title, description: copy.description, on: row.on }
+  })
+  const notifPrefs: NotifPref[] = w.notifPrefs.map((row) => ({
+    id: row.id,
+    category: row.category,
+    emailEnabled: row.emailEnabled,
+    inAppEnabled: row.inAppEnabled,
+    emailLocked: row.emailLocked,
+  }))
   return {
     profile: {
-      name: SETTINGS_PROFILE.name,
-      email: SETTINGS_PROFILE.email,
-      phone: SETTINGS_PROFILE.phone,
-      timezone: SETTINGS_PROFILE.timezone,
-      currentRole: SETTINGS_PROFILE.currentRole,
-      targetTitles: [...SETTINGS_PROFILE.targetTitles],
-      compFloor: SETTINGS_PROFILE.compFloor,
+      name: w.profile.name,
+      email: w.profile.email,
+      phone: w.profile.phone,
+      timezone: w.profile.timezone,
+      currentRole: w.profile.currentRole,
+      targetTitles: w.profile.targetTitles,
+      compFloor: formatUsd(w.profile.compFloorUsd),
     },
-    integrations: [...SETTINGS_INTEGRATIONS],
-    providers: [...SETTINGS_PROVIDERS],
-    routing: [...SETTINGS_ROUTING],
-    usage: [...SETTINGS_USAGE],
-    monthSpend: SETTINGS_USAGE_TOTALS.monthSpend,
-    monthlyCap: SETTINGS_USAGE_TOTALS.monthlyCap,
-    privacy: [...SETTINGS_PRIVACY],
-    privacyLastUpdated: SETTINGS_PRIVACY_LAST_UPDATED,
+    integrations,
+    providers,
+    routing,
+    usage,
+    monthSpend: formatUsd(w.monthSpendUsd),
+    monthlyCap: formatUsd(w.monthlyCapUsd),
+    privacy,
+    privacyLastUpdated: relativeAge(w.privacyLastUpdated),
     plan: {
-      name: SETTINGS_PLAN.name,
-      price: SETTINGS_PLAN.price,
-      description: SETTINGS_PLAN.description,
-      nextCharge: SETTINGS_PLAN.nextCharge,
+      name: w.plan.name,
+      price: formatUsd(w.plan.priceUsd),
+      description: w.plan.description,
+      nextCharge: relativeAge(w.plan.nextCharge),
     },
-    invoices: [...SETTINGS_INVOICES],
-    danger: [...SETTINGS_DANGER],
-    notifPrefs: [...SETTINGS_NOTIFICATION_PREFS],
-    extensionTokens: [...SETTINGS_EXTENSION_TOKENS],
-    emailParserFallback: SETTINGS_EMAIL_PARSER_FALLBACK,
+    invoices: w.invoices.map((row) => ({
+      date: relativeAge(row.date),
+      description: row.description,
+      amount: formatUsd(row.amountUsd),
+    })),
+    danger: [...DANGER_ACTIONS],
+    notifPrefs,
+    extensionTokens: w.extensionTokens.map((t) => ({
+      id: t.id,
+      label: t.label,
+      createdAt: relativeAge(t.createdAt),
+      revokedAt: t.revokedAt ? relativeAge(t.revokedAt) : undefined,
+    })),
+    emailParserFallback: w.emailParserFallback,
   }
 }
 
-// ---------------------------------------------------------------------------
-// LLM cost transparency + deep match score (D8b / D9a)
-// ---------------------------------------------------------------------------
+// ===========================================================================
+// LLM cost transparency + deep match score
+// ===========================================================================
 
-/**
- * Parses a string representing a USD currency value and extracts the numeric amount.
- * Removes any non-numeric characters except for the decimal point, and converts the result to a number.
- *
- * @param {string} s - The string containing the USD currency value to parse.
- * @return {number} The numeric value extracted from the string. Returns 0 if the conversion fails.
- */
-const parseUsd = (s: string): number => Number(s.replace(/[^0-9.]/g, "")) || 0
-
-/**
- * Rounds a given number to two decimal places.
- *
- * @param {number} n - The number to be rounded.
- * @return {number} The number rounded to two decimal places.
- */
-const round2 = (n: number): number => Math.round(n * 100) / 100
-
-/** Current time as an ISO-8601 string (used for soft-delete markers, D24). */
-const nowIso = (): string => new Date().toISOString()
-
-/** Remaining monthly-cap headroom in USD (D8b). */
-const capRemainingUsd = (): number =>
-  Math.max(
-    0,
-    parseUsd(SETTINGS_USAGE_TOTALS.monthlyCap) -
-      parseUsd(SETTINGS_USAGE_TOTALS.monthSpend),
-  )
-
-/**
- * Cost preview for a deep (paid) match score across one or more master resumes
- * (D8b / D21). One itemized line per resume; free rough heuristic scores never
- * appear here.
- *
- * REST: POST /jobs/{id}/preview-deep-score  body {resumeNames} -> CostPreview
- */
 export async function previewDeepMatchScore(
   jobId: string,
   resumeNames: readonly string[],
 ): Promise<CostPreview> {
-  await begin("jobs/:id/preview-deep-score")
-  void jobId
-  const unit = LLM_TASK_COST_USD["deep-match-score"] ?? 0.14
-  const model =
-    SETTINGS_ROUTING.find((row) => row.label === "Match scoring")?.value ??
-    "gemini-1.5-pro"
-  const items = resumeNames.map((name) => ({
-    label: `Deep match score -- ${name}`,
-    model,
-    estCostUsd: unit,
+  const resumes = await getResumes()
+  const resumeIds = resumeNames.map((name) => {
+    const hit =
+      resumes.find((r) => r.id === name) ??
+      resumes.find((r) => name.startsWith(r.name)) ??
+      resumes.find((r) => r.name === name)
+    return hit?.id ?? name
+  })
+  const nameById = new Map<string, string>()
+  for (const r of resumes) {
+    nameById.set(r.id, r.name)
+  }
+  const w = await post<{
+    items: { resumeId: string; model: string; estCostUsd: number }[]
+    totalUsd: number
+    capRemainingUsd: number
+    overCap: boolean
+  }>(`/jobs/${jobId}/preview-deep-score`, { resumeIds })
+  const items: CostPreviewItem[] = w.items.map((it) => ({
+    label: `Deep match score -- ${nameById.get(it.resumeId) ?? it.resumeId}`,
+    model: it.model,
+    estCostUsd: it.estCostUsd,
   }))
-  const totalUsd = round2(items.reduce((sum, item) => sum + item.estCostUsd, 0))
-  const remaining = round2(capRemainingUsd())
   return {
     items,
-    totalUsd,
-    capRemainingUsd: remaining,
-    overCap: totalUsd > remaining,
+    totalUsd: w.totalUsd,
+    capRemainingUsd: w.capRemainingUsd,
+    overCap: w.overCap,
   }
 }
 
-/**
- * Run a deep (paid) match score (D8 deep variant / D9a). Completes on the chosen
- * provider; if the monthly cap is reached it throws `cap_reached` so the UI can
- * re-consent -- never a silent model downgrade. Force the cap path in the mock
- * with VITE_MOCK_FAIL=`jobs/:id/deep-score:cap_reached`.
- *
- * REST: POST /jobs/{id}/deep-score  body {resumeName} -> DeepMatchResult
- */
 export async function runDeepMatchScore(
   jobId: string,
   resumeName: string,
 ): Promise<DeepMatchResult> {
-  await begin("jobs/:id/deep-score")
-  const job = JOBS_BY_ID[jobId]
-  const base = job?.match?.score ?? 80
-  return {
-    jobId,
-    resumeId: resumeName,
-    score: Math.min(99, base + 3),
-    kind: "deep",
-    strengths: job?.match?.strengths ?? [
-      "Direct experience with the core stack",
-    ],
-    gaps: job?.match?.gaps ?? ["Lighter coverage on one secondary requirement"],
-    costUsd: LLM_TASK_COST_USD["deep-match-score"] ?? 0.14,
-  }
+  const resumeId = await resolveResumeId(resumeName)
+  const w = await post<DeepMatchResult & { aiRun?: unknown }>(
+    `/jobs/${jobId}/deep-score`,
+    { resumeId },
+  )
+  // aiRun telemetry is dropped -- the hook's return type is the bare result.
+  const { aiRun: _aiRun, ...result } = w
+  void _aiRun
+  return result
 }
 
-// ---------------------------------------------------------------------------
-// Extension
-// ---------------------------------------------------------------------------
+// ===========================================================================
+// Extension (client-local, no HTTP)
+// ===========================================================================
 
-export async function getExtensionState(state: ExtensionState): Promise<{
+export function getExtensionState(state: ExtensionState): Promise<{
   state: ExtensionState
   label: string
   recentCaptures: readonly ExtensionRecentCapture[]
 }> {
-  const path = "extension/:state"
-  await begin(path)
-  const hit = EXTENSION_STATES.find(
-    (extensionState) => extensionState.state === state,
-  )
+  const hit = EXTENSION_STATE_LABELS.find((s) => s.state === state)
   if (!hit) {
-    throw MockApiError.notFound(`extension/${state}`)
+    return Promise.reject(MockApiError.notFound(`extension/${state}`))
   }
-  return {
+  return Promise.resolve({
     state: hit.state,
     label: hit.label,
-    // Only the "empty" state's popup renders recent captures in the design;
-    // surface them uniformly so the consumer can choose to render or not.
     recentCaptures: hit.state === "empty" ? EXTENSION_RECENT_CAPTURES : [],
-  }
+  })
 }
 
-// ---------------------------------------------------------------------------
-// Usage aggregate (SET-billing)
-// ---------------------------------------------------------------------------
+// ===========================================================================
+// Usage aggregate
+// ===========================================================================
 
-/**
- * Returns the aggregated token-usage summary for the current billing period.
- * Values are derived from SETTINGS_USAGE_TOTALS + SETTINGS_USAGE_META.
- */
 export async function getUsageAggregate(): Promise<UsageAggregate> {
-  await begin("usage-aggregate")
+  const w = await get<{
+    monthSpendUsd: number
+    monthlyCapUsd: number
+    tokensIn: number
+    tokensOut: number
+    avgPerSessionUsd: number
+  }>("/usage-aggregate")
   return {
-    monthSpend: SETTINGS_USAGE_TOTALS.monthSpend,
-    monthlyCap: SETTINGS_USAGE_TOTALS.monthlyCap,
-    tokensIn: SETTINGS_USAGE_META.tokensIn,
-    tokensOut: SETTINGS_USAGE_META.tokensOut,
-    avgPerSession: SETTINGS_USAGE_META.avgPerSession,
+    monthSpend: formatUsd(w.monthSpendUsd),
+    monthlyCap: formatUsd(w.monthlyCapUsd),
+    tokensIn: abbreviateTokens(w.tokensIn),
+    tokensOut: abbreviateTokens(w.tokensOut),
+    avgPerSession: formatUsd(w.avgPerSessionUsd),
   }
 }
 
-// ---------------------------------------------------------------------------
-// Review queue -- approve / reject (AGT-021)
-// ---------------------------------------------------------------------------
+// ===========================================================================
+// Review queue (approve / reject)
+// ===========================================================================
 
-/**
- * Returns all agent-log entries that are awaiting human approval.
- * In the mockup this is a filtered view over AGENT_LOG (kind === 'await').
- */
 export async function getReviewQueue(): Promise<readonly ReviewQueueItem[]> {
-  await begin("agents/review-queue")
-  return AGENT_LOG.filter((entry) => entry.kind === "await").map((entry) => ({
-    ref: entry.ref,
-    agentId: entry.agentId,
-    message: entry.message,
-    time: entry.time,
+  const rows = await get<WReviewQueueItem[]>("/agents/review-queue")
+  return rows.map((r) => ({
+    ref: r.id,
+    agentId: r.agentId,
+    message: r.message,
+    time: relativeAge(r.time),
   }))
 }
 
-/**
- * Approve a queued agent action by its `ref` string.
- * In the mockup the action is acknowledged; no persistent state change.
- */
-export async function approveAgentAction(ref: string): Promise<void> {
-  await begin("agents/review-queue/:ref/approve")
-  // Mockup: no-op beyond latency + failure injection. Real API would POST.
-  void ref
+export function approveAgentAction(ref: string): Promise<void> {
+  return post<void>(`/agents/review-queue/${ref}/approve`)
 }
 
-/**
- * Reject a queued agent action by its `ref` string.
- * In the mockup the action is dismissed; no persistent state change.
- */
-export async function rejectAgentAction(ref: string): Promise<void> {
-  await begin("agents/review-queue/:ref/reject")
-  // Mockup: no-op beyond latency + failure injection. Real API would POST.
-  void ref
+export function rejectAgentAction(ref: string): Promise<void> {
+  return post<void>(`/agents/review-queue/${ref}/reject`)
 }
 
-// ---------------------------------------------------------------------------
-// Data export (ACC-export)
-// ---------------------------------------------------------------------------
+// ===========================================================================
+// Data export / account deletion
+// ===========================================================================
 
-/**
- * Request a full account data export. Returns a fake signed URL.
- * Real API: POST /account/data-export -> { url, expiresAt }
- */
-export async function requestDataExport(): Promise<DataExportRequest> {
-  await begin("account/data-export")
-  return {
-    url: `https://export.employa.app/download/${crypto.randomUUID()}.zip`,
-    requestedAt: new Date().toISOString(),
-  }
+export function requestDataExport(): Promise<DataExportRequest> {
+  return post<DataExportRequest>("/account/data-export")
 }
 
-// ---------------------------------------------------------------------------
-// Account deletion (ACC-danger)
-// ---------------------------------------------------------------------------
-
-/**
- * Initiate account deletion. In the mockup this is acknowledged immediately
- * with a 30-day grace period stub. Real API: POST /account/delete.
- */
-export async function deleteAccount(): Promise<{ gracePeriodEndsAt: string }> {
-  await begin("account/delete")
-  const grace = new Date()
-  grace.setDate(grace.getDate() + 30)
-  return { gracePeriodEndsAt: grace.toISOString().slice(0, 10) }
+export function deleteAccount(): Promise<{ gracePeriodEndsAt: string }> {
+  return post<{ gracePeriodEndsAt: string }>("/account/delete")
 }
 
-// ---------------------------------------------------------------------------
-// Resume mutations -- convenience re-exports for hook naming clarity
-// (already declared above; this comment is a seam marker for the RESUMES cluster)
-// Budget-bar convenience (used by the BudgetBar atom synchronously)
-// ---------------------------------------------------------------------------
+// ===========================================================================
+// Budget snapshot (client-local, synchronous)
+// ===========================================================================
 
-/** Synchronous budget snapshot -- avoids an async round-trip for the sidebar. */
 export function getBudgetSnapshot(): { used: number; total: number } {
   return { used: BUDGET_USED, total: BUDGET_TOTAL }
 }
 
-// ---------------------------------------------------------------------------
-// Test surface
-// ---------------------------------------------------------------------------
-
-/** Reset all mutable stores back to their fixture seeds. Called between tests. */
-// ---------------------------------------------------------------------------
-// Library artifacts -- Contacts (CON-001/002)
-// ---------------------------------------------------------------------------
+// ===========================================================================
+// Library -- Contacts
+// ===========================================================================
 
 export async function getContacts(): Promise<readonly Contact[]> {
-  await begin("contacts")
-  // D24: soft-deleted items are excluded from the live list (they live in trash).
-  return _contacts.filter((c) => !c.deletedAt)
+  const rows = await get<Contact[]>("/contacts")
+  return rows.map((c) => ({ ...c, updated: relativeAge(c.updated) }))
 }
 
 export async function getContact(id: string): Promise<Contact> {
-  await begin("contacts/:id")
-  const hit = _contacts.find((c) => c.id === id)
-  if (!hit) {
-    throw MockApiError.notFound(`contacts/${id}`)
-  }
-  return hit
+  const c = await get<Contact>(`/contacts/${id}`)
+  return { ...c, updated: relativeAge(c.updated) }
 }
 
 export type ContactDraft = Omit<Contact, "id" | "updated">
 
 export async function createContact(draft: ContactDraft): Promise<Contact> {
-  await begin("contacts/create")
-  const created: Contact = {
-    ...draft,
-    id: crypto.randomUUID(),
-    updated: "just now",
-  }
-  _contacts.push(created)
-  return created
+  const c = await post<Contact>("/contacts", stripDraftMeta(draft))
+  return { ...c, updated: relativeAge(c.updated) }
 }
 
 export async function updateContact(
   id: string,
-  patch: Partial<ContactDraft>,
+  patchBody: Partial<ContactDraft>,
 ): Promise<Contact> {
-  await begin("contacts/:id/update")
-  const index = _contacts.findIndex((c) => c.id === id)
-  if (index === -1) {
-    throw MockApiError.notFound(`contacts/${id}`)
-  }
-  _contacts[index] = { ..._contacts[index], ...patch, updated: "just now" }
-  return _contacts[index]
+  // Wire PATCH replaces with a full ContactDraft; merge onto current first.
+  const current = await get<Contact>(`/contacts/${id}`)
+  const merged = { ...stripEntityMeta(current), ...patchBody }
+  const c = await patch<Contact>(`/contacts/${id}`, stripDraftMeta(merged))
+  return { ...c, updated: relativeAge(c.updated) }
 }
 
-export async function deleteContact(id: string): Promise<void> {
-  await begin("contacts/:id/delete")
-  // D24: soft delete -- mark, do not remove. Recoverable from trash.
-  _contacts = _contacts.map((c) =>
-    c.id === id ? { ...c, deletedAt: nowIso() } : c,
-  )
+export function deleteContact(id: string): Promise<void> {
+  return del(`/contacts/${id}`)
 }
 
-// ---------------------------------------------------------------------------
-// Library artifacts -- Accomplishments (ACC-001/002/003)
-// ---------------------------------------------------------------------------
+// ===========================================================================
+// Library -- Accomplishments
+// ===========================================================================
 
 export async function getAccomplishments(): Promise<readonly Accomplishment[]> {
-  await begin("accomplishments")
-  return _accomplishments.filter((a) => !a.deletedAt)
+  const rows = await get<Accomplishment[]>("/accomplishments")
+  return rows.map((a) => ({ ...a, updated: relativeAge(a.updated) }))
 }
 
 export type AccomplishmentDraft = Omit<
@@ -1592,326 +1289,215 @@ export type AccomplishmentDraft = Omit<
 export async function createAccomplishment(
   draft: AccomplishmentDraft,
 ): Promise<Accomplishment> {
-  await begin("accomplishments/create")
-  const created: Accomplishment = {
-    ...draft,
-    id: crypto.randomUUID(),
-    usedIn: 0,
-    updated: "just now",
-  }
-  _accomplishments.push(created)
-  return created
+  const a = await post<Accomplishment>(
+    "/accomplishments",
+    stripDraftMeta(draft),
+  )
+  return { ...a, updated: relativeAge(a.updated) }
 }
 
 export async function updateAccomplishment(
   id: string,
-  patch: Partial<AccomplishmentDraft>,
+  patchBody: Partial<AccomplishmentDraft>,
 ): Promise<Accomplishment> {
-  await begin("accomplishments/:id/update")
-  const index = _accomplishments.findIndex((a) => a.id === id)
-  if (index === -1) {
+  const list = await get<Accomplishment[]>("/accomplishments")
+  const current = list.find((a) => a.id === id)
+  if (!current) {
     throw MockApiError.notFound(`accomplishments/${id}`)
   }
-  _accomplishments[index] = {
-    ..._accomplishments[index],
-    ...patch,
-    updated: "just now",
+  const merged: AccomplishmentDraft = {
+    title: current.title,
+    summary: current.summary,
+    tags: current.tags,
+    source: current.source,
+    ...patchBody,
   }
-  return _accomplishments[index]
-}
-
-export async function deleteAccomplishment(id: string): Promise<void> {
-  await begin("accomplishments/:id/delete")
-  _accomplishments = _accomplishments.map((a) =>
-    a.id === id ? { ...a, deletedAt: nowIso() } : a,
+  const a = await patch<Accomplishment>(
+    `/accomplishments/${id}`,
+    stripDraftMeta(merged),
   )
+  return { ...a, updated: relativeAge(a.updated) }
 }
 
-/** ACC-002: distill a Project into a NEW accomplishment (snapshot + backlink, not live-bound). */
+export function deleteAccomplishment(id: string): Promise<void> {
+  return del(`/accomplishments/${id}`)
+}
+
 export async function deriveAccomplishmentFromProject(
   projectId: string,
 ): Promise<Accomplishment> {
-  await begin("accomplishments/derive-from-project")
-  const project = _projects.find((p) => p.id === projectId)
-  if (!project) {
-    throw MockApiError.notFound(`projects/${projectId}`)
-  }
-  const created: Accomplishment = {
-    id: crypto.randomUUID(),
-    title: project.title,
-    summary: project.body.slice(0, 160),
-    tags: project.tags,
-    source: { projectId },
-    usedIn: 0,
-    updated: "just now",
-  }
-  _accomplishments.push(created)
-  return created
+  const w = await post<{ accomplishment: Accomplishment; aiRun?: unknown }>(
+    "/accomplishments/derive-from-project",
+    { projectId },
+  )
+  return { ...w.accomplishment, updated: relativeAge(w.accomplishment.updated) }
 }
 
-// ---------------------------------------------------------------------------
-// Library artifacts -- Answers (ANS-001)
-// ---------------------------------------------------------------------------
+// ===========================================================================
+// Library -- Answers
+// ===========================================================================
 
 export async function getAnswers(): Promise<readonly Answer[]> {
-  await begin("answers")
-  return _answers.filter((a) => !a.deletedAt)
+  const rows = await get<Answer[]>("/answers")
+  return rows.map((a) => ({ ...a, updated: relativeAge(a.updated) }))
 }
 
 export type AnswerDraft = Omit<Answer, "id" | "updated">
 
 export async function createAnswer(draft: AnswerDraft): Promise<Answer> {
-  await begin("answers/create")
-  const created: Answer = {
-    ...draft,
-    id: crypto.randomUUID(),
-    updated: "just now",
-  }
-  _answers.push(created)
-  return created
+  const a = await post<Answer>("/answers", stripDraftMeta(draft))
+  return { ...a, updated: relativeAge(a.updated) }
 }
 
 export async function updateAnswer(
   id: string,
-  patch: Partial<AnswerDraft>,
+  patchBody: Partial<AnswerDraft>,
 ): Promise<Answer> {
-  await begin("answers/:id/update")
-  const index = _answers.findIndex((a) => a.id === id)
-  if (index === -1) {
+  const list = await get<Answer[]>("/answers")
+  const current = list.find((a) => a.id === id)
+  if (!current) {
     throw MockApiError.notFound(`answers/${id}`)
   }
-  _answers[index] = { ..._answers[index], ...patch, updated: "just now" }
-  return _answers[index]
+  const merged: AnswerDraft = {
+    question: current.question,
+    body: current.body,
+    category: current.category,
+    tags: current.tags,
+    ...patchBody,
+  }
+  const a = await patch<Answer>(`/answers/${id}`, stripDraftMeta(merged))
+  return { ...a, updated: relativeAge(a.updated) }
 }
 
-export async function deleteAnswer(id: string): Promise<void> {
-  await begin("answers/:id/delete")
-  _answers = _answers.map((a) =>
-    a.id === id ? { ...a, deletedAt: nowIso() } : a,
-  )
+export function deleteAnswer(id: string): Promise<void> {
+  return del(`/answers/${id}`)
 }
 
-// ---------------------------------------------------------------------------
-// Library artifacts -- Projects (PRJ-001)
-// ---------------------------------------------------------------------------
+// ===========================================================================
+// Library -- Projects
+// ===========================================================================
 
 export async function getProjects(): Promise<readonly Project[]> {
-  await begin("projects")
-  return _projects.filter((p) => !p.deletedAt)
+  const rows = await get<Project[]>("/projects")
+  return rows.map((p) => ({ ...p, updated: relativeAge(p.updated) }))
 }
 
 export type ProjectDraft = Omit<Project, "id" | "updated">
 
 export async function createProject(draft: ProjectDraft): Promise<Project> {
-  await begin("projects/create")
-  const created: Project = {
-    ...draft,
-    id: crypto.randomUUID(),
-    updated: "just now",
-  }
-  _projects.push(created)
-  return created
+  const p = await post<Project>("/projects", stripDraftMeta(draft))
+  return { ...p, updated: relativeAge(p.updated) }
 }
 
 export async function updateProject(
   id: string,
-  patch: Partial<ProjectDraft>,
+  patchBody: Partial<ProjectDraft>,
 ): Promise<Project> {
-  await begin("projects/:id/update")
-  const index = _projects.findIndex((p) => p.id === id)
-  if (index === -1) {
+  const list = await get<Project[]>("/projects")
+  const current = list.find((p) => p.id === id)
+  if (!current) {
     throw MockApiError.notFound(`projects/${id}`)
   }
-  _projects[index] = { ..._projects[index], ...patch, updated: "just now" }
-  return _projects[index]
+  const merged: ProjectDraft = {
+    title: current.title,
+    employer: current.employer,
+    body: current.body,
+    tags: current.tags,
+    ...patchBody,
+  }
+  const p = await patch<Project>(`/projects/${id}`, stripDraftMeta(merged))
+  return { ...p, updated: relativeAge(p.updated) }
 }
 
-export async function deleteProject(id: string): Promise<void> {
-  await begin("projects/:id/delete")
-  _projects = _projects.map((p) =>
-    p.id === id ? { ...p, deletedAt: nowIso() } : p,
-  )
+export function deleteProject(id: string): Promise<void> {
+  return del(`/projects/${id}`)
 }
 
-// ---------------------------------------------------------------------------
-// Library trash: restore / purge / deletion-impact (D24)
-// ---------------------------------------------------------------------------
+// --- library draft helpers ---
 
-/**
- * All soft-deleted bounded Library entities, newest-deleted first.
- */
+/** Drop server-owned fields a draft body must not carry. */
+function stripDraftMeta<T extends object>(draft: T): T {
+  const {
+    id: _id,
+    updated: _updated,
+    usedIn: _usedIn,
+    deletedAt: _deletedAt,
+    ...rest
+  } = draft as Record<string, unknown>
+  void _id
+  void _updated
+  void _usedIn
+  void _deletedAt
+  return rest as T
+}
+
+function stripEntityMeta<T extends object>(entity: T): T {
+  return stripDraftMeta(entity)
+}
+
+// ===========================================================================
+// Library -- Trash
+// ===========================================================================
+
 export async function getTrash(): Promise<readonly TrashEntry[]> {
-  await begin("library/trash")
-  const entries: TrashEntry[] = [
-    ..._contacts.flatMap((c) =>
-      c.deletedAt
-        ? [
-            {
-              kind: "contact" as const,
-              id: c.id,
-              label: c.name,
-              deletedAt: c.deletedAt,
-            },
-          ]
-        : [],
-    ),
-    ..._accomplishments.flatMap((a) =>
-      a.deletedAt
-        ? [
-            {
-              kind: "accomplishment" as const,
-              id: a.id,
-              label: a.title,
-              deletedAt: a.deletedAt,
-            },
-          ]
-        : [],
-    ),
-    ..._answers.flatMap((a) =>
-      a.deletedAt
-        ? [
-            {
-              kind: "answer" as const,
-              id: a.id,
-              label: a.question,
-              deletedAt: a.deletedAt,
-            },
-          ]
-        : [],
-    ),
-    ..._projects.flatMap((p) =>
-      p.deletedAt
-        ? [
-            {
-              kind: "project" as const,
-              id: p.id,
-              label: p.title,
-              deletedAt: p.deletedAt,
-            },
-          ]
-        : [],
-    ),
-  ]
-  return entries.sort((x, y) => (x.deletedAt < y.deletedAt ? 1 : -1))
+  const rows = await get<WTrashEntry[]>("/library/trash")
+  return rows.map((t) => ({ ...t, deletedAt: relativeAge(t.deletedAt) }))
 }
 
-/**
- * Restore a soft-deleted Library item (D24).
- * REST: POST /library/{kind}/{id}/restore
- */
-export async function restoreLibraryItem(
+export function restoreLibraryItem(
   kind: LibraryKind,
   id: string,
 ): Promise<void> {
-  await begin("library/:kind/:id/restore")
-  const clear = <T extends { id: string; deletedAt?: string }>(
-    items: T[],
-  ): T[] =>
-    items.map((item) =>
-      item.id === id ? { ...item, deletedAt: undefined } : item,
-    )
-  if (kind === "contact") {
-    _contacts = clear(_contacts)
-  } else if (kind === "accomplishment") {
-    _accomplishments = clear(_accomplishments)
-  } else if (kind === "answer") {
-    _answers = clear(_answers)
-  } else {
-    _projects = clear(_projects)
-  }
+  return post<void>(`/library/${kind}/${id}/restore`)
 }
 
-/**
- * Permanently purge a soft-deleted Library item -- frees its quota (D24).
- * REST: DELETE /library/{kind}/{id}/purge
- */
-export async function purgeLibraryItem(
-  kind: LibraryKind,
-  id: string,
-): Promise<void> {
-  await begin("library/:kind/:id/purge")
-  if (kind === "contact") {
-    _contacts = _contacts.filter((c) => c.id !== id)
-  } else if (kind === "accomplishment") {
-    _accomplishments = _accomplishments.filter((a) => a.id !== id)
-  } else if (kind === "answer") {
-    _answers = _answers.filter((a) => a.id !== id)
-  } else {
-    _projects = _projects.filter((p) => p.id !== id)
-  }
+export function purgeLibraryItem(kind: LibraryKind, id: string): Promise<void> {
+  return del(`/library/${kind}/${id}/purge`)
 }
 
-/**
- * Dependent-count report for a delete (D24). Drives the typed-count confirm
- * dialog -- shows what references this item before the user commits.
- *
- * REST: GET /library/{kind}/{id}/deletion-impact -> DeletionImpact
- */
-export async function getDeletionImpact(
+export function getDeletionImpact(
   kind: LibraryKind,
   id: string,
 ): Promise<DeletionImpact> {
-  await begin("library/:kind/:id/deletion-impact")
-  const dependents: {
-    kind: LibraryKind
-    count: number
-    items: { id: string; label: string }[]
-  }[] = []
-  if (kind === "project") {
-    // Accomplishments distilled from this project reference it (ACC-002).
-    const items = _accomplishments
-      .filter((a) => !a.deletedAt && a.source?.projectId === id)
-      .map((a) => ({ id: a.id, label: a.title }))
-    if (items.length > 0) {
-      dependents.push({ kind: "accomplishment", count: items.length, items })
-    }
-  }
-  const total = dependents.reduce((sum, d) => sum + d.count, 0)
-  return { kind, id, dependents, total }
+  return get<DeletionImpact>(`/library/${kind}/${id}/deletion-impact`)
 }
 
-// ---------------------------------------------------------------------------
-// Library artifacts -- Credentials (CRD-001, Post-MVP)
-// ---------------------------------------------------------------------------
+// ===========================================================================
+// Library -- Credentials
+// ===========================================================================
 
 export async function getCredentials(): Promise<readonly Credential[]> {
-  await begin("credentials")
-  return _credentials
+  const rows = await get<Credential[]>("/credentials")
+  return rows.map((c) => ({ ...c, updated: relativeAge(c.updated) }))
 }
 
-// ---------------------------------------------------------------------------
-// Resume lifecycle -- uploads / career history / projections / exports / templates
-// ---------------------------------------------------------------------------
+// ===========================================================================
+// Resume lifecycle
+// ===========================================================================
 
 export async function getResumeUploads(): Promise<readonly ResumeUpload[]> {
-  await begin("resumes/uploads")
-  return _resumeUploads
+  const rows = await get<ResumeUpload[]>("/resumes/uploads")
+  return rows.map((u) => ({ ...u, uploadedAt: relativeAge(u.uploadedAt) }))
 }
 
-export async function getCareerHistory(): Promise<
-  readonly CareerHistoryItem[]
-> {
-  await begin("career-history")
-  return [..._careerHistory].sort((a, b) => a.ordinal - b.ordinal)
+export function getCareerHistory(): Promise<readonly CareerHistoryItem[]> {
+  return get<CareerHistoryItem[]>("/career-history")
 }
 
-export async function getResumeTemplates(): Promise<readonly ResumeTemplate[]> {
-  await begin("resumes/templates")
-  return RESUME_TEMPLATES
+export function getResumeTemplates(): Promise<readonly ResumeTemplate[]> {
+  return get<ResumeTemplate[]>("/resumes/templates")
 }
 
 export async function getResumeExports(): Promise<readonly ResumeExport[]> {
-  await begin("resumes/exports")
-  return _resumeExports
+  const rows = await get<ResumeExport[]>("/resumes/exports")
+  return rows.map((e) => ({ ...e, generatedAt: relativeAge(e.generatedAt) }))
 }
 
-/** RES-034: projections are the non-FORMAT resumes (masters/variants/tailored). */
 export async function getProjections(): Promise<readonly Resume[]> {
-  await begin("projections")
-  return _resumes.filter((r) => r.tag !== "FORMAT")
+  const rows = await get<WResume[]>("/projections")
+  return rows.map(appResume)
 }
 
-/** RES-034/035: create a master/variant projection. New history never auto-injects (pinning). */
 export async function createProjection(input: {
   name: string
   targetRole?: string
@@ -1919,162 +1505,48 @@ export async function createProjection(input: {
   templateId?: string
   sourceUploadId?: string
 }): Promise<Resume> {
-  await begin("projections/create")
-  const created: Resume = {
-    id: crypto.randomUUID(),
+  const body = {
     name: input.name,
-    subtitle: input.targetRole
-      ? `For ${input.targetRole}`
-      : "Projection over career history",
-    version: "v1",
-    usedIn: 0,
-    updated: "just now",
-    tag: "VARIANT",
     targetRole: input.targetRole,
-    templateId: input.templateId ?? TEMPLATE_ID_CLASSIC,
+    itemIds: input.itemIds,
+    templateId: input.templateId,
     sourceUploadId: input.sourceUploadId,
-    body: `Projection including ${input.itemIds.length} career-history items.`,
   }
-  _resumes.push(created)
-  return created
+  return appResume(await post<WResume>("/projections", body))
 }
 
-/** TPL-002: assign a template to a projection. */
 export async function assignTemplate(
   projectionId: string,
   templateId: string,
 ): Promise<Resume> {
-  await begin("projections/:id/template")
-  const index = _resumes.findIndex((r) => r.id === projectionId)
-  if (index === -1) {
-    throw MockApiError.notFound(`projections/${projectionId}`)
-  }
-  _resumes[index] = { ..._resumes[index], templateId, updated: "just now" }
-  return _resumes[index]
+  return appResume(
+    await put<WResume>(`/projections/${projectionId}/template`, { templateId }),
+  )
 }
 
-/** RES-037: render a projection through its template into a one-way export. */
 export async function renderExport(
   projectionId: string,
 ): Promise<ResumeExport> {
-  await begin("exports")
-  const projection = _resumes.find((r) => r.id === projectionId)
-  if (!projection) {
-    throw MockApiError.notFound(`projections/${projectionId}`)
-  }
-  const created: ResumeExport = {
-    id: crypto.randomUUID(),
-    projectionId,
-    templateId: projection.templateId ?? TEMPLATE_ID_CLASSIC,
-    templateVersion: "v1",
-    filename: `${projection.name.replace(/\s+/g, "_")}.pdf`,
-    generatedAt: "just now",
-    regenerable: true,
-  }
-  _resumeExports.push(created)
-  return created
+  const e = await post<ResumeExport>("/exports", { projectionId })
+  return { ...e, generatedAt: relativeAge(e.generatedAt) }
 }
 
-/**
- * RES-037 / D17: regenerate creates a NEW export at the current template version.
- * The original export keeps its own (templateVersion + date) provenance -- a
- * regenerate never silently restyles an old export.
- *
- * REST: POST /exports/{id}/regenerate -> ResumeExport (the freshly created one)
- */
 export async function regenerateExport(
   exportId: string,
 ): Promise<ResumeExport> {
-  await begin("exports/:id/regenerate")
-  const source = _resumeExports.find((e) => e.id === exportId)
-  if (!source) {
-    throw MockApiError.notFound(`exports/${exportId}`)
-  }
-  const created: ResumeExport = {
-    ...source,
-    id: crypto.randomUUID(),
-    templateVersion: "v2",
-    generatedAt: "just now",
-  }
-  _resumeExports.push(created)
-  return created
+  const e = await post<ResumeExport>(`/exports/${exportId}/regenerate`)
+  return { ...e, generatedAt: relativeAge(e.generatedAt) }
 }
 
-// ---------------------------------------------------------------------------
-// Coach -- omnipresent panel (COA-031/032/036)
-// ---------------------------------------------------------------------------
-
-export async function getCoachGreeting(
-  scope: CoachThreadScope,
-): Promise<CoachGreeting> {
-  await begin("coach/greeting")
-  return COACH_GREETING_BY_SCOPE[scope] ?? COACH_GREETING_BY_SCOPE.general
-}
-
-/** COA-032: mock "the assistant drafts a change" -- returns a canned pending proposal. */
-export async function proposeCoachEdit(
-  subject: CoachSubject,
-): Promise<CoachProposal> {
-  await begin("coach/proposals")
-  const canned =
-    COACH_PROPOSAL_FIXTURES[subject.scope] ?? COACH_PROPOSAL_FIXTURES["résumé"]
-  return { ...canned, id: crypto.randomUUID(), subject, status: "pending" }
-}
+// ===========================================================================
+// Test surface
+// ===========================================================================
 
 /**
- * COA-032 gate 2 / COA-033 / COA-036: persist an accepted proposal. Routes through
- * the SAME store the user's own save does (so locks/append-only apply) and returns
- * an attributed audit event ("Coach, on behalf of you").
+ * No-op in the HTTP adapter -- the mutable stores now live server-side. Kept as
+ * an export so test call sites don't break; tests that need a pristine backend
+ * reset it out-of-band (or run against a fresh scaffold process).
  */
-export async function saveCoachProposal(
-  proposal: CoachProposal,
-): Promise<TimelineEvent> {
-  await begin("coach/proposals/:id/accept")
-  // If the subject is a resume/projection we hold, persist the diff's `after` text
-  // through the same path saveResumeBody uses (COA-033: no special bypass).
-  if (
-    (proposal.subject.scope === "résumé" ||
-      proposal.subject.scope === "projection") &&
-    proposal.subject.id
-  ) {
-    const index = _resumes.findIndex((r) => r.id === proposal.subject.id)
-    if (index !== -1) {
-      const applied = proposal.diff.map((d) => d.after).join(" ")
-      _resumes[index] = {
-        ..._resumes[index],
-        body: applied,
-        updated: "just now",
-      }
-    }
-  }
-  return {
-    id: crypto.randomUUID(),
-    time: "just now",
-    who: "Coach",
-    actor: "coach-on-behalf",
-    message: proposal.summary,
-    badge: "Coach",
-  }
-}
-
 export function __resetForTests(): void {
-  _notifications = [...NOTIFICATIONS]
-  _resumes = [...RESUMES]
-  _agents = [...AGENTS_DATA]
-  _shortlist = [...SHORTLIST_DATA]
-  _apps = [...APPS]
-  _appsRemote = [...APPS_BACKEND]
-  _appsAiInfra = [...APPS_AI_INFRA]
-  _searches = [...SEARCHES]
-  _archive = [...ARCHIVE_APPS]
-  _interviewRounds = [...INTERVIEW_ROUNDS]
-  _dynamicJobs = {}
-  _contacts = [...CONTACTS]
-  _accomplishments = [...ACCOMPLISHMENTS]
-  _answers = [...ANSWERS]
-  _projects = [...PROJECTS]
-  _credentials = [...CREDENTIALS]
-  _resumeUploads = [...RESUME_UPLOADS]
-  _careerHistory = [...CAREER_HISTORY]
-  _resumeExports = [...RESUME_EXPORTS]
+  // Intentionally empty: state is owned by the scaffold backend.
 }

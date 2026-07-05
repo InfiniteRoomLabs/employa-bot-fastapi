@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Frontend data-seam swap: `frontend/src/data/api.ts` is now a real HTTP adapter over the scaffold backend (96 exports, `transitionApplication` added), with wire-to-app transforms in `src/data/wire.ts`, client-local presentation constants in `src/data/client-constants.ts`, and an HTTP-to-error-kind translator in `src/lib/mock-api-error.ts`. Base URL follows the template `VITE_API_URL` convention (no dev proxy). A gated integration test (`RUN_ADAPTER_IT=1`, backend on :8000 or `ADAPTER_IT_URL`) verifies seeded data, joined views, a transition round-trip with version bump, and 404 envelope translation against the live scaffold. 41 test files (148 tests) that asserted on the retired mock data layer are excluded in `vitest.config.ts` with a documented rationale; the remaining suite is green (323 passed).
+
 - Scaffold backend phase 2: in-memory routes for the remaining contract operations, landed per resource group (periphery, resumes and lifecycle, jobs/shortlist/match, library, coach/agents with the 6 deferred operations as mock-parity stubs, applications/transitions), shrinking the `NOT_YET_SCAFFOLDED` ledger to zero.
 
 - Scaffold backend phase 1 (`backend/app/scaffold/`): Pydantic v2 models generated from the frozen contract (121 classes, regeneration command in `app/scaffold/README.md`), in-memory fixture-seeded store with `reset()`, typed error hierarchy producing the contract error envelope via FastAPI exception handlers, searches resource as the pattern exemplar (4 operations), and DB-free scaffold tests including a contract-drift check driven by a `NOT_YET_SCAFFOLDED` ledger.
