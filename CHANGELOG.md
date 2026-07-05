@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Scaffold backend phase 2: in-memory routes for the remaining contract operations, landed per resource group (periphery, resumes and lifecycle, jobs/shortlist/match, library, coach/agents with the 6 deferred operations as mock-parity stubs, applications/transitions), shrinking the `NOT_YET_SCAFFOLDED` ledger to zero.
+
 - Scaffold backend phase 1 (`backend/app/scaffold/`): Pydantic v2 models generated from the frozen contract (121 classes, regeneration command in `app/scaffold/README.md`), in-memory fixture-seeded store with `reset()`, typed error hierarchy producing the contract error envelope via FastAPI exception handlers, searches resource as the pattern exemplar (4 operations), and DB-free scaffold tests including a contract-drift check driven by a `NOT_YET_SCAFFOLDED` ledger.
 - Frontend integration commit: the mockup app (30 screens, components, hooks, mock data layer, tests) adopted wholesale under the template toolchain (Bun + Vite + Biome; React Router replaces TanStack Router). Template's generated OpenAPI client parked at `frontend/src/client/` for the later data-seam swap. 514 unit/component tests pass; build, lint, and dev server verified. `frontend/bunfig.toml` documents the lockfile-regeneration procedure under the machine-global frozen-lockfile policy.
 
