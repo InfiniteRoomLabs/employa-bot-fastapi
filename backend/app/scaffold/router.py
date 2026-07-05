@@ -11,7 +11,11 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from app.scaffold.routes import searches
+from app.scaffold.routes import periphery, searches
 
 scaffold_router = APIRouter()
 scaffold_router.include_router(searches.router)
+scaffold_router.include_router(periphery.user_router)
+scaffold_router.include_router(periphery.notifications_router)
+scaffold_router.include_router(periphery.settings_router)
+scaffold_router.include_router(periphery.account_router)
