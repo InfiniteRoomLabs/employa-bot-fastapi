@@ -11,7 +11,13 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from app.scaffold.routes import searches
+from app.scaffold.routes import resume_lifecycle, resumes, searches
 
 scaffold_router = APIRouter()
 scaffold_router.include_router(searches.router)
+# resume_lifecycle MUST be included before resumes: its static paths
+# (/resumes/uploads, /resumes/templates, /resumes/exports) would otherwise be
+# shadowed by resumes' dynamic GET /resumes/{id} (Starlette matches route
+# order, not specificity, and would try to parse "uploads" etc. as a UUID).
+scaffold_router.include_router(resume_lifecycle.router)
+scaffold_router.include_router(resumes.router)
