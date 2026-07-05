@@ -11,7 +11,10 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from app.scaffold.routes import searches
+from app.scaffold.routes import jobs, match, searches, shortlist
 
 scaffold_router = APIRouter()
 scaffold_router.include_router(searches.router)
+scaffold_router.include_router(shortlist.router)
+scaffold_router.include_router(jobs.router)
+scaffold_router.include_router(match.router)
