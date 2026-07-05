@@ -11,7 +11,8 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from app.scaffold.routes import searches
+from app.scaffold.routes import library, searches
 
 scaffold_router = APIRouter()
 scaffold_router.include_router(searches.router)
+scaffold_router.include_router(library.router)
