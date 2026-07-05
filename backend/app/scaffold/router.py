@@ -12,6 +12,8 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from app.scaffold.routes import (
+    agents,
+    coach,
     jobs,
     match,
     periphery,
@@ -36,3 +38,5 @@ scaffold_router.include_router(resumes.router)
 scaffold_router.include_router(shortlist.router)
 scaffold_router.include_router(jobs.router)
 scaffold_router.include_router(match.router)
+scaffold_router.include_router(agents.router)
+scaffold_router.include_router(coach.router)

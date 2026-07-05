@@ -8,8 +8,10 @@ PHASE-2 AGENTS: when you land a resource, DELETE its operationIds from
 NOT_YET_SCAFFOLDED. The test then requires those routes to exist with the
 right operationId, and fails if they do not (or if a stale/extra id appears).
 
-The 6 DEFERRED ops (founder-ruled 2026-07-04, CONTRACT-NOTES.md) stay here
-until the founder rules -- they are in the contract but NOT implementable:
+The agents/coach resource group's 6 DEFERRED ops (founder-ruled 2026-07-04,
+CONTRACT-NOTES.md, DECISIONS-NEEDED #1/#2) are now scaffolded as mock-parity
+stubs -- see ``app/scaffold/routes/agents.py`` and ``routes/coach.py`` for the
+per-route ``# DEFERRED (...)`` markers explaining what's not yet frozen:
   * approveAgentAction
   * getReviewQueue
   * patchAgentTrustTier
@@ -20,21 +22,8 @@ until the founder rules -- they are in the contract but NOT implementable:
 
 from __future__ import annotations
 
-# 6 deferred ops -- NOT scaffoldable until the founder rules. Kept as a named
-# subset so phase-2 agents do not accidentally try to implement them.
-DEFERRED: frozenset[str] = frozenset(
-    {
-        "approveAgentAction",
-        "getReviewQueue",
-        "patchAgentTrustTier",
-        "proposeCoachEdit",
-        "rejectAgentAction",
-        "saveCoachProposal",
-    }
-)
-
 # Every contract op not yet served by a scaffold route. Shrinks over phase 2.
-NOT_YET_SCAFFOLDED: frozenset[str] = DEFERRED | frozenset(
+NOT_YET_SCAFFOLDED: frozenset[str] = frozenset(
     {
         "createAccomplishment",
         "createAnswer",
@@ -48,19 +37,12 @@ NOT_YET_SCAFFOLDED: frozenset[str] = DEFERRED | frozenset(
         "deriveAccomplishmentFromProject",
         "dismissApplication",
         "getAccomplishments",
-        "getAgent",
-        "getAgentLog",
-        "getAgentPermissions",
-        "getAgentTrustTier",
-        "getAgents",
         "getAnswers",
         "getApplication",
         "getApplicationTimeline",
         "getApplications",
         "getArchive",
         "getArchiveCounts",
-        "getCoachThread",
-        "getCoachThreads",
         "getContact",
         "getContacts",
         "getCredentials",
@@ -70,7 +52,6 @@ NOT_YET_SCAFFOLDED: frozenset[str] = DEFERRED | frozenset(
         "getResumeSnapshot",
         "getTrash",
         "markWon",
-        "patchAgent",
         "patchInterviewRound",
         "purgeLibraryItem",
         "reactivateApplication",
