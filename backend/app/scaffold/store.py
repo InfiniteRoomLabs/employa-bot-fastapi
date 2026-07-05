@@ -24,6 +24,7 @@ Conventions for phase-2 agents adding resources:
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from uuid import NAMESPACE_URL, UUID, uuid5
 
@@ -31,6 +32,7 @@ from pydantic import AnyUrl
 
 from app.scaffold.models import (
     Accomplishment,
+    Actor,
     Agent,
     AgentLogEntry,
     AgentLogKind,
@@ -38,6 +40,9 @@ from app.scaffold.models import (
     AgentState,
     AgentTrustTier,
     Answer,
+    Application,
+    ApplicationFlag,
+    ApplicationView,
     Author,
     Cadence,
     CareerHistoryItem,
@@ -58,6 +63,10 @@ from app.scaffold.models import (
     Employment,
     ExtensionToken,
     IntegrationRow,
+    InterviewFormat,
+    InterviewRound,
+    InterviewStatus,
+    InterviewType,
     InvoiceRow,
     Job,
     JobCaptureMethod,
@@ -75,6 +84,7 @@ from app.scaffold.models import (
     Mode,
     Notification,
     NotifPref,
+    Outcome,
     Plan,
     PreviewKind,
     PrivacyToggle,
@@ -84,6 +94,7 @@ from app.scaffold.models import (
     RemotePolicy,
     Resume,
     ResumeExport,
+    ResumeSnapshot,
     ResumeTag,
     ResumeTemplate,
     ResumeUpload,
@@ -98,9 +109,12 @@ from app.scaffold.models import (
     ShortlistEntry,
     Source,
     Source1,
+    Stage,
+    StageTransition,
     State,
     State1,
     State2,
+    TimelineEvent,
     TrustTierRung,
     UsageAggregate,
     UsageRow,
@@ -1689,6 +1703,21 @@ def reset() -> None:
 
     month_spend_usd = _INITIAL_MONTH_SPEND_USD
 
+    _active, _arch, _derived_jobs = _seed_application_state()
+    applications.clear()
+    applications.update(_active)
+    archive.clear()
+    archive.update(_arch)
+    application_jobs.clear()
+    application_jobs.update(_derived_jobs)
+    transition_logs.clear()
+    timelines.clear()
+    timelines.update(_seed_timelines())
+    interview_rounds.clear()
+    interview_rounds.extend(_seed_interview_rounds())
+    undo_grants.clear()
+    resume_snapshots.clear()
+
 
 # ---------------------------------------------------------------------------
 # jobs (ADR-006 canonical posting resource)
@@ -2643,3 +2672,885 @@ month_spend_usd: float = _INITIAL_MONTH_SPEND_USD
 def cap_remaining_usd() -> float:
     """Remaining monthly-cap headroom in USD (D8b), floored at 0."""
     return round(max(0.0, MONTHLY_CAP_USD - month_spend_usd), 2)
+
+
+# ---------------------------------------------------------------------------
+# applications / archive / transitions / timelines / interviews / snapshots
+# (D6/D7 posting-vs-application split, D10 snapshot, D12 dismiss, D18 undo,
+#  D19 reactivate). Ported from fixtures.ts APPS/APPS_BACKEND/APPS_AI_INFRA/
+#  ARCHIVE_APPS + api.ts application lifecycle. The frozen transition matrix
+#  itself lives in routes/applications.py (transcribed from
+#  state-machines.md#application-stages -- the settled law).
+#
+# Application/job ids are the VERBATIM deterministic uuids the mock's
+# slugToUuid(slug, 'app'|'job') produces (dumped from the mock and pasted here)
+# so the frontend's hard-coded deep-links resolve. Each seeded application owns
+# a derived Job posting (mock jobFromSeed) kept in ``application_jobs`` -- a
+# side store the ApplicationView join consults IN ADDITION to ``jobs`` (getJobs
+# stays the 7 canonical postings; the derived postings never leak into it,
+# matching the mock's JOBS-vs-_applicationJobs split).
+#
+# Relative fixture ages (mock ``days``) become iso_ago(days=...) instants;
+# archive ``outcomeAt`` calendar dates become UTC midnights. Application.version
+# seeds at 1 for every row (bumped by transitionApplication).
+
+
+def _srange(lo: int, hi: int) -> SalaryRange:
+    return SalaryRange(min=lo, max=hi, extra=[])
+
+
+def _spoint(value: int, *extra: str) -> SalaryPoint:
+    return SalaryPoint(value=value, extra=list(extra))
+
+
+def _utc_date(iso: str) -> datetime:
+    """Parse a ``YYYY-MM-DD`` fixture date into a UTC-midnight instant."""
+    year, month, day = (int(part) for part in iso.split("-"))
+    return datetime(year, month, day, tzinfo=UTC)
+
+
+# Resume label -> well-known Resume id, by name-prefix (mock resumeIdForLabel).
+_RESUME_ID_BY_LABEL_PREFIX: list[tuple[str, UUID]] = [
+    ("Distributed-systems", RESUME_ID_DISTRIBUTED),
+    ("Platform / infra", RESUME_ID_PLATFORM),
+    ("For Vercel - edge", RESUME_ID_VERCEL),
+    ("Master", RESUME_ID_MASTER),
+]
+
+
+def _resume_id_for_label(label: str) -> UUID | None:
+    for prefix, rid in _RESUME_ID_BY_LABEL_PREFIX:
+        if label.startswith(prefix):
+            return rid
+    return None
+
+
+@dataclass(frozen=True)
+class _AppSeed:
+    """One ported application-pool fixture row (active or archive)."""
+
+    app: str
+    job: str
+    company: str
+    role: str
+    stage: Stage
+    location: str
+    salary: SalaryPoint | SalaryRange | None
+    resume: str
+    match: int
+    days: int
+    source: str
+    searchId: UUID
+    flag: ApplicationFlag | None = None
+    contact: str | None = None
+    coachNudge: bool | None = None
+    resurrected: bool | None = None
+    outcome: Outcome | None = None
+    outcomeAt: datetime | None = None
+    outcomeReason: str | None = None
+
+
+@dataclass
+class UndoGrant:
+    """A live mark-won undo grant (D18). Not on the wire -- keyed by token in
+    ``undo_grants``. ``expires_at`` is mutable so tests can force expiry."""
+
+    application: Application
+    expires_at: datetime
+
+
+def _mk_app_and_job(seed: _AppSeed) -> tuple[Application, Job]:
+    created = iso_ago(days=seed.days)
+    app = Application(
+        id=UUID(seed.app),
+        jobId=UUID(seed.job),
+        resumeId=_resume_id_for_label(seed.resume),
+        stage=seed.stage,
+        version=1,
+        createdAt=created,
+        flag=seed.flag,
+        contact=seed.contact,
+        coachNudge=seed.coachNudge,
+        resurrected=seed.resurrected,
+        outcome=seed.outcome,
+        outcomeAt=seed.outcomeAt,
+        outcomeReason=seed.outcomeReason,
+        outcomeReasons=None,
+        searchId=seed.searchId,
+    )
+    job = Job(
+        id=UUID(seed.job),
+        company=seed.company,
+        title=seed.role,
+        location=JobLocation(raw=seed.location),
+        workMode=JobWorkMode.onsite,
+        employment=_w2_salary_ft(),
+        compensation=seed.salary,
+        source=JobSource(
+            board=seed.source,
+            channel=JobCaptureMethod.url,
+            capturedAt=created,
+        ),
+        posted=created,
+        match=JobMatch(score=seed.match, strengths=[], gaps=[]),
+    )
+    return app, job
+
+
+# --- active pools (searchId-scoped, mock APPS / APPS_BACKEND / APPS_AI_INFRA) --
+_ACTIVE_SEEDS: list[_AppSeed] = [
+    # platform search (SEARCH_ID_PLATFORM)
+    _AppSeed(
+        app="6df605b9-9094-4344-8113-ac8b3248f03e",
+        job="6df605bb-29fb-4329-8565-f422f3d9dca9",
+        company="Stripe",
+        role="Staff Engineer, Payments core",
+        stage=Stage.applied,
+        location="Remote - US",
+        salary=_srange(255000, 305000),
+        resume="Distributed-systems v4",
+        match=92,
+        days=9,
+        source="greenhouse",
+        searchId=SEARCH_ID_PLATFORM,
+        flag=ApplicationFlag.stale,
+        contact="Maya Kapoor",
+        coachNudge=True,
+        resurrected=True,
+    ),
+    _AppSeed(
+        app="df79d7bf-8cd5-440b-8861-c958311e8734",
+        job="df79d7b1-bda1-4a77-8227-cb65b5056ff4",
+        company="Linear",
+        role="Senior Staff Engineer, Platform",
+        stage=Stage.screening,
+        location="Remote - US",
+        salary=_srange(280000, 340000),
+        resume="Distributed-systems v4",
+        match=88,
+        days=6,
+        source="ashby",
+        searchId=SEARCH_ID_PLATFORM,
+    ),
+    _AppSeed(
+        app="6a6918ec-3133-4cb3-8e36-d670323bfc73",
+        job="6a6918e0-3406-406b-8a01-fabc7ebd6b92",
+        company="Vercel",
+        role="Staff Engineer, Edge runtime",
+        stage=Stage.offer,
+        location="Remote - US/EU",
+        salary=_spoint(265000, "+ 0.4% equity"),
+        resume="For Vercel - edge v1",
+        match=91,
+        days=21,
+        source="ashby",
+        searchId=SEARCH_ID_PLATFORM,
+        flag=ApplicationFlag.offer,
+        coachNudge=True,
+    ),
+    _AppSeed(
+        app="59a0c6b1-ff2b-4091-8f6a-54f2d85f100d",
+        job="59a0c6b3-fc7f-4bf9-8d9c-3f25eae80d1a",
+        company="Render",
+        role="Senior Staff, Platform",
+        stage=Stage.rejected,
+        location="Remote - US",
+        salary=None,
+        resume="Distributed-systems v4",
+        match=68,
+        days=30,
+        source="lever",
+        searchId=SEARCH_ID_PLATFORM,
+    ),
+    _AppSeed(
+        app="63086faa-0b03-4a6e-8b52-ce64ed6adc4e",
+        job="63086faa-023b-4249-8e1a-da2e8532e303",
+        company="Supabase",
+        role="Principal Engineer, Realtime",
+        stage=Stage.applied,
+        location="Remote - US",
+        salary=_srange(290000, 350000),
+        resume="Platform / infra v2",
+        match=79,
+        days=3,
+        source="greenhouse",
+        searchId=SEARCH_ID_PLATFORM,
+    ),
+    _AppSeed(
+        app="364caaeb-4908-416b-8677-e843fa87be34",
+        job="364caaeb-4908-4bda-8860-8eaced47ee26",
+        company="PlanetScale",
+        role="Principal Engineer, Storage",
+        stage=Stage.interview,
+        location="Remote - US",
+        salary=_srange(295000, 360000),
+        resume="Distributed-systems v4",
+        match=84,
+        days=14,
+        source="ashby",
+        searchId=SEARCH_ID_PLATFORM,
+        resurrected=True,
+    ),
+    _AppSeed(
+        app="24328093-6bbf-4801-8ff7-90337a46a7fa",
+        job="243280e2-34a9-4dc3-819c-62d3b369dbf2",
+        company="Modal",
+        role="Staff Engineer, Compute",
+        stage=Stage.drafting,
+        location="Remote - US",
+        salary=None,
+        resume="-",
+        match=81,
+        days=0,
+        source="greenhouse",
+        searchId=SEARCH_ID_PLATFORM,
+    ),
+    _AppSeed(
+        app="ff2b3959-65a6-429f-8a77-bf8f15ea77f0",
+        job="ff2b3959-65a9-4be7-825e-803fede965a7",
+        company="Cloudflare",
+        role="Senior Staff, Workers",
+        stage=Stage.applied,
+        location="Remote - US",
+        salary=_srange(270000, 330000),
+        resume="Platform / infra v2",
+        match=91,
+        days=1,
+        source="greenhouse",
+        searchId=SEARCH_ID_PLATFORM,
+    ),
+    _AppSeed(
+        app="6aeb106c-d04d-4bde-8720-62637449921d",
+        job="6aeb1067-ca3a-4d4b-8501-0c5c410b09f3",
+        company="Sentry",
+        role="Staff Engineer, Ingest",
+        stage=Stage.interview,
+        location="Remote - US",
+        salary=_srange(260000, 315000),
+        resume="Distributed-systems v4",
+        match=89,
+        days=11,
+        source="greenhouse",
+        searchId=SEARCH_ID_PLATFORM,
+    ),
+    _AppSeed(
+        app="1fad38c6-8dd4-4487-8887-a7f91f563f35",
+        job="1fad3810-10aa-44ae-8e48-43967660a0cf",
+        company="Fly.io",
+        role="Principal Engineer",
+        stage=Stage.screening,
+        location="Remote - US",
+        salary=_srange(285000, 345000),
+        resume="Distributed-systems v4",
+        match=79,
+        days=7,
+        source="lever",
+        searchId=SEARCH_ID_PLATFORM,
+    ),
+    _AppSeed(
+        app="96ce626f-0bd6-4ea2-846d-22a1c145e9ac",
+        job="96ce626f-013a-490c-86de-f8f3e90bea12",
+        company="Temporal",
+        role="Staff Engineer",
+        stage=Stage.screening,
+        location="Remote - US",
+        salary=_srange(250000, 310000),
+        resume="Distributed-systems v4",
+        match=72,
+        days=4,
+        source="ashby",
+        searchId=SEARCH_ID_PLATFORM,
+    ),
+    _AppSeed(
+        app="a822d3fe-0cda-4434-8464-9774e3fc8684",
+        job="a822d161-2e8d-46cc-8f86-d11ae92ec666",
+        company="Neon",
+        role="Staff Engineer, Postgres",
+        stage=Stage.applied,
+        location="Remote - US",
+        salary=_srange(245000, 300000),
+        resume="Distributed-systems v4",
+        match=77,
+        days=5,
+        source="workday",
+        searchId=SEARCH_ID_PLATFORM,
+    ),
+    _AppSeed(
+        app="f2750d1b-efef-422f-8931-1c953b902ca1",
+        job="f2750d1b-ef57-4690-820e-b38b643b5d17",
+        company="Honeycomb",
+        role="Staff Engineer, Observability",
+        stage=Stage.applied,
+        location="Remote - US",
+        salary=_srange(255000, 310000),
+        resume="Distributed-systems v4",
+        match=88,
+        days=12,
+        source="greenhouse",
+        searchId=SEARCH_ID_PLATFORM,
+        flag=ApplicationFlag.stale,
+    ),
+    _AppSeed(
+        app="f1d0fa20-f831-4091-8948-7f02e1a3f785",
+        job="f1d0fa24-92e0-4532-845b-d3757e812756",
+        company="Convex",
+        role="Senior Staff, DB",
+        stage=Stage.rejected,
+        location="Remote - US",
+        salary=None,
+        resume="Distributed-systems v4",
+        match=64,
+        days=18,
+        source="greenhouse",
+        searchId=SEARCH_ID_PLATFORM,
+    ),
+    # backend search (SEARCH_ID_BACKEND)
+    _AppSeed(
+        app="f19e75b9-f0ed-4dd4-8013-a78453ed1156",
+        job="f19e75b9-f327-48dd-8004-745d87cbb1cb",
+        company="Wise",
+        role="Staff Engineer, Money movement",
+        stage=Stage.screening,
+        location="Remote - US",
+        salary=_srange(240000, 300000),
+        resume="Distributed-systems v4",
+        match=90,
+        days=5,
+        source="greenhouse",
+        searchId=SEARCH_ID_BACKEND,
+        contact="Dev Anand",
+    ),
+    _AppSeed(
+        app="f193b78f-daf6-4322-88bc-c4e3f1d29168",
+        job="f193b78f-d88a-43e7-80f0-2bf64f2b625f",
+        company="Adyen",
+        role="Senior Staff Engineer, Ledger",
+        stage=Stage.applied,
+        location="Remote - US",
+        salary=_srange(250000, 320000),
+        resume="Distributed-systems v4",
+        match=87,
+        days=2,
+        source="ashby",
+        searchId=SEARCH_ID_BACKEND,
+    ),
+    _AppSeed(
+        app="f19cde93-416f-44e6-8e84-1a453e354a63",
+        job="f19cde93-412a-460b-8c28-22bc57ea47a7",
+        company="Column",
+        role="Staff Engineer, Core banking API",
+        stage=Stage.interview,
+        location="Remote - US",
+        salary=_srange(245000, 310000),
+        resume="Distributed-systems v4",
+        match=89,
+        days=11,
+        source="lever",
+        searchId=SEARCH_ID_BACKEND,
+        coachNudge=True,
+    ),
+    # ai-infra search (SEARCH_ID_AI_INFRA)
+    _AppSeed(
+        app="85e29a5d-03fe-4301-80a9-961bcd5ea2ae",
+        job="85e29a5d-03f1-4783-8f53-9bc75abf835f",
+        company="Baseten",
+        role="Staff Engineer, Model serving",
+        stage=Stage.applied,
+        location="Remote - US",
+        salary=_srange(230000, 290000),
+        resume="Distributed-systems v4",
+        match=83,
+        days=4,
+        source="ashby",
+        searchId=SEARCH_ID_AI_INFRA,
+    ),
+]
+
+
+# --- archive pool (ORI-009; terminal stage derived from outcome) ---
+_ARCHIVE_SEEDS: list[_AppSeed] = [
+    _AppSeed(
+        app="8568e175-05d4-443b-8b0c-2e7a9bec6c16",
+        job="8568e175-05d0-4243-857a-69445600c97f",
+        company="Datadog",
+        role="Staff Engineer, Platform",
+        stage=Stage.won,
+        location="Remote - US",
+        salary=_spoint(258000, "+ equity"),
+        resume="Distributed-systems v4",
+        match=93,
+        days=34,
+        source="greenhouse",
+        searchId=SEARCH_ID_PLATFORM,
+        contact="Priya Nair",
+        outcome=Outcome.won,
+        outcomeAt=_utc_date("2024-11-15"),
+    ),
+    _AppSeed(
+        app="85681ed3-7ad9-4514-8ae6-7f4b8e524091",
+        job="85681ed3-7ad2-49fe-8326-aca7f3d2ab0b",
+        company="Airbnb",
+        role="Staff Engineer, Payments",
+        stage=Stage.rejected,
+        location="Remote - US",
+        salary=_srange(245000, 295000),
+        resume="Distributed-systems v4",
+        match=81,
+        days=22,
+        source="greenhouse",
+        searchId=SEARCH_ID_PLATFORM,
+        outcome=Outcome.rejected,
+        outcomeAt=_utc_date("2024-10-02"),
+        outcomeReason="Position filled",
+    ),
+    _AppSeed(
+        app="85681ed3-7a75-4852-83f3-fd540da847fb",
+        job="85681ed3-7a7e-44e6-8e55-5b24f4f9b487",
+        company="Notion",
+        role="Senior Staff Engineer, Platform",
+        stage=Stage.rejected,
+        location="Remote - US",
+        salary=_srange(230000, 280000),
+        resume="Master v4",
+        match=74,
+        days=18,
+        source="lever",
+        searchId=SEARCH_ID_PLATFORM,
+        outcome=Outcome.rejected,
+        outcomeAt=_utc_date("2024-09-14"),
+        outcomeReason="Comp below range",
+    ),
+    _AppSeed(
+        app="85681ed3-77a5-4491-8b49-8b4d1c3f2b8b",
+        job="85681ed3-77ae-4b6b-8a76-4ecb16798277",
+        company="Figma",
+        role="Principal Engineer, Realtime",
+        stage=Stage.rejected,
+        location="Remote - US",
+        salary=_srange(260000, 310000),
+        resume="Platform / infra v2",
+        match=88,
+        days=28,
+        source="ashby",
+        searchId=SEARCH_ID_PLATFORM,
+        outcome=Outcome.rejected,
+        outcomeAt=_utc_date("2024-08-30"),
+        outcomeReason="Selected internal candidate",
+    ),
+    _AppSeed(
+        app="8568e458-df6a-49bd-8305-c3f1accaf04b",
+        job="8568e458-df6d-4c9b-85a4-768dbc011af3",
+        company="Retool",
+        role="Staff Engineer, Growth",
+        stage=Stage.withdrew,
+        location="Remote - US",
+        salary=_srange(210000, 255000),
+        resume="Master v4",
+        match=69,
+        days=10,
+        source="workday",
+        searchId=SEARCH_ID_PLATFORM,
+        outcome=Outcome.withdrawn,
+        outcomeAt=_utc_date("2024-08-12"),
+        outcomeReason="Withdrew - accepted other offer",
+    ),
+    _AppSeed(
+        app="85681ed3-7571-4338-86c9-17f6963b65e5",
+        job="85681ed3-7573-4fbc-8e6b-9c2a249e369a",
+        company="Ramp",
+        role="Staff Engineer, Infra",
+        stage=Stage.rejected,
+        location="Remote - US",
+        salary=_srange(240000, 290000),
+        resume="Distributed-systems v4",
+        match=76,
+        days=31,
+        source="recruiter",
+        searchId=SEARCH_ID_PLATFORM,
+        outcome=Outcome.rejected,
+        outcomeAt=_utc_date("2024-07-22"),
+        outcomeReason="Position filled",
+    ),
+    _AppSeed(
+        app="85681ed3-7cd2-4f73-8823-ffb9e3c63565",
+        job="85681ed3-7cde-4e63-8dc1-3be926bfeeea",
+        company="Brex",
+        role="Principal Engineer, API",
+        stage=Stage.rejected,
+        location="Remote - US/EU",
+        salary=_srange(255000, 305000),
+        resume="Master v4",
+        match=83,
+        days=15,
+        source="ashby",
+        searchId=SEARCH_ID_PLATFORM,
+        outcome=Outcome.rejected,
+        outcomeAt=_utc_date("2024-07-08"),
+    ),
+    _AppSeed(
+        app="8568e458-d8b5-4fda-86a5-af8609f4c12a",
+        job="8568e458-d8b7-4378-8aad-bd78905a372c",
+        company="Mercury",
+        role="Senior Staff Engineer, Platform",
+        stage=Stage.withdrew,
+        location="Remote - global",
+        salary=_srange(220000, 265000),
+        resume="Platform / infra v2",
+        match=65,
+        days=8,
+        source="lever",
+        searchId=SEARCH_ID_PLATFORM,
+        outcome=Outcome.withdrawn,
+        outcomeAt=_utc_date("2024-06-25"),
+        outcomeReason="Title was a step back",
+    ),
+    _AppSeed(
+        app="85681ed3-7fc9-4e02-8b0d-f7256afbaa26",
+        job="85681ed3-7fc2-444b-81ad-e31d521f4442",
+        company="Plaid",
+        role="Staff Engineer, Data",
+        stage=Stage.rejected,
+        location="Remote - US",
+        salary=_srange(245000, 295000),
+        resume="Distributed-systems v4",
+        match=79,
+        days=19,
+        source="greenhouse",
+        searchId=SEARCH_ID_PLATFORM,
+        outcome=Outcome.rejected,
+        outcomeAt=_utc_date("2024-06-10"),
+        outcomeReason="Comp below range",
+    ),
+    _AppSeed(
+        app="85681ed3-7dcc-4c2f-8b31-8cb9e461e712",
+        job="85681ed3-7dc8-4ea0-8327-b1ccab4f9240",
+        company="Databricks",
+        role="Principal Engineer, Storage",
+        stage=Stage.rejected,
+        location="Remote - US",
+        salary=_srange(270000, 320000),
+        resume="Master v4",
+        match=71,
+        days=12,
+        source="workday",
+        searchId=SEARCH_ID_PLATFORM,
+        outcome=Outcome.rejected,
+        outcomeAt=_utc_date("2024-05-29"),
+    ),
+    _AppSeed(
+        app="8568e458-d80b-4270-8c2e-6f9eed207473",
+        job="8568e458-d805-4e1d-8ee5-2a83b251d8fd",
+        company="Snowflake",
+        role="Staff Engineer, Data",
+        stage=Stage.withdrew,
+        location="Remote - US",
+        salary=_spoint(268000, "+ equity"),
+        resume="Platform / infra v2",
+        match=61,
+        days=5,
+        source="recruiter",
+        searchId=SEARCH_ID_PLATFORM,
+        outcome=Outcome.withdrawn,
+        outcomeAt=_utc_date("2024-05-14"),
+        outcomeReason="Role not fully remote",
+    ),
+    _AppSeed(
+        app="85681ed3-72d5-46b2-80f9-ffea5073477c",
+        job="85681ed3-72de-4253-8f56-66faad1de6cd",
+        company="Confluent",
+        role="Senior Staff Engineer, Infra",
+        stage=Stage.rejected,
+        location="Remote - US",
+        salary=_srange(255000, 305000),
+        resume="Distributed-systems v4",
+        match=87,
+        days=24,
+        source="greenhouse",
+        searchId=SEARCH_ID_PLATFORM,
+        outcome=Outcome.rejected,
+        outcomeAt=_utc_date("2024-04-30"),
+        outcomeReason="Failed system-design round",
+    ),
+    _AppSeed(
+        app="85681ed3-76c8-47d9-844b-eed63c9a3299",
+        job="85681ed3-76c4-4b9d-82bc-148bd03d2ade",
+        company="Elastic",
+        role="Principal Engineer, Search",
+        stage=Stage.rejected,
+        location="Remote - US/EU",
+        salary=_srange(240000, 290000),
+        resume="Platform / infra v2",
+        match=80,
+        days=17,
+        source="lever",
+        searchId=SEARCH_ID_PLATFORM,
+        outcome=Outcome.rejected,
+        outcomeAt=_utc_date("2024-04-11"),
+    ),
+    _AppSeed(
+        app="85681ed3-8021-41bc-849f-a52b60306fec",
+        job="85681ed3-8023-4d12-80cb-0f6bcd39ea10",
+        company="GitLab",
+        role="Staff Engineer, Platform",
+        stage=Stage.rejected,
+        location="Remote - global",
+        salary=_srange(215000, 265000),
+        resume="Master v4",
+        match=73,
+        days=20,
+        source="indeed",
+        searchId=SEARCH_ID_PLATFORM,
+        outcome=Outcome.rejected,
+        outcomeAt=_utc_date("2024-03-28"),
+        outcomeReason="Role re-scoped to EM",
+    ),
+    _AppSeed(
+        app="85681ed3-8c06-40b5-8070-584f9cf16ef8",
+        job="85681ed3-8c09-4775-8f00-2ff17891c64d",
+        company="HashiCorp",
+        role="Senior Staff Engineer, Platform",
+        stage=Stage.rejected,
+        location="Remote - US",
+        salary=_srange(230000, 280000),
+        resume="Distributed-systems v4",
+        match=68,
+        days=26,
+        source="ashby",
+        searchId=SEARCH_ID_PLATFORM,
+        outcome=Outcome.rejected,
+        outcomeAt=_utc_date("2024-03-05"),
+        outcomeReason="Selected internal candidate",
+    ),
+]
+
+
+def _seed_application_state() -> tuple[
+    dict[UUID, Application], dict[UUID, Application], dict[UUID, Job]
+]:
+    """Build (active applications, archive, derived-jobs) from the ported pools."""
+    active: dict[UUID, Application] = {}
+    arch: dict[UUID, Application] = {}
+    derived_jobs: dict[UUID, Job] = {}
+    for seed in _ACTIVE_SEEDS:
+        app, job = _mk_app_and_job(seed)
+        active[app.id] = app
+        derived_jobs[job.id] = job
+    for seed in _ARCHIVE_SEEDS:
+        app, job = _mk_app_and_job(seed)
+        arch[app.id] = app
+        derived_jobs[job.id] = job
+    return active, arch, derived_jobs
+
+
+# slug -> application uuid, for porting the slug-keyed cross-ref fixtures
+# (timelines, interview rounds) onto the verbatim application ids.
+APP_UUID_BY_SLUG: dict[str, UUID] = {
+    "stripe": UUID("6df605b9-9094-4344-8113-ac8b3248f03e"),
+    "linear": UUID("df79d7bf-8cd5-440b-8861-c958311e8734"),
+    "vercel": UUID("6a6918ec-3133-4cb3-8e36-d670323bfc73"),
+    "supabase": UUID("63086faa-0b03-4a6e-8b52-ce64ed6adc4e"),
+    "planetscale": UUID("364caaeb-4908-416b-8677-e843fa87be34"),
+    "sentry": UUID("6aeb106c-d04d-4bde-8720-62637449921d"),
+    "be-column": UUID("f19cde93-416f-44e6-8e84-1a453e354a63"),
+}
+
+
+def _tl_id(fixture_id: str) -> UUID:
+    return uuid5(NAMESPACE_URL, f"mock:timeline:{fixture_id}")
+
+
+def _timeline_actor(who: str) -> Actor | None:
+    if who == "You":
+        return Actor.you
+    if who == "Coach":
+        return Actor.coach_on_behalf
+    if "detector" in who.lower():
+        return Actor.agent
+    return None
+
+
+# Ported from fixtures.ts TIMELINE_BY_APP (TRK-118). The fixture's calendar-ish
+# ``time`` strings ("Jan 22", "Mar 14") carry no fixed anchor, so timestamps are
+# a JUDGMENT CALL: monotonically increasing iso_ago offsets that preserve the
+# fixture's oldest-first ordering. The mock's ``badge`` field is dropped (the
+# frozen TimelineEvent carries structured ``actor`` instead).
+_TIMELINE_FIXTURES: dict[str, list[tuple[str, str, str]]] = {
+    "stripe": [
+        ("tl-stripe-1", "You", "Applied via Greenhouse"),
+        ("tl-stripe-2", "Stale-detector", "Flagged as stale (9d, median 6d)"),
+        ("tl-stripe-3", "Coach", "Drafted follow-up email"),
+        ("tl-stripe-4", "You", "Sent follow-up to Maya Kapoor"),
+    ],
+    "linear": [
+        ("tl-linear-1", "You", "Applied via Ashby"),
+        (
+            "tl-linear-2",
+            "Linear recruiting",
+            "Recruiter screen scheduled - Thu 11:00 AM",
+        ),
+    ],
+    "supabase": [
+        ("tl-supabase-1", "You", "Applied via Greenhouse"),
+    ],
+    "planetscale": [
+        ("tl-planetscale-1", "You", "Applied via Ashby"),
+        ("tl-planetscale-2", "PlanetScale recruiting", "Phone screen scheduled"),
+        ("tl-planetscale-3", "You", "Completed phone screen"),
+    ],
+    "sentry": [
+        ("tl-sentry-1", "You", "Applied via Greenhouse"),
+        ("tl-sentry-2", "You", "Tailored Distributed-systems v4 as the basis resume"),
+        ("tl-sentry-3", "Dana Okafor", "Hiring manager scheduled technical round"),
+    ],
+    "be-column": [
+        ("tl-be-column-1", "You", "Applied via Ashby"),
+        ("tl-be-column-2", "Column recruiting", "Recruiter screen scheduled"),
+        ("tl-be-column-3", "You", "Completed recruiter screen"),
+        ("tl-be-column-4", "Column", "Onsite interview scheduled - Thu"),
+    ],
+}
+
+
+def _seed_timelines() -> dict[UUID, list[TimelineEvent]]:
+    out: dict[UUID, list[TimelineEvent]] = {}
+    for slug, events in _TIMELINE_FIXTURES.items():
+        app_id = APP_UUID_BY_SLUG[slug]
+        count = len(events)
+        out[app_id] = [
+            TimelineEvent(
+                id=_tl_id(fixture_id),
+                time=iso_ago(days=count - index),
+                who=who,
+                message=message,
+                actor=_timeline_actor(who),
+            )
+            for index, (fixture_id, who, message) in enumerate(events)
+        ]
+    return out
+
+
+def _ir_id(fixture_id: str) -> UUID:
+    return uuid5(NAMESPACE_URL, f"mock:interview-round:{fixture_id}")
+
+
+# Ported from fixtures.ts INTERVIEW_ROUNDS (TRK-117). ``date`` fixture strings
+# ("Mar 14, 2026", "Thu, Mar 20") are not cleanly parseable and carry no anchor,
+# so dates are a JUDGMENT CALL: monotonic iso_ago offsets preserving order.
+# (slug, fixture_id, type, format, status)
+_INTERVIEW_FIXTURES: list[
+    tuple[str, str, InterviewType, InterviewFormat, InterviewStatus]
+] = [
+    (
+        "stripe",
+        "ir-stripe-1",
+        InterviewType.recruiter_screen,
+        InterviewFormat.phone,
+        InterviewStatus.completed,
+    ),
+    (
+        "stripe",
+        "ir-stripe-2",
+        InterviewType.technical,
+        InterviewFormat.video,
+        InterviewStatus.scheduled,
+    ),
+    (
+        "planetscale",
+        "ir-planetscale-1",
+        InterviewType.recruiter_screen,
+        InterviewFormat.phone,
+        InterviewStatus.completed,
+    ),
+    (
+        "planetscale",
+        "ir-planetscale-2",
+        InterviewType.onsite,
+        InterviewFormat.onsite,
+        InterviewStatus.scheduled,
+    ),
+    (
+        "sentry",
+        "ir-sentry-1",
+        InterviewType.recruiter_screen,
+        InterviewFormat.phone,
+        InterviewStatus.completed,
+    ),
+    (
+        "sentry",
+        "ir-sentry-2",
+        InterviewType.technical,
+        InterviewFormat.video,
+        InterviewStatus.scheduled,
+    ),
+    (
+        "linear",
+        "ir-linear-1",
+        InterviewType.recruiter_screen,
+        InterviewFormat.phone,
+        InterviewStatus.scheduled,
+    ),
+    (
+        "be-column",
+        "ir-be-column-1",
+        InterviewType.recruiter_screen,
+        InterviewFormat.video,
+        InterviewStatus.completed,
+    ),
+    (
+        "be-column",
+        "ir-be-column-2",
+        InterviewType.onsite,
+        InterviewFormat.onsite,
+        InterviewStatus.scheduled,
+    ),
+]
+
+
+def _seed_interview_rounds() -> list[InterviewRound]:
+    rounds: list[InterviewRound] = []
+    for index, (slug, fixture_id, itype, iformat, istatus) in enumerate(
+        _INTERVIEW_FIXTURES
+    ):
+        rounds.append(
+            InterviewRound(
+                id=_ir_id(fixture_id),
+                appId=APP_UUID_BY_SLUG[slug],
+                date=iso_ago(days=len(_INTERVIEW_FIXTURES) - index),
+                type=itype,
+                format=iformat,
+                status=istatus,
+            )
+        )
+    return rounds
+
+
+# Live stores. Never reassigned -- mutated in place so imported references stay
+# valid. Routes read/write ``store.applications`` etc.
+applications, archive, application_jobs = _seed_application_state()
+transition_logs: dict[UUID, list[StageTransition]] = {}
+timelines: dict[UUID, list[TimelineEvent]] = _seed_timelines()
+interview_rounds: list[InterviewRound] = _seed_interview_rounds()
+undo_grants: dict[UUID, UndoGrant] = {}
+resume_snapshots: dict[UUID, ResumeSnapshot] = {}
+
+
+def application_view(app: Application) -> ApplicationView:
+    """Join an Application to its Job + Resume, flattening the display fields
+    onto the read model (mock ``applicationView`` / the ``?expand=job,resume``
+    view). Consults ``jobs`` first, then the derived ``application_jobs``."""
+    job = jobs.get(app.jobId) or application_jobs.get(app.jobId)
+    if job is None:  # pragma: no cover -- every application owns a resolvable job
+        raise KeyError(f"no job for application {app.id}")
+    resume = resumes.get(app.resumeId) if app.resumeId else None
+    return ApplicationView(
+        **app.model_dump(),
+        job=job,
+        resume=resume,
+        company=job.company,
+        role=job.title,
+        location=job.location.raw,
+        salary=job.compensation,
+        match=job.match.score if job.match else 0,
+        source=job.source.board,
+        resumeName=resume.name if resume else "No resume selected",
+    )

@@ -13,7 +13,10 @@ from fastapi import APIRouter
 
 from app.scaffold.routes import (
     agents,
+    applications,
+    archive,
     coach,
+    interviews,
     jobs,
     library,
     match,
@@ -42,3 +45,9 @@ scaffold_router.include_router(match.router)
 scaffold_router.include_router(agents.router)
 scaffold_router.include_router(coach.router)
 scaffold_router.include_router(library.router)
+# applications + its sub-resources. Static/collection routes and the distinct
+# ``/applications/{id}/<verb>`` sub-paths do not shadow each other (they differ
+# by trailing segment), so registration order among these three is free.
+scaffold_router.include_router(applications.router)
+scaffold_router.include_router(interviews.router)
+scaffold_router.include_router(archive.router)

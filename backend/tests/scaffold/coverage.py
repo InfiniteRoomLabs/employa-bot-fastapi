@@ -22,22 +22,7 @@ per-route ``# DEFERRED (...)`` markers explaining what's not yet frozen:
 
 from __future__ import annotations
 
-# Every contract op not yet served by a scaffold route. Shrinks over phase 2.
-NOT_YET_SCAFFOLDED: frozenset[str] = frozenset(
-    {
-        "createApplication",
-        "dismissApplication",
-        "getApplication",
-        "getApplicationTimeline",
-        "getApplications",
-        "getArchive",
-        "getArchiveCounts",
-        "getInterviewRounds",
-        "getResumeSnapshot",
-        "markWon",
-        "patchInterviewRound",
-        "reactivateApplication",
-        "transitionApplication",
-        "undoMarkWon",
-    }
-)
+# Every contract op not yet served by a scaffold route. The applications /
+# interviews / archive group (14 ops) was the last unscaffolded group, so this
+# is now empty -- every frozen contract op has a scaffold route.
+NOT_YET_SCAFFOLDED: frozenset[str] = frozenset()
