@@ -11,7 +11,15 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from app.scaffold.routes import periphery, resume_lifecycle, resumes, searches
+from app.scaffold.routes import (
+    jobs,
+    match,
+    periphery,
+    resume_lifecycle,
+    resumes,
+    searches,
+    shortlist,
+)
 
 scaffold_router = APIRouter()
 scaffold_router.include_router(searches.router)
@@ -25,3 +33,6 @@ scaffold_router.include_router(periphery.account_router)
 # order, not specificity, and would try to parse "uploads" etc. as a UUID).
 scaffold_router.include_router(resume_lifecycle.router)
 scaffold_router.include_router(resumes.router)
+scaffold_router.include_router(shortlist.router)
+scaffold_router.include_router(jobs.router)
+scaffold_router.include_router(match.router)
