@@ -15,6 +15,7 @@ from app.scaffold.routes import (
     agents,
     coach,
     jobs,
+    library,
     match,
     periphery,
     resume_lifecycle,
@@ -40,3 +41,4 @@ scaffold_router.include_router(jobs.router)
 scaffold_router.include_router(match.router)
 scaffold_router.include_router(agents.router)
 scaffold_router.include_router(coach.router)
+scaffold_router.include_router(library.router)
