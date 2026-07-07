@@ -81,5 +81,9 @@ show_contexts = true
 [tool.ty.terminal]
 error-on-warning = true
 
+[tool.ty.environment]
+# uv workspace: the shared venv lives at the repo root, not next to this pyproject
+python = "../.venv"
+
 [tool.fastapi]
 entrypoint = "app.main:app"

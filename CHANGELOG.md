@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `[tool.ty.environment] python = "../.venv"` in `backend/pyproject.toml`: ty roots at the backend pyproject and only auto-discovers a venv there, but the uv workspace keeps the shared `.venv` at the repo root — so ty run outside `uv run` (e.g. the PyCharm plugin) fell back to system site-packages and flagged every third-party import as unresolved.
+
 ### Added
 
 - Frontend data-seam swap: `frontend/src/data/api.ts` is now a real HTTP adapter over the scaffold backend (96 exports, `transitionApplication` added), with wire-to-app transforms in `src/data/wire.ts`, client-local presentation constants in `src/data/client-constants.ts`, and an HTTP-to-error-kind translator in `src/lib/mock-api-error.ts`. Base URL follows the template `VITE_API_URL` convention (no dev proxy). A gated integration test (`RUN_ADAPTER_IT=1`, backend on :8000 or `ADAPTER_IT_URL`) verifies seeded data, joined views, a transition round-trip with version bump, and 404 envelope translation against the live scaffold. 41 test files (148 tests) that asserted on the retired mock data layer are excluded in `vitest.config.ts` with a documented rationale; the remaining suite is green (323 passed).
