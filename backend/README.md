@@ -12,7 +12,7 @@ Two API layers share the `/api/v1` prefix:
 
 ## Docker Compose
 
-Start the local development environment with Docker Compose following the guide in [../development.md](../development.md).
+Start the local development environment with `docker compose watch` from the repo root (see the [root README](../README.md)).
 
 ## General Workflow
 
