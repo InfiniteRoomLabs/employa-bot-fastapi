@@ -12,6 +12,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Seeded job fixture URLs in the scaffold store now construct `AnyUrl` explicitly instead of passing raw strings past a type-ignore.
 - `[tool.ty.environment] python = "../.venv"` in `backend/pyproject.toml`: ty roots at the backend pyproject and only auto-discovers a venv there, but the uv workspace keeps the shared `.venv` at the repo root — so ty run outside `uv run` (e.g. the PyCharm plugin) fell back to system site-packages and flagged every third-party import as unresolved.
 
+### Removed
+
+- Template demo resource `Item`: routes (`/items`, `/private`), models, `crud.create_item`, the `User.items` relationship, and their tests. Template error-path tests now assert on the contract error envelope's `message` field (the app-wide handlers rewrite 404/409 bodies).
+
 ### Added
 
 - Real login wired end-to-end: `User` gains profile fields (`initials`, `city`, `current`, `years`, `comp_floor`, `target_titles`; alembic `70eafafea7af`), the frontend data seam stores the JWT from `POST /login/access-token` and sends `Authorization: Bearer` on every request, auth failures (401, or 403 with the credential-validation detail) clear the token and redirect to `/login`, the login screen submits real credentials with inline error display, sign-out clears the token, and `getCurrentUser()` reads `/users/me`.

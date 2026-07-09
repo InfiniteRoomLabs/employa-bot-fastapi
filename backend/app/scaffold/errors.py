@@ -157,6 +157,6 @@ def register_scaffold(app: FastAPI) -> None:
     registered app-wide so that framework-raised errors (validation, 404) wear
     the same ``{kind, path, message}`` envelope scaffold routes produce.
     """
-    app.add_exception_handler(ScaffoldError, _handle_scaffold_error)  # type: ignore[arg-type]
-    app.add_exception_handler(RequestValidationError, _handle_validation_error)  # type: ignore[arg-type]
-    app.add_exception_handler(StarletteHTTPException, _handle_http_exception)  # type: ignore[arg-type]
+    app.add_exception_handler(ScaffoldError, _handle_scaffold_error)  # type: ignore[arg-type]  # ty: ignore[invalid-argument-type]
+    app.add_exception_handler(RequestValidationError, _handle_validation_error)  # type: ignore[arg-type]  # ty: ignore[invalid-argument-type]
+    app.add_exception_handler(StarletteHTTPException, _handle_http_exception)  # type: ignore[arg-type]  # ty: ignore[invalid-argument-type]

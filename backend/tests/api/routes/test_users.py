@@ -84,7 +84,7 @@ def test_get_non_existing_user_as_superuser(
         headers=superuser_token_headers,
     )
     assert r.status_code == 404
-    assert r.json() == {"detail": "User not found"}
+    assert r.json()["message"] == "User not found"
 
 
 def test_get_existing_user_current_user(client: TestClient, db: Session) -> None:
@@ -294,7 +294,7 @@ def test_update_user_me_email_exists(
         json=data,
     )
     assert r.status_code == 409
-    assert r.json()["detail"] == "User with this email already exists"
+    assert r.json()["message"] == "User with this email already exists"
 
 
 def test_update_password_me_same_password_error(
@@ -391,7 +391,7 @@ def test_update_user_not_exists(
         json=data,
     )
     assert r.status_code == 404
-    assert r.json()["detail"] == "The user with this id does not exist in the system"
+    assert r.json()["message"] == "The user with this id does not exist in the system"
 
 
 def test_update_user_email_exists(
@@ -414,7 +414,7 @@ def test_update_user_email_exists(
         json=data,
     )
     assert r.status_code == 409
-    assert r.json()["detail"] == "User with this email already exists"
+    assert r.json()["message"] == "User with this email already exists"
 
 
 def test_delete_user_me(client: TestClient, db: Session) -> None:
@@ -487,7 +487,7 @@ def test_delete_user_not_found(
         headers=superuser_token_headers,
     )
     assert r.status_code == 404
-    assert r.json()["detail"] == "User not found"
+    assert r.json()["message"] == "User not found"
 
 
 def test_delete_user_current_super_user_error(
