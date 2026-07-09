@@ -1,6 +1,6 @@
 """Interview rounds sub-resource (TRK-117 / TRK-127, D3).
 
-Follows the SCAFFOLD PATTERN in ``routes/searches.py``. Two ops, both tagged
+Follows the MOCK ROUTE PATTERN in ``routes/searches.py``. Two ops, both tagged
 ``interviews`` per ``mvp-api.yaml``. ``patchInterviewRound`` enforces the D3 /
 TRK-127 mutation allowlist (ONLY date / type / format / status are mutable) in
 route logic via a strict (``extra='forbid'``) body model: any other key is a
@@ -15,9 +15,9 @@ from uuid import UUID
 from fastapi import APIRouter
 from pydantic import BaseModel, ConfigDict
 
-from app.scaffold import store
-from app.scaffold.errors import NotFoundError
-from app.scaffold.models import (
+from app import store
+from app.api.errors import NotFoundError
+from app.schemas import (
     InterviewFormat,
     InterviewRound,
     InterviewStatus,

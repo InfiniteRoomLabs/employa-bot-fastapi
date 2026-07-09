@@ -1,13 +1,13 @@
 """Typed domain errors and the contract Error-envelope handlers.
 
-Every error the scaffold surfaces to a client is one of the ``ScaffoldError``
+Every error the mock API surfaces to a client is one of the ``ApiError``
 subclasses below. Each carries a wire ``kind`` (from the frozen ``Error`` schema
 in ``mvp-api.yaml``); the ``kind -> HTTP status`` mapping is the one enumerated
 in that file's ``info.description`` and is the single source of truth here.
 
-Handlers registered by :func:`register_scaffold` translate:
+Handlers registered by :func:`register_error_handlers` translate:
 
-* ``ScaffoldError``            -> the ``{kind, path, message}`` envelope
+* ``ApiError``            -> the ``{kind, path, message}`` envelope
 * ``RequestValidationError``   -> 422 ``validation_error`` envelope
 * ``StarletteHTTPException``   -> the envelope, kind inferred from status
 
@@ -21,7 +21,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from app.scaffold.models import Error, Kind
+from app.schemas import Error, Kind
 
 # ---------------------------------------------------------------------------
 # kind -> HTTP status (frozen mapping from mvp-api.yaml info.description)
@@ -41,7 +41,7 @@ KIND_TO_STATUS: dict[Kind, int] = {
 
 # Reverse map for framework HTTPExceptions. Where several kinds share a status
 # (409, 422) we pick the generic member; specific kinds are only produced by
-# domain code raising the matching ScaffoldError, never inferred from a status.
+# domain code raising the matching ApiError, never inferred from a status.
 _STATUS_TO_KIND: dict[int, Kind] = {
     401: Kind.unauthorized,
     402: Kind.cap_reached,
@@ -58,8 +58,8 @@ _STATUS_TO_KIND: dict[int, Kind] = {
 # ---------------------------------------------------------------------------
 
 
-class ScaffoldError(Exception):
-    """Base for all scaffold domain errors. Subclasses set ``kind``."""
+class ApiError(Exception):
+    """Base for all mock-API domain errors. Subclasses set ``kind``."""
 
     kind: Kind
 
@@ -72,41 +72,41 @@ class ScaffoldError(Exception):
         return KIND_TO_STATUS[self.kind]
 
 
-class NotFoundError(ScaffoldError):
+class NotFoundError(ApiError):
     kind = Kind.not_found
 
 
-class UnauthorizedError(ScaffoldError):
+class UnauthorizedError(ApiError):
     kind = Kind.unauthorized
 
 
-class ValidationTaggedError(ScaffoldError):
+class ValidationTaggedError(ApiError):
     """Domain-level validation failure (distinct from framework 422s)."""
 
     kind = Kind.validation_error
 
 
-class ConflictError(ScaffoldError):
+class ConflictError(ApiError):
     kind = Kind.conflict
 
 
-class CapReachedError(ScaffoldError):
+class CapReachedError(ApiError):
     kind = Kind.cap_reached
 
 
-class UndoWindowExpiredError(ScaffoldError):
+class UndoWindowExpiredError(ApiError):
     kind = Kind.undo_window_expired
 
 
-class InvalidTransitionError(ScaffoldError):
+class InvalidTransitionError(ApiError):
     kind = Kind.invalid_transition
 
 
-class RateLimitedError(ScaffoldError):
+class RateLimitedError(ApiError):
     kind = Kind.rate_limited
 
 
-class ProviderUnavailableError(ScaffoldError):
+class ProviderUnavailableError(ApiError):
     kind = Kind.provider_unavailable
 
 
@@ -123,7 +123,7 @@ def _envelope(kind: Kind, request: Request, message: str | None) -> JSONResponse
     )
 
 
-async def _handle_scaffold_error(request: Request, exc: ScaffoldError) -> JSONResponse:
+async def _handle_api_error(request: Request, exc: ApiError) -> JSONResponse:
     return _envelope(exc.kind, request, exc.message)
 
 
@@ -148,15 +148,15 @@ async def _handle_http_exception(
     return _envelope(kind, request, message)
 
 
-def register_scaffold(app: FastAPI) -> None:
-    """Install the scaffold's Error-envelope exception handlers on ``app``.
+def register_error_handlers(app: FastAPI) -> None:
+    """Install the mock API's Error-envelope exception handlers on ``app``.
 
     Call once from ``app.main`` after the ``FastAPI`` app is constructed. This
-    only registers handlers -- the scaffold *router* is wired separately in
+    only registers handlers -- the mock-API routers are wired separately in
     ``app.api.main`` so it inherits the ``/api/v1`` prefix. Handlers are
     registered app-wide so that framework-raised errors (validation, 404) wear
-    the same ``{kind, path, message}`` envelope scaffold routes produce.
+    the same ``{kind, path, message}`` envelope mock-API routes produce.
     """
-    app.add_exception_handler(ScaffoldError, _handle_scaffold_error)  # type: ignore[arg-type]  # ty: ignore[invalid-argument-type]
+    app.add_exception_handler(ApiError, _handle_api_error)  # type: ignore[arg-type]  # ty: ignore[invalid-argument-type]
     app.add_exception_handler(RequestValidationError, _handle_validation_error)  # type: ignore[arg-type]  # ty: ignore[invalid-argument-type]
     app.add_exception_handler(StarletteHTTPException, _handle_http_exception)  # type: ignore[arg-type]  # ty: ignore[invalid-argument-type]

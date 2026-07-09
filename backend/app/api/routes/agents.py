@@ -10,7 +10,7 @@ list). Two route-ordering notes specific to this resource:
   them and fail UUID validation instead of hitting the real handler.
 * 6 of this resource's 14 ops are DEFERRED (founder-ruled 2026-07-04,
   DECISIONS-NEEDED #1/#2): ``getReviewQueue``, ``approveAgentAction``,
-  ``rejectAgentAction``, ``patchAgentTrustTier``. They are scaffolded as
+  ``rejectAgentAction``, ``patchAgentTrustTier``. They are served as
   mock-parity stubs so the UI functions, but their real approval-machine
   semantics are not frozen. Each is tagged with a ``# DEFERRED (...)`` comment.
 """
@@ -22,9 +22,9 @@ from uuid import UUID
 from fastapi import APIRouter
 from pydantic import BaseModel
 
-from app.scaffold import store
-from app.scaffold.errors import NotFoundError
-from app.scaffold.models import (
+from app import store
+from app.api.errors import NotFoundError
+from app.schemas import (
     Agent,
     AgentLogEntry,
     AgentLogKind,

@@ -3,13 +3,13 @@
 Follows the ``routes/searches.py`` pattern (see its header for the full rule
 list). 2 of this resource's 4 ops are DEFERRED (founder-ruled 2026-07-04,
 DECISIONS-NEEDED #1): ``proposeCoachEdit`` and ``saveCoachProposal``. They are
-scaffolded as mock-parity stubs so the UI functions, but the proposal-approval
+served as mock-parity stubs so the UI functions, but the proposal-approval
 state machine they depend on is not frozen. Each is tagged with a
 ``# DEFERRED (...)`` comment.
 
 ``/coach/greeting`` is NOT in the contract (founder ruled 2026-07-04,
 DECISIONS-NEEDED #5: canned client copy, no backend route) and is
-intentionally not scaffolded here.
+intentionally not implemented here.
 """
 
 from __future__ import annotations
@@ -19,9 +19,9 @@ from uuid import UUID, uuid4
 from fastapi import APIRouter
 from pydantic import BaseModel
 
-from app.scaffold import store
-from app.scaffold.errors import NotFoundError
-from app.scaffold.models import (
+from app import store
+from app.api.errors import NotFoundError
+from app.schemas import (
     Actor,
     CoachMessage,
     CoachProposal,
@@ -47,7 +47,7 @@ class CoachThreadBundle(BaseModel):
     """Response shape for ``getCoachThread`` -- the contract defines this as
     an anonymous inline object (``{thread, messages, context}``), so
     datamodel-codegen emits no named schema for it. Modeled locally here to
-    keep ``response_model`` typed per the scaffold pattern.
+    keep ``response_model`` typed per the mock route pattern.
     """
 
     thread: CoachThread

@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- The `app/scaffold/` namespace is dissolved into the normal backend layout: wire models at `app/schemas.py`, the in-memory store at `app/store.py`, the error envelope at `app/api/errors.py` (`ApiError`, `register_error_handlers`), one router per resource under `app/api/routes/` (`periphery.py` split into `notifications.py`, `settings.py`, `account.py`), aggregation inlined into `app/api/main.py`, and contract tests at `tests/contract/` (the empty `NOT_YET_SCAFFOLDED` ledger deleted, drift test now asserts the app serves all 89 contract ops). Mock-API docs moved from `app/scaffold/README.md` into `backend/README.md`.
 - Alembic history squashed to a single `initial schema` migration (`3bae06a61157`) creating the `user` table with all profile fields. **Existing dev databases must be recreated** (`docker compose down -v && docker compose up -d --build`).
 
 ### Removed

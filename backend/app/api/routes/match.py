@@ -33,9 +33,9 @@ from uuid import UUID
 from fastapi import APIRouter, Query
 from pydantic import BaseModel
 
-from app.scaffold import store
-from app.scaffold.errors import CapReachedError, NotFoundError
-from app.scaffold.models import (
+from app import store
+from app.api.errors import CapReachedError, NotFoundError
+from app.schemas import (
     AiRunEnvelope,
     AiRunStatus,
     CostPreview,
@@ -43,7 +43,7 @@ from app.scaffold.models import (
     DeepMatchResult,
     MatchReport,
 )
-from app.scaffold.models import Kind2 as DeepMatchKind
+from app.schemas import Kind2 as DeepMatchKind
 
 router = APIRouter(tags=["match"])
 
@@ -100,7 +100,7 @@ def run_deep_match_score(id: UUID, body: RunDeepScoreBody) -> DeepMatchResult:
     """Run a deep (paid) match score (runDeepMatchScore, D8/D9a).
 
     Synchronous "AI" operation served by the synthetic FakeProvider (no real
-    provider in the scaffold). Raises ``CapReachedError`` (402) BEFORE
+    provider in the mock backend). Raises ``CapReachedError`` (402) BEFORE
     recording any spend if the unit cost would exceed the remaining monthly
     cap -- see module docstring.
     """

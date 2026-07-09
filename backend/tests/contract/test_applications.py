@@ -16,9 +16,9 @@ from uuid import UUID
 import pytest
 from fastapi.testclient import TestClient
 
-from app.scaffold import store
-from app.scaffold.models import Stage
-from app.scaffold.routes.applications import LEGAL_TRANSITIONS
+from app import store
+from app.api.routes.applications import LEGAL_TRANSITIONS
+from app.schemas import Stage
 
 B = "/api/v1"
 

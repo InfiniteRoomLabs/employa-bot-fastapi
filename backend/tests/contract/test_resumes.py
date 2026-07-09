@@ -11,8 +11,8 @@ from uuid import UUID, uuid4
 
 from fastapi.testclient import TestClient
 
-from app.scaffold import store
-from app.scaffold.models import CareerHistoryItem, Kind3
+from app import store
+from app.schemas import CareerHistoryItem, Kind3
 
 UNKNOWN_ID = "00000000-0000-4000-8000-000000000000"
 

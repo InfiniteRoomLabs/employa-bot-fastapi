@@ -1,9 +1,9 @@
 """Applications resource -- the post-commit lifecycle (ADR-006 / D6..D19).
 
-Follows the SCAFFOLD PATTERN in ``routes/searches.py`` (read that file's header
+Follows the MOCK ROUTE PATTERN in ``routes/searches.py`` (read that file's header
 first): one router per resource, explicit ``operation_id`` verbatim from
 ``mvp-api.yaml``, generated ``response_model``, store access via
-``app.scaffold.store``, typed errors (never ``HTTPException``), no auth deps.
+``app.store``, typed errors (never ``HTTPException``), no auth deps.
 
 ``transitionApplication`` is the core op. Its legal-move matrix
 (:data:`LEGAL_TRANSITIONS`) is DATA transcribed VERBATIM from the settled law
@@ -18,7 +18,7 @@ deliberately excluded from this matrix:
     only carries the pre-commit ``saved|drafting -> dismissed`` edges.
 
 Two contract rules pydantic cannot express live in route logic (per the
-scaffold README carry-forward note): (1) ``resumeId`` is REQUIRED when
+backend README carry-forward note): (1) ``resumeId`` is REQUIRED when
 ``targetStage == applied`` -> 422 ``validation_error``; (2) ``expectedVersion``
 must equal ``Application.version`` -> 409 ``conflict``.
 """
@@ -31,15 +31,15 @@ from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 from fastapi import APIRouter, Body, Query
 from pydantic import BaseModel
 
-from app.scaffold import store
-from app.scaffold.errors import (
+from app import store
+from app.api.errors import (
     ConflictError,
     InvalidTransitionError,
     NotFoundError,
     UndoWindowExpiredError,
     ValidationTaggedError,
 )
-from app.scaffold.models import (
+from app.schemas import (
     Actor,
     Application,
     ApplicationView,

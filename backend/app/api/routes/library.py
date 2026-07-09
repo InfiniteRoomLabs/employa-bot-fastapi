@@ -1,7 +1,7 @@
 """Library resource: contacts, projects, accomplishments, answers, credentials,
 and the shared trash (soft-delete) lifecycle across the first four kinds.
 
-Follows the SCAFFOLD PATTERN from ``routes/searches.py`` (see that file's
+Follows the MOCK ROUTE PATTERN from ``routes/searches.py`` (see that file's
 docstring for the numbered rules). Resource-specific judgment calls:
 
 * Soft delete (D24): ``delete*`` routes set ``deletedAt``; every list getter
@@ -10,7 +10,7 @@ docstring for the numbered rules). Resource-specific judgment calls:
 * Unknown id on ANY id-addressed route here -- including restore, purge, and
   deletion-impact -- raises ``NotFoundError`` (404), per pattern rule 5. The
   mock ``api.ts`` is lenient (a silent no-op on an unmatched id) because its
-  UI never exercises that path; the scaffold enforces the stricter, more
+  UI never exercises that path; the mock backend enforces the stricter, more
   useful contract behavior instead.
 * ``update*`` routes accept the full ``*Draft`` body (the contract's PATCH
   request body is the non-partial Draft schema, not `Partial<Draft>` like the
@@ -18,7 +18,7 @@ docstring for the numbered rules). Resource-specific judgment calls:
   every Draft field is required, this has the same effect as the mock's
   partial-merge for any request a real client can actually send.
 * ``deriveAccomplishmentFromProject`` is a synthetic AI op (no provider in
-  the scaffold): it snapshots the source Project into a NEW Accomplishment
+  the mock backend): it snapshots the source Project into a NEW Accomplishment
   with a ``source.projectId`` backlink (NOT live-bound -- editing the Project
   afterward does not change the derived Accomplishment, mirroring mock
   api.ts) and returns a synthetic ``AiRunEnvelope`` (provider="fake",
@@ -33,9 +33,9 @@ from uuid import UUID, uuid4
 from fastapi import APIRouter
 from pydantic import BaseModel
 
-from app.scaffold import store
-from app.scaffold.errors import NotFoundError
-from app.scaffold.models import (
+from app import store
+from app.api.errors import NotFoundError
+from app.schemas import (
     Accomplishment,
     AccomplishmentDeriveResult,
     AccomplishmentDraft,
@@ -176,7 +176,7 @@ class DeriveAccomplishmentFromProjectBody(BaseModel):
 
     The contract inlines this object (``{projectId}``) rather than naming a
     reusable schema, so ``datamodel-codegen`` did not emit a model for it in
-    ``app.scaffold.models``. Defined here rather than editing the generated
+    ``app.schemas``. Defined here rather than editing the generated
     file.
     """
 
@@ -194,7 +194,7 @@ def derive_accomplishment_from_project(
 ) -> AccomplishmentDeriveResult:
     """Distill a Project into a NEW accomplishment (deriveAccomplishmentFromProject, ACC-002).
 
-    Synthetic AI op -- no provider in the scaffold. Snapshots + backlinks the
+    Synthetic AI op -- no provider in the mock backend. Snapshots + backlinks the
     source Project (mirrors mock api.ts: title copied verbatim, summary is
     the project body truncated to 160 chars, tags copied, ``source.projectId``
     set). The result is NOT live-bound to the Project. 404 if the project is

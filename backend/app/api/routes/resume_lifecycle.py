@@ -1,11 +1,11 @@
 """Resume-lifecycle resource: uploads, career history, templates, exports,
 and projections (ADR-007/008, RES-030..037, TPL-001/002).
 
-Follows the SCAFFOLD PATTERN in ``routes/searches.py`` (read that file's
+Follows the MOCK ROUTE PATTERN in ``routes/searches.py`` (read that file's
 header first). ``mvp-api.yaml`` inlines the ``createProjection``,
 ``assignTemplate``, and ``renderExport`` request bodies as anonymous objects
 (no ``$ref``), so ``datamodel-codegen`` never emitted models for them in
-``app.scaffold.models``. The three ``*Input`` models below are small
+``app.schemas``. The three ``*Input`` models below are small
 hand-authored request models for those bodies only -- every response still
 uses the generated models (``Resume``, ``ResumeExport``, ...).
 """
@@ -18,9 +18,9 @@ from uuid import UUID, uuid4
 from fastapi import APIRouter
 from pydantic import BaseModel
 
-from app.scaffold import store
-from app.scaffold.errors import NotFoundError
-from app.scaffold.models import (
+from app import store
+from app.api.errors import NotFoundError
+from app.schemas import (
     CareerHistoryItem,
     Resume,
     ResumeExport,

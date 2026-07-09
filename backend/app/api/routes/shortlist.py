@@ -12,7 +12,7 @@ field-for-field.
 
 ``dismissFromShortlist`` is UUID-ified per the contract (DELETE
 ``/shortlist/{id}``) even though the mock keys removal by role string --
-see ``app.scaffold.store``'s shortlist section docstring for the id scheme
+see ``app.store``'s shortlist section docstring for the id scheme
 and the mutable-vs-per-search-view split ported from api.ts.
 """
 
@@ -24,9 +24,9 @@ from uuid import UUID, uuid4
 from fastapi import APIRouter, Query, Response
 from pydantic import BaseModel
 
-from app.scaffold import store
-from app.scaffold.errors import NotFoundError
-from app.scaffold.models import SalaryPoint, SalaryRange, ShortlistEntry, Source
+from app import store
+from app.api.errors import NotFoundError
+from app.schemas import SalaryPoint, SalaryRange, ShortlistEntry, Source
 
 router = APIRouter(tags=["shortlist"])
 

@@ -2,7 +2,7 @@
 
 Follows the searches.py pattern exactly (see that file's header for the full
 rule list): explicit ``operation_id`` verbatim from the contract, generated
-``response_model``, store access via ``app.scaffold.store`` dicts/lists,
+``response_model``, store access via ``app.store`` dicts/lists,
 typed errors (never ``HTTPException``), no auth deps.
 
 ``getJobsInbox`` takes an optional ``searchId`` query param. Judgment call
@@ -18,9 +18,9 @@ from uuid import UUID
 
 from fastapi import APIRouter, Query
 
-from app.scaffold import store
-from app.scaffold.errors import NotFoundError
-from app.scaffold.models import Job, JobInboxItem
+from app import store
+from app.api.errors import NotFoundError
+from app.schemas import Job, JobInboxItem
 
 router = APIRouter(tags=["jobs"])
 

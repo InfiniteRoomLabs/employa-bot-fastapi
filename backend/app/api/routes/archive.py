@@ -1,6 +1,6 @@
 """Archive resource (ORI-009) -- outcome-bucketed closed applications.
 
-Follows the SCAFFOLD PATTERN in ``routes/searches.py``. Two read-only ops
+Follows the MOCK ROUTE PATTERN in ``routes/searches.py``. Two read-only ops
 tagged ``archive`` per ``mvp-api.yaml``. The ``kind`` -> outcome mapping mirrors
 the mock exactly: ``won`` -> outcome WON; ``passed`` -> outcome in
 (REJECTED, WITHDRAWN).
@@ -10,8 +10,8 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Query
 
-from app.scaffold import store
-from app.scaffold.models import ApplicationView, Outcome
+from app import store
+from app.schemas import ApplicationView, Outcome
 
 router = APIRouter(tags=["archive"])
 

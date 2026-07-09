@@ -1,10 +1,10 @@
 """Resumes resource -- CRUD + lifecycle actions (RES-019 / CUR-020).
 
-Follows the SCAFFOLD PATTERN in ``routes/searches.py`` (read that file's
+Follows the MOCK ROUTE PATTERN in ``routes/searches.py`` (read that file's
 header first). One local deviation worth flagging: ``mvp-api.yaml`` inlines
 the ``patchResume`` and ``forkResumeAsDraft`` request bodies as anonymous
 objects (no ``$ref``), so ``datamodel-codegen`` never emitted models for them
-in ``app.scaffold.models``. ``PatchResumeBody`` / ``ForkResumeInput`` below
+in ``app.schemas``. ``PatchResumeBody`` / ``ForkResumeInput`` below
 are small hand-authored request models for those two bodies only -- every
 response still uses the generated ``Resume`` model.
 """
@@ -16,9 +16,9 @@ from uuid import UUID, uuid4
 from fastapi import APIRouter
 from pydantic import BaseModel
 
-from app.scaffold import store
-from app.scaffold.errors import ConflictError, NotFoundError
-from app.scaffold.models import Resume, ResumeTag
+from app import store
+from app.api.errors import ConflictError, NotFoundError
+from app.schemas import Resume, ResumeTag
 
 router = APIRouter(tags=["resumes"])
 

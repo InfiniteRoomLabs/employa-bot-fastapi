@@ -13,7 +13,7 @@ import uuid
 
 from fastapi.testclient import TestClient
 
-from app.scaffold import store
+from app import store
 
 UNKNOWN_ID = "00000000-0000-4000-8000-000000000000"
 

@@ -1,9 +1,9 @@
-"""In-memory data store for the scaffold backend.
+"""In-memory data store for the mock API backend.
 
 This is the server-side port of the mockup's mock data layer
 (``../employa-bot-front-end/src/data/fixtures.ts``). It holds one module-level
 dict per resource, keyed by the resource's UUID, seeded from the ported
-fixtures. There is NO database: the scaffold exists so the mockup UI can run
+fixtures. There is NO database: the mock backend exists so the mockup UI can run
 against real FastAPI routes while the real persistence layer is written later.
 
 Conventions for phase-2 agents adding resources:
@@ -30,7 +30,7 @@ from uuid import NAMESPACE_URL, UUID, uuid5
 
 from pydantic import AnyUrl
 
-from app.scaffold.models import (
+from app.schemas import (
     Accomplishment,
     Actor,
     Agent,
@@ -1619,7 +1619,7 @@ credentials: dict[UUID, Credential] = _seed_credentials()
 
 # ---------------------------------------------------------------------------
 # reset -- restore every store to pristine fixture state. Called by the
-# scaffold test conftest between tests; phase-2 agents extend this.
+# contract-test conftest between tests.
 # ---------------------------------------------------------------------------
 
 

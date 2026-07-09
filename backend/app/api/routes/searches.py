@@ -1,4 +1,4 @@
-"""Searches resource -- the SCAFFOLD PATTERN exemplar.
+"""Searches resource -- the MOCK ROUTE PATTERN exemplar.
 
 ======================================================================
 PATTERN RULES (phase-2 agents: copy this file, keep every rule)
@@ -7,7 +7,7 @@ PATTERN RULES (phase-2 agents: copy this file, keep every rule)
 1. ROUTER
    * One ``APIRouter`` per resource, ``tags=[<contract tag>]``.
    * The tag MUST match the resource's ``tags:`` in mvp-api.yaml.
-   * Register the router in ``app/scaffold/router.py``.
+   * Register the router in ``app/api/main.py``.
 
 2. operationId  (NON-NEGOTIABLE)
    * Every route sets ``operation_id="<exactContractId>"`` EXPLICITLY,
@@ -16,19 +16,19 @@ PATTERN RULES (phase-2 agents: copy this file, keep every rule)
 
 3. response_model + status_code
    * Set ``response_model=`` to the generated model from
-     ``app.scaffold.models`` (or ``list[Model]`` for collections).
+     ``app.schemas`` (or ``list[Model]`` for collections).
    * POST creators set ``status_code=201`` to match the contract.
-   * NO auth dependencies on scaffold routes -- mock parity, the mock
+   * NO auth dependencies on mock-API routes -- mock parity, the mock
      api.ts is unauthenticated.
 
 4. STORE ACCESS
-   * Read/write ``app.scaffold.store`` module dicts directly
+   * Read/write ``app.store`` module dicts directly
      (``store.searches``). Never hold a copy across a request.
    * Path ids arrive as ``uuid.UUID`` (declare the param as ``UUID``);
      the store is keyed by ``UUID``.
 
 5. ERROR RAISING
-   * Raise the typed domain errors from ``app.scaffold.errors``
+   * Raise the typed domain errors from ``app.api.errors``
      (``NotFoundError`` etc.) -- NEVER ``HTTPException``. The registered
      handlers turn them into the ``{kind, path, message}`` envelope with
      the correct status. Unknown id on an id-addressed route -> 404.
@@ -51,9 +51,9 @@ from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Body
 
-from app.scaffold import store
-from app.scaffold.errors import NotFoundError
-from app.scaffold.models import CreateSearchInput, Search, SearchCriteria, State
+from app import store
+from app.api.errors import NotFoundError
+from app.schemas import CreateSearchInput, Search, SearchCriteria, State
 
 router = APIRouter(tags=["searches"])
 
