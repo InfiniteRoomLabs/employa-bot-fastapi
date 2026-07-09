@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Seeded job fixture URLs in the scaffold store now construct `AnyUrl` explicitly instead of passing raw strings past a type-ignore.
 - `[tool.ty.environment] python = "../.venv"` in `backend/pyproject.toml`: ty roots at the backend pyproject and only auto-discovers a venv there, but the uv workspace keeps the shared `.venv` at the repo root — so ty run outside `uv run` (e.g. the PyCharm plugin) fell back to system site-packages and flagged every third-party import as unresolved.
 
 ### Added

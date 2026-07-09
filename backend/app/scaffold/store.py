@@ -1767,7 +1767,7 @@ def _seed_jobs() -> dict[UUID, Job]:
             source=JobSource(
                 board="greenhouse",
                 channel=JobCaptureMethod.url,
-                url="https://boards.greenhouse.io/stripe/jobs/staff-payments-core",  # type: ignore[arg-type]
+                url=AnyUrl("https://boards.greenhouse.io/stripe/jobs/staff-payments-core"),  # type: ignore[arg-type]
                 capturedAt=iso_ago(days=2),
             ),
             isNew=True,
@@ -1829,7 +1829,7 @@ def _seed_jobs() -> dict[UUID, Job]:
             source=JobSource(
                 board="ashby",
                 channel=JobCaptureMethod.extension,
-                url="https://linear.app/jobs/senior-staff-engineer-platform",  # type: ignore[arg-type]
+                url=AnyUrl("https://linear.app/jobs/senior-staff-engineer-platform"),  # type: ignore[arg-type]
                 capturedAt=iso_ago(days=1),
             ),
             isNew=True,
@@ -1896,7 +1896,7 @@ def _seed_jobs() -> dict[UUID, Job]:
             source=JobSource(
                 board="lever",
                 channel=JobCaptureMethod.email_forward,
-                url="https://sentry.io/careers/staff-engineer-ingest",  # type: ignore[arg-type]
+                url=AnyUrl("https://sentry.io/careers/staff-engineer-ingest"),  # type: ignore[arg-type]
                 capturedAt=iso_ago(days=3),
             ),
             posted=iso_ago(days=3),
@@ -2065,7 +2065,7 @@ def _seed_jobs_inbox() -> list[JobInboxItem]:
             posted=iso_ago(days=2),
             capturedVia=JobCaptureMethod.url,
             capturedAt=iso_ago(days=2),
-            sourceUrl="https://boards.greenhouse.io/stripe/jobs/staff-payments-core",  # type: ignore[arg-type]
+            sourceUrl=AnyUrl("https://boards.greenhouse.io/stripe/jobs/staff-payments-core"),  # type: ignore[arg-type]
             workMode=JobWorkMode.remote,
             employmentType="Full-time",
             seniority="Staff",
@@ -2123,7 +2123,7 @@ def _seed_jobs_inbox() -> list[JobInboxItem]:
             posted=iso_ago(days=1),
             capturedVia=JobCaptureMethod.extension,
             capturedAt=iso_ago(days=1),
-            sourceUrl="https://linear.app/jobs/senior-staff-engineer-platform",  # type: ignore[arg-type]
+            sourceUrl=AnyUrl("https://linear.app/jobs/senior-staff-engineer-platform"),  # type: ignore[arg-type]
             workMode=JobWorkMode.remote,
             employmentType="Full-time",
             seniority="Senior Staff",
@@ -2185,7 +2185,7 @@ def _seed_jobs_inbox() -> list[JobInboxItem]:
             posted=iso_ago(days=3),
             capturedVia=JobCaptureMethod.email_forward,
             capturedAt=iso_ago(days=3),
-            sourceUrl="https://sentry.io/careers/staff-engineer-ingest",  # type: ignore[arg-type]
+            sourceUrl=AnyUrl("https://sentry.io/careers/staff-engineer-ingest"),  # type: ignore[arg-type]
             workMode=JobWorkMode.remote,
             employmentType="Full-time",
             seniority="Staff",
