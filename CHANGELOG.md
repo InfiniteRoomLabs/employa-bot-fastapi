@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- The generated OpenAPI client is retargeted at our own API: `scripts/generate-client.sh` + `openapi-ts` regenerate `frontend/src/client/` from the live backend OpenAPI (89 contract ops + auth/user/utils services) instead of the template's items/users surface. The `generate-frontend-sdk` pre-commit hook and the playwright-workflow generate step are restored to keep it synced. Migrating `src/data/api.ts` onto the generated client is follow-up work.
 - The `app/scaffold/` namespace is dissolved into the normal backend layout: wire models at `app/schemas.py`, the in-memory store at `app/store.py`, the error envelope at `app/api/errors.py` (`ApiError`, `register_error_handlers`), one router per resource under `app/api/routes/` (`periphery.py` split into `notifications.py`, `settings.py`, `account.py`), aggregation inlined into `app/api/main.py`, and contract tests at `tests/contract/` (the empty `NOT_YET_SCAFFOLDED` ledger deleted, drift test now asserts the app serves all 89 contract ops). Mock-API docs moved from `app/scaffold/README.md` into `backend/README.md`.
 - Alembic history squashed to a single `initial schema` migration (`3bae06a61157`) creating the `user` table with all profile fields. **Existing dev databases must be recreated** (`docker compose down -v && docker compose up -d --build`).
 
@@ -25,7 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 
 - Root/CI template residue: Copier machinery (`.copier/`, `copier.yml`, `hooks/`), template README screenshots (`img/`), upstream `release-notes.md` + its release-date pre-commit hook and script, `deployment.md`, `compose.traefik.yml`, `.vscode/`, and 10 inert GitHub workflows (deploys needing self-hosted runners, fastapi-org bots, labeler, smokeshow, detect-conflicts, guard-dependencies, pre-commit). Kept: test-backend, test-docker-compose, playwright (generate-client step dropped, single shard), zizmor, dependabot. Root `package.json` renamed to `employa-bot`; smokeshow dependency group and stale typos excludes dropped; biome pre-commit hook now invokes `bun run lint` (repo has no npm).
-- Frontend template leftovers: the generated OpenAPI client (`src/client/`, `openapi-ts.config.ts`, `scripts/generate-client.sh`, the `generate-client` script) which had zero importers in the app, the template Playwright suite (`frontend/tests/` -- old-UI selectors), unused deps (`@hey-api/openapi-ts`, `@tanstack/react-query`, `axios`, `form-data`, `dotenv`), template svg assets, `MAILCATCHER_HOST` from `frontend/.env`, and stale biome ignores.
+- Frontend template leftovers: the template Playwright suite (`frontend/tests/` -- old-UI selectors), unused deps (`@tanstack/react-query`, `form-data`, `dotenv`), and template svg assets.
 - Template demo resource `Item`: routes (`/items`, `/private`), models, `crud.create_item`, the `User.items` relationship, and their tests. Template error-path tests now assert on the contract error envelope's `message` field (the app-wide handlers rewrite 404/409 bodies).
 
 ### Added
