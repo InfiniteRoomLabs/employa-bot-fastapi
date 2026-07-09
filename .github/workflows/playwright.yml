@@ -45,8 +45,10 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        shardIndex: [1, 2, 3, 4]
-        shardTotal: [4]
+        # Single shard: the suite is the 35-route smoke spec. Grow the
+        # matrix again when the e2e suite warrants it.
+        shardIndex: [1]
+        shardTotal: [1]
       fail-fast: false
     steps:
     - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -73,7 +75,6 @@ jobs:
       working-directory: backend
     - run: bun ci
       working-directory: frontend
-    - run: bash scripts/generate-client.sh
     - run: docker compose build
     - run: docker compose down -v --remove-orphans
     - name: Run Playwright tests

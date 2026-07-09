@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+- Root/CI template residue: Copier machinery (`.copier/`, `copier.yml`, `hooks/`), template README screenshots (`img/`), upstream `release-notes.md` + its release-date pre-commit hook and script, `deployment.md`, `compose.traefik.yml`, `.vscode/`, and 10 inert GitHub workflows (deploys needing self-hosted runners, fastapi-org bots, labeler, smokeshow, detect-conflicts, guard-dependencies, pre-commit). Kept: test-backend, test-docker-compose, playwright (generate-client step dropped, single shard), zizmor, dependabot. Root `package.json` renamed to `employa-bot`; smokeshow dependency group and stale typos excludes dropped; biome pre-commit hook now invokes `bun run lint` (repo has no npm).
 - Frontend template leftovers: the generated OpenAPI client (`src/client/`, `openapi-ts.config.ts`, `scripts/generate-client.sh`, the `generate-client` script) which had zero importers in the app, the template Playwright suite (`frontend/tests/` -- old-UI selectors), unused deps (`@hey-api/openapi-ts`, `@tanstack/react-query`, `axios`, `form-data`, `dotenv`), template svg assets, `MAILCATCHER_HOST` from `frontend/.env`, and stale biome ignores.
 - Template demo resource `Item`: routes (`/items`, `/private`), models, `crud.create_item`, the `User.items` relationship, and their tests. Template error-path tests now assert on the contract error envelope's `message` field (the app-wide handlers rewrite 404/409 bodies).
 

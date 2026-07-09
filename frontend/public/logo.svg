@@ -1,13 +1,13 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 48" width="160" height="48" role="img" aria-label="Employa-Bot">
-  
-  
+
+
   <g transform="translate(4 6)">
     <rect x="0" y="0" width="36" height="36" rx="9" fill="#13161B"></rect>
-    
+
     <path d="M10 22 h14 a2 2 0 0 0 2 -2 v-2 a7 7 0 1 0 -2.2 5.1" fill="none" stroke="#FAFAF8" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"></path>
-    
+
     <rect class="d" x="28" y="9" width="3" height="12" rx="1"></rect>
   </g>
-  
+
   <text class="w" x="50" y="31">employa<tspan fill="#626974">-bot</tspan></text>
 </svg>
