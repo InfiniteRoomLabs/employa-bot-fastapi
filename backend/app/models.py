@@ -2,7 +2,8 @@ import uuid
 from datetime import UTC, datetime
 
 from pydantic import EmailStr
-from sqlalchemy import DateTime
+from sqlalchemy import DateTime, String
+from sqlalchemy.dialects.postgresql import ARRAY
 from sqlmodel import Field, Relationship, SQLModel
 
 
@@ -16,6 +17,14 @@ class UserBase(SQLModel):
     is_active: bool = True
     is_superuser: bool = False
     full_name: str | None = Field(default=None, max_length=255)
+    initials: str | None = Field(default=None, max_length=8)
+    city: str | None = Field(default=None, max_length=255)
+    current: str | None = Field(default=None, max_length=255)
+    years: float | None = Field(default=None)
+    comp_floor: float | None = Field(default=None)
+    target_titles: list[str] = Field(
+        default_factory=list, sa_type=ARRAY(String)  # type: ignore
+    )
 
 
 # Properties to receive via API on creation

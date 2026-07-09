@@ -26,11 +26,13 @@ import {
   XCircleIcon,
 } from "lucide-react"
 import * as React from "react"
+import { useState } from "react"
 import { useLocation, useNavigate } from "react-router-dom"
-
 import { Button } from "@/components/ui/button-eb"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
+import { login } from "@/data/api.ts"
+import { MockApiError } from "@/lib/mock-api-error"
 import { pathFor } from "@/routes"
 
 type Mode =
@@ -233,12 +235,44 @@ function AuthLogin({
   onSignup: () => void
 }) {
   const navigate = useNavigate()
+  const [email, setEmail] = useState("")
+  const [password, setPassword] = useState("")
+  const [error, setError] = useState("")
+  const [isSubmitting, setIsSubmitting] = useState(false)
+
+  const handleLogin = async () => {
+    setError("")
+    setIsSubmitting(true)
+    try {
+      await login(email, password)
+      navigate(pathFor("dashboard"))
+    } catch (err) {
+      setError(
+        err instanceof MockApiError && err.kind === "network"
+          ? "Can't reach the server. Check your connection and try again."
+          : "Incorrect email or password.",
+      )
+      setIsSubmitting(false)
+    }
+  }
+
   return (
     <AuthCard>
       <h2 className="m-0 mb-5 display text-[28px] font-normal">Welcome back</h2>
-      {/* Social sign-in deferred (see AuthSignup note). Email + password only for now. */}
+      {error ? (
+        <div
+          role="alert"
+          className="mb-3.5 text-[12.5px] text-[var(--danger-text)]"
+        >
+          {error}
+        </div>
+      ) : null}
       <Field label="Email">
-        <Input type="email" defaultValue="wes.gilleland@gmail.com" />
+        <Input
+          type="email"
+          value={email}
+          onChange={(event) => setEmail(event.target.value)}
+        />
       </Field>
       <div className="mb-3.5">
         <div className="mb-1 flex items-baseline justify-between">
@@ -253,7 +287,11 @@ function AuthLogin({
             Forgot?
           </button>
         </div>
-        <Input type="password" defaultValue="..........." />
+        <Input
+          type="password"
+          value={password}
+          onChange={(event) => setPassword(event.target.value)}
+        />
       </div>
       <label className="mb-3.5 flex items-center gap-2 text-[13px]">
         <Checkbox defaultChecked />
@@ -262,9 +300,16 @@ function AuthLogin({
       <Button
         variant="default"
         className="w-full"
-        onClick={() => navigate(pathFor("dashboard"))}
+        disabled={isSubmitting}
+        onClick={handleLogin}
       >
-        Log in <ArrowRightIcon className="size-4" />
+        {isSubmitting ? (
+          "Logging in..."
+        ) : (
+          <>
+            Log in <ArrowRightIcon className="size-4" />
+          </>
+        )}
       </Button>
       <div className="mt-3.5 text-center text-[13px] text-[var(--fg-muted)]">
         New here?{" "}
@@ -274,11 +319,6 @@ function AuthLogin({
           onClick={onSignup}
         >
           Make an account
-        </button>
-      </div>
-      <div className="mt-2 text-center text-[11.5px] text-[var(--fg-subtle)]">
-        <button type="button" className="underline" onClick={() => go("2fa")}>
-          (demo) 2FA challenge
         </button>
       </div>
     </AuthCard>

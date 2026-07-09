@@ -27,6 +27,7 @@ import { BudgetBar } from "@/components/atoms/budget-bar"
 import { UserMenuPopover } from "@/components/domain/user-menu-popover"
 import { Avatar } from "@/components/ui/avatar-eb"
 import { toast } from "@/components/ui/toast"
+import { clearToken } from "@/data/api"
 import {
   SEARCH_ID_AI_INFRA,
   SEARCH_ID_BACKEND,
@@ -123,12 +124,10 @@ const Sidebar = React.forwardRef<HTMLElement, SidebarProps>(function Sidebar(
   // ORI-009: live archive badge counts -- sidebar badges match rendered row counts.
   const { data: archiveCounts } = useArchiveCounts()
 
-  // ORI-010: sign-out handler fires a demo toast then navigates to /login.
+  // ORI-010: sign-out handler clears the stored token then navigates to /login.
   const handleSignOut = React.useCallback(() => {
-    toast.success({
-      title: "Signed out",
-      sub: "Demo only - no real session teardown",
-    })
+    clearToken()
+    toast.success({ title: "Signed out" })
     setTimeout(() => {
       navigate(pathFor("login"))
     }, 400)

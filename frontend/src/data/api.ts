@@ -119,16 +119,26 @@ import {
 const API_ROOT = (import.meta.env.VITE_API_URL as string | undefined) ?? ""
 const API_BASE = `${API_ROOT}/api/v1`
 
+const TOKEN_KEY = "access_token"
+export const getToken = () => localStorage.getItem(TOKEN_KEY)
+export const setToken = (t: string) => localStorage.setItem(TOKEN_KEY, t)
+export const clearToken = () => localStorage.removeItem(TOKEN_KEY)
+
 /** Server-side CORS (BACKEND_CORS_ORIGINS) allows the dev origins; no proxy. */
 async function call<T>(path: string, init?: RequestInit): Promise<T> {
   let res: Response
+  const access_token: string | null = getToken()
   try {
     const hasBody = init?.body !== undefined && init?.body !== null
+    const hasContentType = new Headers(init?.headers).has("Content-Type")
     res = await fetch(`${API_BASE}${path}`, {
       ...init,
       headers: {
         Accept: "application/json",
-        ...(hasBody ? { "Content-Type": "application/json" } : {}),
+        ...(hasBody && !hasContentType
+          ? { "Content-Type": "application/json" }
+          : {}),
+        ...(access_token ? { Authorization: `Bearer ${access_token}` } : {}),
         ...init?.headers,
       },
     })
@@ -140,11 +150,34 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
     return undefined as T
   }
   if (!res.ok) {
-    let body: { kind?: string; path?: string; message?: string } | null = null
+    let body: {
+      kind?: string
+      path?: string
+      message?: string
+      detail?: string
+    } | null = null
     try {
-      body = (await res.json()) as { kind?: string; message?: string }
+      body = (await res.json()) as {
+        kind?: string
+        message?: string
+        detail?: string
+      }
     } catch {
       body = null
+    }
+    // 401: no token sent at all (FastAPI's OAuth2PasswordBearer default).
+    // 403 + this exact detail: token present but invalid/expired
+    // (app.api.deps.get_current_user). Other 403s (e.g. "not enough
+    // privileges") mean the user IS authenticated, just not authorized --
+    // those must NOT clear the token or redirect.
+    const isAuthFailure =
+      res.status === 401 ||
+      (res.status === 403 && body?.detail === "Could not validate credentials")
+    if (isAuthFailure) {
+      clearToken()
+      if (window.location.pathname !== "/login") {
+        window.location.href = "/login"
+      }
     }
     throw httpErrorToMockApiError(res.status, path, body)
   }
@@ -162,6 +195,18 @@ function post<T>(path: string, body?: unknown): Promise<T> {
   return call<T>(path, {
     method: "POST",
     body: body === undefined ? undefined : JSON.stringify(body),
+  })
+}
+function formPost<T>(path: string, body?: unknown): Promise<T> {
+  return call<T>(path, {
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    method: "POST",
+    body:
+      body === undefined
+        ? undefined
+        : new URLSearchParams(body as Record<string, string>).toString(),
   })
 }
 function patch<T>(path: string, body?: unknown): Promise<T> {
@@ -386,8 +431,52 @@ async function resolveResumeId(nameOrId: string | number): Promise<string> {
 // User / persona
 // ===========================================================================
 
-export function getCurrentUser(): Promise<User> {
-  return get<User>("/user")
+interface RealUserPublic {
+  email: string
+  full_name: string | null
+  initials: string | null
+  city: string | null
+  current: string | null
+  years: number | null
+  comp_floor: number | null
+  target_titles: string[]
+}
+
+function initialsFrom(name: string): string {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("")
+}
+
+export async function getCurrentUser(): Promise<User> {
+  const u = await get<RealUserPublic>("/users/me")
+  const name = u.full_name ?? u.email
+  return {
+    name,
+    email: u.email,
+    initials: u.initials ?? initialsFrom(name),
+    city: u.city ?? "",
+    current: u.current ?? "",
+    years: u.years ?? 0,
+    comp_floor: u.comp_floor ?? 0,
+    target_titles: u.target_titles ?? [],
+  }
+}
+
+interface AccessTokenResponse {
+  access_token: string
+  token_type: string
+}
+
+export async function login(username: string, password: string): Promise<void> {
+  const { access_token } = await formPost<AccessTokenResponse>(
+    "/login/access-token",
+    { username, password },
+  )
+  setToken(access_token)
 }
 
 // ===========================================================================
