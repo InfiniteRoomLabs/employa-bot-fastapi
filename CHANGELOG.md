@@ -17,8 +17,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The `app/scaffold/` namespace is dissolved into the normal backend layout: wire models at `app/schemas.py`, the in-memory store at `app/store.py`, the error envelope at `app/api/errors.py` (`ApiError`, `register_error_handlers`), one router per resource under `app/api/routes/` (`periphery.py` split into `notifications.py`, `settings.py`, `account.py`), aggregation inlined into `app/api/main.py`, and contract tests at `tests/contract/` (the empty `NOT_YET_SCAFFOLDED` ledger deleted, drift test now asserts the app serves all 89 contract ops). Mock-API docs moved from `app/scaffold/README.md` into `backend/README.md`.
 - Alembic history squashed to a single `initial schema` migration (`3bae06a61157`) creating the `user` table with all profile fields. **Existing dev databases must be recreated** (`docker compose down -v && docker compose up -d --build`).
 
+### Fixed
+
+- Match-explorer's hardcoded fallback ids were pre-adapter legacy slugs (`distributed-systems`, `stripe-staff-engineer`) that 422 against the live backend's UUID-typed paths; they now use the `RESUME_ID_DISTRIBUTED` / `JOB_ID_STRIPE` fixture constants.
+- The Playwright smoke suite (`frontend/e2e/smoke.spec.ts`) was dormant (the config's `testDir` pointed at the deleted template `tests/`) and had drifted: it now authenticates as `FIRST_SUPERUSER` before each route (real auth redirects unauthenticated visitors to `/login`), resolves application/agent ids from the live API instead of legacy slugs, and is wired up via `testDir: './e2e'`. All 35 routes pass.
+
 ### Removed
 
+- Frontend template leftovers: the generated OpenAPI client (`src/client/`, `openapi-ts.config.ts`, `scripts/generate-client.sh`, the `generate-client` script) which had zero importers in the app, the template Playwright suite (`frontend/tests/` -- old-UI selectors), unused deps (`@hey-api/openapi-ts`, `@tanstack/react-query`, `axios`, `form-data`, `dotenv`), template svg assets, `MAILCATCHER_HOST` from `frontend/.env`, and stale biome ignores.
 - Template demo resource `Item`: routes (`/items`, `/private`), models, `crud.create_item`, the `User.items` relationship, and their tests. Template error-path tests now assert on the contract error envelope's `message` field (the app-wide handlers rewrite 404/409 bodies).
 
 ### Added

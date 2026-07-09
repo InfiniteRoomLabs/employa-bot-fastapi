@@ -115,7 +115,7 @@ export default mergeConfig(
               "test-results",
               // RETIRED post seam-swap (2026-07-04): these 41 files asserted
               // on the mock data layer THROUGH api.ts, which is now a real
-              // HTTP adapter against the scaffold backend -- in jsdom there
+              // HTTP adapter against the mock API backend -- in jsdom there
               // is no backend, so they can only fail. Wire-level coverage
               // lives in src/data/adapter.integration.test.ts (gated by
               // RUN_ADAPTER_IT=1 with the backend running). Revisit when the

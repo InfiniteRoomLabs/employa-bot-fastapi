@@ -25,6 +25,7 @@ import { Badge } from "@/components/ui/badge-eb"
 import { Button } from "@/components/ui/button-eb"
 import { Skeleton } from "@/components/ui/skeleton"
 import { toast } from "@/components/ui/toast"
+import { JOB_ID_STRIPE, RESUME_ID_DISTRIBUTED } from "@/data/fixtures"
 import type { CostPreview } from "@/data/types"
 import { useDeepMatchScore, useMatchReport, useResumeMutations } from "@/hooks"
 
@@ -34,8 +35,8 @@ export default function MatchExplorerScreen() {
 
   // Forward-compatible: read resumeId/jobId from search params with hardcoded fallbacks.
   // This preserves backward compatibility while allowing CUR-007 parameterization later.
-  const resumeId = searchParams.get("resumeId") ?? "distributed-systems"
-  const jobId = searchParams.get("jobId") ?? "stripe-staff-engineer"
+  const resumeId = searchParams.get("resumeId") ?? RESUME_ID_DISTRIBUTED
+  const jobId = searchParams.get("jobId") ?? JOB_ID_STRIPE
 
   const { data, isLoading, error, refetch } = useMatchReport({
     resumeId,

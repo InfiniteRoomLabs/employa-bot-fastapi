@@ -1,5 +1,5 @@
 /**
- * Wire <-> app transform layer for the scaffold-backend HTTP adapter.
+ * Wire <-> app transform layer for the mock-API HTTP adapter.
  *
  * `src/data/api.ts` now speaks HTTP against the frozen `mvp-api.yaml` contract
  * (camelCase wire fields, ISO-8601 timestamps, USD numbers, the 12-value stage

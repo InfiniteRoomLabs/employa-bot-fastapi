@@ -1,5 +1,5 @@
 /**
- * Data seam -- HTTP adapter against the scaffold FastAPI backend.
+ * Data seam -- HTTP adapter against the mock-API FastAPI backend.
  *
  * Consumers MUST go through `src/hooks/`. This file is the swap-seam: every
  * exported function keeps its old signature (hooks/screens/tests are unchanged)
@@ -114,8 +114,8 @@ import {
 // HTTP core
 // ===========================================================================
 
-// Base URL follows the template convention: the generated OpenAPI client keys
-// off `VITE_API_URL` (fed by compose/.env). Empty string => same-origin.
+// Base URL comes from `VITE_API_URL` (fed by compose/.env). Empty string =>
+// same-origin.
 const API_ROOT = (import.meta.env.VITE_API_URL as string | undefined) ?? ""
 const API_BASE = `${API_ROOT}/api/v1`
 
@@ -1634,8 +1634,8 @@ export async function regenerateExport(
 /**
  * No-op in the HTTP adapter -- the mutable stores now live server-side. Kept as
  * an export so test call sites don't break; tests that need a pristine backend
- * reset it out-of-band (or run against a fresh scaffold process).
+ * reset it out-of-band (or run against a fresh backend process).
  */
 export function __resetForTests(): void {
-  // Intentionally empty: state is owned by the scaffold backend.
+  // Intentionally empty: state is owned by the mock API backend.
 }

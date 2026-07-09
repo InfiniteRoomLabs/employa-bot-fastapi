@@ -1,6 +1,6 @@
 /**
  * Adapter integration test -- runs the REAL HTTP adapter against the running
- * scaffold backend. Gated: only executes when RUN_ADAPTER_IT=1 and the
+ * mock API backend. Gated: only executes when RUN_ADAPTER_IT=1 and the
  * backend is up on :8000 (from backend/: `uv run uvicorn app.main:app --port 8000`).
  *
  *   RUN_ADAPTER_IT=1 bun run test src/data/adapter.integration.test.ts
@@ -21,7 +21,7 @@ const SEARCH_ID_AI_INFRA = "ad9e6c14-5b80-4f17-a3d2-7e6f9c1b0a55"
 
 type Api = typeof import("./api")
 
-describe.skipIf(!RUN)("HTTP adapter against live scaffold backend", () => {
+describe.skipIf(!RUN)("HTTP adapter against live mock API backend", () => {
   let api: Api
 
   beforeAll(async () => {
