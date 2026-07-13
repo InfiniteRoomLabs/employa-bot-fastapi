@@ -3,263 +3,256 @@
 import type { CancelablePromise } from './core/CancelablePromise';
 import { OpenAPI } from './core/OpenAPI';
 import { request as __request } from './core/request';
-import type { RequestDataExportResponse, DeleteAccountResponse, GetAgentsResponse, GetAgentLogData, GetAgentLogResponse, GetReviewQueueResponse, GetAgentData, GetAgentResponse, PatchAgentData, PatchAgentResponse, GetAgentPermissionsData, GetAgentPermissionsResponse, GetAgentTrustTierData, GetAgentTrustTierResponse, PatchAgentTrustTierData, PatchAgentTrustTierResponse, ApproveAgentActionData, ApproveAgentActionResponse, RejectAgentActionData, RejectAgentActionResponse, GetApplicationsData, GetApplicationsResponse, CreateApplicationData, CreateApplicationResponse, GetApplicationData, GetApplicationResponse, TransitionApplicationData, TransitionApplicationResponse, GetResumeSnapshotData, GetResumeSnapshotResponse, MarkWonData, MarkWonResponse, UndoMarkWonData, UndoMarkWonResponse, ReactivateApplicationData, ReactivateApplicationResponse, DismissApplicationData, DismissApplicationResponse, GetApplicationTimelineData, GetApplicationTimelineResponse, GetArchiveData, GetArchiveResponse, GetArchiveCountsResponse, GetCoachThreadsResponse, GetCoachThreadData, GetCoachThreadResponse, ProposeCoachEditData, ProposeCoachEditResponse, SaveCoachProposalData, SaveCoachProposalResponse, GetInterviewRoundsData, GetInterviewRoundsResponse, PatchInterviewRoundData, PatchInterviewRoundResponse, GetJobsResponse, GetJobsInboxData, GetJobsInboxResponse, GetJobData, GetJobResponse, GetContactsResponse, CreateContactData, CreateContactResponse, GetContactData, GetContactResponse, UpdateContactData, UpdateContactResponse, DeleteContactData, DeleteContactResponse, GetAccomplishmentsResponse, CreateAccomplishmentData, CreateAccomplishmentResponse, UpdateAccomplishmentData, UpdateAccomplishmentResponse, DeleteAccomplishmentData, DeleteAccomplishmentResponse, DeriveAccomplishmentFromProjectData, DeriveAccomplishmentFromProjectResponse, GetAnswersResponse, CreateAnswerData, CreateAnswerResponse, UpdateAnswerData, UpdateAnswerResponse, DeleteAnswerData, DeleteAnswerResponse, GetProjectsResponse, CreateProjectData, CreateProjectResponse, UpdateProjectData, UpdateProjectResponse, DeleteProjectData, DeleteProjectResponse, GetCredentialsResponse, GetTrashResponse, RestoreLibraryItemData, RestoreLibraryItemResponse, PurgeLibraryItemData, PurgeLibraryItemResponse, GetDeletionImpactData, GetDeletionImpactResponse, LoginLoginAccessTokenData, LoginLoginAccessTokenResponse, LoginTestTokenResponse, LoginRecoverPasswordData, LoginRecoverPasswordResponse, LoginResetPasswordData, LoginResetPasswordResponse, LoginRecoverPasswordHtmlContentData, LoginRecoverPasswordHtmlContentResponse, PreviewDeepMatchScoreData, PreviewDeepMatchScoreResponse, RunDeepMatchScoreData, RunDeepMatchScoreResponse, GetMatchReportData, GetMatchReportResponse, GetNotificationsResponse, MarkNotificationReadData, MarkNotificationReadResponse, MarkAllNotificationsReadResponse, GetResumeUploadsResponse, GetCareerHistoryResponse, GetResumeTemplatesResponse, GetResumeExportsResponse, GetProjectionsResponse, CreateProjectionData, CreateProjectionResponse, AssignTemplateData, AssignTemplateResponse, RenderExportData, RenderExportResponse, RegenerateExportData, RegenerateExportResponse, GetResumesResponse, CreateResumeResponse, GetResumeData, GetResumeResponse, PatchResumeData, PatchResumeResponse, DeleteResumeData, DeleteResumeResponse, DuplicateResumeData, DuplicateResumeResponse, SetDefaultResumeData, SetDefaultResumeResponse, ForkResumeAsDraftData, ForkResumeAsDraftResponse, GetSearchesResponse, CreateSearchData, CreateSearchResponse, GetSearchData, GetSearchResponse, UpdateSearchCriteriaData, UpdateSearchCriteriaResponse, GetSettingsResponse, GetUsageAggregateResponse, GetShortlistData, GetShortlistResponse, AddToShortlistData, AddToShortlistResponse, DismissFromShortlistData, DismissFromShortlistResponse, GetCurrentUserResponse, UsersReadUsersData, UsersReadUsersResponse, UsersCreateUserData, UsersCreateUserResponse, UsersReadUserMeResponse, UsersDeleteUserMeResponse, UsersUpdateUserMeData, UsersUpdateUserMeResponse, UsersUpdatePasswordMeData, UsersUpdatePasswordMeResponse, UsersRegisterUserData, UsersRegisterUserResponse, UsersReadUserByIdData, UsersReadUserByIdResponse, UsersUpdateUserData, UsersUpdateUserResponse, UsersDeleteUserData, UsersDeleteUserResponse, UtilsTestEmailData, UtilsTestEmailResponse, UtilsHealthCheckResponse } from './types.gen';
+import type { RequestDataExportResponse, DeleteAccountResponse, GetAgentsResponse, GetAgentData, GetAgentResponse, PatchAgentData, PatchAgentResponse, GetAgentPermissionsData, GetAgentPermissionsResponse, GetAgentTrustTierData, GetAgentTrustTierResponse, PatchAgentTrustTierData, PatchAgentTrustTierResponse, GetAgentLogData, GetAgentLogResponse, GetReviewQueueResponse, ApproveAgentActionData, ApproveAgentActionResponse, RejectAgentActionData, RejectAgentActionResponse, GetApplicationsData, GetApplicationsResponse, CreateApplicationData, CreateApplicationResponse, GetApplicationData, GetApplicationResponse, TransitionApplicationData, TransitionApplicationResponse, GetResumeSnapshotData, GetResumeSnapshotResponse, MarkWonData, MarkWonResponse, UndoMarkWonData, UndoMarkWonResponse, ReactivateApplicationData, ReactivateApplicationResponse, DismissApplicationData, DismissApplicationResponse, GetApplicationTimelineData, GetApplicationTimelineResponse, GetArchiveData, GetArchiveResponse, GetArchiveCountsResponse, GetCoachThreadsResponse, GetCoachThreadData, GetCoachThreadResponse, ProposeCoachEditData, ProposeCoachEditResponse, SaveCoachProposalData, SaveCoachProposalResponse, GetInterviewRoundsData, GetInterviewRoundsResponse, PatchInterviewRoundData, PatchInterviewRoundResponse, GetJobsResponse, GetJobsInboxData, GetJobsInboxResponse, GetJobData, GetJobResponse, GetContactsResponse, CreateContactData, CreateContactResponse, GetContactData, GetContactResponse, UpdateContactData, UpdateContactResponse, DeleteContactData, DeleteContactResponse, GetAccomplishmentsResponse, CreateAccomplishmentData, CreateAccomplishmentResponse, UpdateAccomplishmentData, UpdateAccomplishmentResponse, DeleteAccomplishmentData, DeleteAccomplishmentResponse, DeriveAccomplishmentFromProjectData, DeriveAccomplishmentFromProjectResponse, GetAnswersResponse, CreateAnswerData, CreateAnswerResponse, UpdateAnswerData, UpdateAnswerResponse, DeleteAnswerData, DeleteAnswerResponse, GetProjectsResponse, CreateProjectData, CreateProjectResponse, UpdateProjectData, UpdateProjectResponse, DeleteProjectData, DeleteProjectResponse, GetCredentialsResponse, GetTrashResponse, RestoreLibraryItemData, RestoreLibraryItemResponse, PurgeLibraryItemData, PurgeLibraryItemResponse, GetDeletionImpactData, GetDeletionImpactResponse, PreviewDeepMatchScoreData, PreviewDeepMatchScoreResponse, RunDeepMatchScoreData, RunDeepMatchScoreResponse, GetMatchReportData, GetMatchReportResponse, GetNotificationsResponse, MarkNotificationReadData, MarkNotificationReadResponse, MarkAllNotificationsReadResponse, GetResumeUploadsResponse, GetCareerHistoryResponse, GetResumeTemplatesResponse, GetResumeExportsResponse, GetProjectionsResponse, CreateProjectionData, CreateProjectionResponse, AssignTemplateData, AssignTemplateResponse, RenderExportData, RenderExportResponse, RegenerateExportData, RegenerateExportResponse, GetResumesResponse, CreateResumeResponse, GetResumeData, GetResumeResponse, PatchResumeData, PatchResumeResponse, DeleteResumeData, DeleteResumeResponse, DuplicateResumeData, DuplicateResumeResponse, SetDefaultResumeData, SetDefaultResumeResponse, ForkResumeAsDraftData, ForkResumeAsDraftResponse, GetSearchesResponse, CreateSearchData, CreateSearchResponse, GetSearchData, GetSearchResponse, UpdateSearchCriteriaData, UpdateSearchCriteriaResponse, GetSettingsResponse, GetUsageAggregateResponse, GetShortlistData, GetShortlistResponse, AddToShortlistData, AddToShortlistResponse, DismissFromShortlistData, DismissFromShortlistResponse, GetCurrentUserResponse } from './types.gen';
 
 export class AccountService {
     /**
-     * Request Data Export
-     * Request a full account data export (requestDataExport, ACC-export).
-     *
-     * Fake signed URL, computed fresh on every call (mirrors mock api.ts's
-     * ``crypto.randomUUID()`` + ``new Date()`` -- no seeded store state).
-     * @returns DataExportRequest Successful Response
+     * Request a full account data export (ACC-export)
+     * @returns DataExportRequest Export created; returns a signed download URL.
      * @throws ApiError
      */
     public static requestDataExport(): CancelablePromise<RequestDataExportResponse> {
         return __request(OpenAPI, {
             method: 'POST',
-            url: '/api/v1/account/data-export'
+            url: '/account/data-export',
+            errors: {
+                default: 'Error envelope (`kind` -> HTTP status per info.description).'
+            }
         });
     }
     
     /**
-     * Delete Account
-     * Initiate account deletion with a 30-day grace period (deleteAccount, ACC-danger).
-     * @returns AccountDeletionResult Successful Response
+     * Initiate account deletion with a 30-day grace period (ACC-danger)
+     * @returns unknown Deletion scheduled.
      * @throws ApiError
      */
     public static deleteAccount(): CancelablePromise<DeleteAccountResponse> {
         return __request(OpenAPI, {
             method: 'POST',
-            url: '/api/v1/account/delete'
+            url: '/account/delete',
+            errors: {
+                default: 'Error envelope (`kind` -> HTTP status per info.description).'
+            }
         });
     }
 }
 
 export class AgentsService {
     /**
-     * Get Agents
-     * All agents (getAgents).
-     * @returns Agent Successful Response
+     * All agents
+     * @returns Agent OK
      * @throws ApiError
      */
     public static getAgents(): CancelablePromise<GetAgentsResponse> {
         return __request(OpenAPI, {
             method: 'GET',
-            url: '/api/v1/agents'
-        });
-    }
-    
-    /**
-     * Get Agent Log
-     * Agent activity log, optionally filtered by agentId and/or kind.
-     * @param data The data for the request.
-     * @param data.agentId
-     * @param data.kind
-     * @returns AgentLogEntry Successful Response
-     * @throws ApiError
-     */
-    public static getAgentLog(data: GetAgentLogData = {}): CancelablePromise<GetAgentLogResponse> {
-        return __request(OpenAPI, {
-            method: 'GET',
-            url: '/api/v1/agents/log',
-            query: {
-                agentId: data.agentId,
-                kind: data.kind
-            },
+            url: '/agents',
             errors: {
-                422: 'Validation Error'
+                default: 'Error envelope (`kind` -> HTTP status per info.description).'
             }
         });
     }
     
     /**
-     * Get Review Queue
-     * Agent actions awaiting human approval (AGT-021).
-     *
-     * # DEFERRED (DECISIONS-NEEDED #1): mock-parity stub, real semantics not
-     * frozen. Derived from ``agent_log`` entries where kind == "await", exactly
-     * mirroring the mock (there is no separate review-queue store).
-     * @returns ReviewQueueItem Successful Response
-     * @throws ApiError
-     */
-    public static getReviewQueue(): CancelablePromise<GetReviewQueueResponse> {
-        return __request(OpenAPI, {
-            method: 'GET',
-            url: '/api/v1/agents/review-queue'
-        });
-    }
-    
-    /**
-     * Get Agent
-     * One agent (getAgent). 404 envelope on unknown id.
+     * One agent
      * @param data The data for the request.
-     * @param data.id
-     * @returns Agent Successful Response
+     * @param data.id Resource UUID (RFC 4122). Resolved by UUID only -- the mock's legacy slug/name leniency is not part of the contract.
+     *
+     * @returns Agent OK
      * @throws ApiError
      */
     public static getAgent(data: GetAgentData): CancelablePromise<GetAgentResponse> {
         return __request(OpenAPI, {
             method: 'GET',
-            url: '/api/v1/agents/{id}',
+            url: '/agents/{id}',
             path: {
                 id: data.id
             },
             errors: {
-                422: 'Validation Error'
+                404: 'Resource not found (`not_found`).',
+                default: 'Error envelope (`kind` -> HTTP status per info.description).'
             }
         });
     }
     
     /**
-     * Patch Agent
-     * Patch mutable agent fields (ORI-014 pause / run-now).
-     *
-     * Mirrors mock api.ts merge semantics: only client-sent fields (``state``
-     * and/or ``live``) override; everything else on the agent is preserved.
+     * Patch mutable agent fields (ORI-014 pause / run-now)
      * @param data The data for the request.
-     * @param data.id
+     * @param data.id Resource UUID (RFC 4122). Resolved by UUID only -- the mock's legacy slug/name leniency is not part of the contract.
+     *
      * @param data.requestBody
-     * @returns Agent Successful Response
+     * @returns Agent OK
      * @throws ApiError
      */
     public static patchAgent(data: PatchAgentData): CancelablePromise<PatchAgentResponse> {
         return __request(OpenAPI, {
             method: 'PATCH',
-            url: '/api/v1/agents/{id}',
+            url: '/agents/{id}',
             path: {
                 id: data.id
             },
             body: data.requestBody,
             mediaType: 'application/json',
             errors: {
-                422: 'Validation Error'
+                404: 'Resource not found (`not_found`).',
+                default: 'Error envelope (`kind` -> HTTP status per info.description).'
             }
         });
     }
     
     /**
-     * Get Agent Permissions
-     * Per-agent permission grants (AGT-023).
-     *
-     * Each grant is enriched with its ``requiredTier`` (D25 / AGT-031) at read
-     * time via ``PERMISSION_REQUIRED_TIER``, defaulting to ``observe`` for any
-     * unmapped permission label. Unknown agent id -> empty list (no 404; the
-     * contract defines none for this route, matching the mock).
+     * Per-agent permission grants (AGT-023)
+     * Each grant is enriched with its `requiredTier` (D25 / AGT-031).
      * @param data The data for the request.
-     * @param data.id
-     * @returns AgentPermission Successful Response
+     * @param data.id Resource UUID (RFC 4122). Resolved by UUID only -- the mock's legacy slug/name leniency is not part of the contract.
+     *
+     * @returns AgentPermission OK
      * @throws ApiError
      */
     public static getAgentPermissions(data: GetAgentPermissionsData): CancelablePromise<GetAgentPermissionsResponse> {
         return __request(OpenAPI, {
             method: 'GET',
-            url: '/api/v1/agents/{id}/permissions',
+            url: '/agents/{id}/permissions',
             path: {
                 id: data.id
             },
             errors: {
-                422: 'Validation Error'
+                default: 'Error envelope (`kind` -> HTTP status per info.description).'
             }
         });
     }
     
     /**
-     * Get Agent Trust Tier
-     * Agent trust standing + ladder (D25 / AGT-031). 404 on unknown agent.
+     * Agent trust standing + ladder (D25 / AGT-031)
      * @param data The data for the request.
-     * @param data.id
-     * @returns AgentTrustTierView Successful Response
+     * @param data.id Resource UUID (RFC 4122). Resolved by UUID only -- the mock's legacy slug/name leniency is not part of the contract.
+     *
+     * @returns AgentTrustTierView OK
      * @throws ApiError
      */
     public static getAgentTrustTier(data: GetAgentTrustTierData): CancelablePromise<GetAgentTrustTierResponse> {
         return __request(OpenAPI, {
             method: 'GET',
-            url: '/api/v1/agents/{id}/trust-tier',
+            url: '/agents/{id}/trust-tier',
             path: {
                 id: data.id
             },
             errors: {
-                422: 'Validation Error'
+                404: 'Resource not found (`not_found`).',
+                default: 'Error envelope (`kind` -> HTTP status per info.description).'
             }
         });
     }
     
     /**
-     * Patch Agent Trust Tier
-     * Set an agent's trust tier (soft-gated).
+     * Set an agent's trust tier (soft-gated)
+     * Founder ruled 2026-07-04: DEFERRED (DECISIONS-NEEDED #2). Granted-vs-pending
+     * semantics depend on the unresolved proposal-approval machine; not
+     * implementable in MVP.
      *
-     * # DEFERRED (DECISIONS-NEEDED #2): mock-parity stub, real semantics not
-     * frozen. ``status`` is an opaque contract string (state model deferred);
-     * mirrors the mock by always granting immediately and updating the agent's
-     * ``trustTier`` in place.
      * @param data The data for the request.
-     * @param data.id
+     * @param data.id Resource UUID (RFC 4122). Resolved by UUID only -- the mock's legacy slug/name leniency is not part of the contract.
+     *
      * @param data.requestBody
-     * @returns AgentTrustTierUpdate Successful Response
+     * @returns AgentTrustTierUpdate OK
      * @throws ApiError
      */
     public static patchAgentTrustTier(data: PatchAgentTrustTierData): CancelablePromise<PatchAgentTrustTierResponse> {
         return __request(OpenAPI, {
             method: 'PATCH',
-            url: '/api/v1/agents/{id}/trust-tier',
+            url: '/agents/{id}/trust-tier',
             path: {
                 id: data.id
             },
             body: data.requestBody,
             mediaType: 'application/json',
             errors: {
-                422: 'Validation Error'
+                404: 'Resource not found (`not_found`).',
+                default: 'Error envelope (`kind` -> HTTP status per info.description).'
             }
         });
     }
     
     /**
-     * Approve Agent Action
-     * Approve a queued agent action.
-     *
-     * # DEFERRED (DECISIONS-NEEDED #1): mock-parity stub, real semantics not
-     * frozen. No-op success (mirrors the mock: no persistent state change
-     * beyond acknowledging the request). 404s if ``id`` doesn't match a
-     * currently pending review-queue entry.
+     * Agent activity log
      * @param data The data for the request.
-     * @param data.id
-     * @returns void Successful Response
+     * @param data.agentId
+     * @param data.kind
+     * @returns AgentLogEntry OK
+     * @throws ApiError
+     */
+    public static getAgentLog(data: GetAgentLogData = {}): CancelablePromise<GetAgentLogResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/agents/log',
+            query: {
+                agentId: data.agentId,
+                kind: data.kind
+            },
+            errors: {
+                default: 'Error envelope (`kind` -> HTTP status per info.description).'
+            }
+        });
+    }
+    
+    /**
+     * Agent actions awaiting human approval (AGT-021)
+     * Founder ruled 2026-07-04: DEFERRED (DECISIONS-NEEDED #1). Proposal-approval machine unresolved.
+     * @returns ReviewQueueItem OK
+     * @throws ApiError
+     */
+    public static getReviewQueue(): CancelablePromise<GetReviewQueueResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/agents/review-queue',
+            errors: {
+                default: 'Error envelope (`kind` -> HTTP status per info.description).'
+            }
+        });
+    }
+    
+    /**
+     * Approve a queued agent action
+     * Founder ruled 2026-07-04: DEFERRED (DECISIONS-NEEDED #1). Proposal-approval machine unresolved.
+     * @param data The data for the request.
+     * @param data.id Resource UUID (RFC 4122). Resolved by UUID only -- the mock's legacy slug/name leniency is not part of the contract.
+     *
+     * @returns void Approved.
      * @throws ApiError
      */
     public static approveAgentAction(data: ApproveAgentActionData): CancelablePromise<ApproveAgentActionResponse> {
         return __request(OpenAPI, {
             method: 'POST',
-            url: '/api/v1/agents/review-queue/{id}/approve',
+            url: '/agents/review-queue/{id}/approve',
             path: {
                 id: data.id
             },
             errors: {
-                422: 'Validation Error'
+                404: 'Resource not found (`not_found`).',
+                default: 'Error envelope (`kind` -> HTTP status per info.description).'
             }
         });
     }
     
     /**
-     * Reject Agent Action
-     * Reject a queued agent action.
-     *
-     * # DEFERRED (DECISIONS-NEEDED #1): mock-parity stub, real semantics not
-     * frozen. No-op success, same shape as ``approveAgentAction``.
+     * Reject a queued agent action
+     * Founder ruled 2026-07-04: DEFERRED (DECISIONS-NEEDED #1). Proposal-approval machine unresolved.
      * @param data The data for the request.
-     * @param data.id
-     * @returns void Successful Response
+     * @param data.id Resource UUID (RFC 4122). Resolved by UUID only -- the mock's legacy slug/name leniency is not part of the contract.
+     *
+     * @returns void Rejected.
      * @throws ApiError
      */
     public static rejectAgentAction(data: RejectAgentActionData): CancelablePromise<RejectAgentActionResponse> {
         return __request(OpenAPI, {
             method: 'POST',
-            url: '/api/v1/agents/review-queue/{id}/reject',
+            url: '/agents/review-queue/{id}/reject',
             path: {
                 id: data.id
             },
             errors: {
-                422: 'Validation Error'
+                404: 'Resource not found (`not_found`).',
+                default: 'Error envelope (`kind` -> HTTP status per info.description).'
             }
         });
     }
@@ -267,262 +260,261 @@ export class AgentsService {
 
 export class ApplicationsService {
     /**
-     * Get Applications
-     * Applications scoped to a saved search (getApplications).
-     *
-     * Mirrors mock api.ts: BACKEND / AI_INFRA searches select their pool; any
-     * other value (including omitted/unknown) falls back to the canonical
-     * platform list.
+     * Applications scoped to a saved search
+     * When `searchId` is omitted, the canonical/default list ships.
      * @param data The data for the request.
      * @param data.searchId
-     * @returns ApplicationView Successful Response
+     * @returns ApplicationView OK
      * @throws ApiError
      */
     public static getApplications(data: GetApplicationsData = {}): CancelablePromise<GetApplicationsResponse> {
         return __request(OpenAPI, {
             method: 'GET',
-            url: '/api/v1/applications',
+            url: '/applications',
             query: {
                 searchId: data.searchId
             },
             errors: {
-                422: 'Validation Error'
+                default: 'Error envelope (`kind` -> HTTP status per info.description).'
             }
         });
     }
     
     /**
-     * Create Application
-     * Create an application (createApplication, ORI-014).
+     * Create an application (ORI-014)
+     * Normalized create (ADR-006): mints a Job for the posting plus an
+     * ids-only Application, returns the joined view. D15: when `searchId`
+     * is omitted the capture lands in the last-used / auto-created
+     * "My jobs" search.
      *
-     * Normalized (ADR-006): mints a Job posting into ``store.jobs`` as a side
-     * effect (mirrors the mock's dynamic-job mint) plus an ids-only Application
-     * at stage DRAFTING, and returns the joined view. searchId is auto-assigned
-     * via :func:`_ensure_default_search` when the client omits it (D15).
      * @param data The data for the request.
      * @param data.requestBody
-     * @returns ApplicationView Successful Response
+     * @returns ApplicationView Created
      * @throws ApiError
      */
     public static createApplication(data: CreateApplicationData): CancelablePromise<CreateApplicationResponse> {
         return __request(OpenAPI, {
             method: 'POST',
-            url: '/api/v1/applications',
+            url: '/applications',
             body: data.requestBody,
             mediaType: 'application/json',
             errors: {
-                422: 'Validation Error'
+                default: 'Error envelope (`kind` -> HTTP status per info.description).'
             }
         });
     }
     
     /**
-     * Get Application
-     * One application, joined view (getApplication). 404 on unknown id.
+     * One application (joined view)
      * @param data The data for the request.
-     * @param data.id
-     * @returns ApplicationView Successful Response
+     * @param data.id Resource UUID (RFC 4122). Resolved by UUID only -- the mock's legacy slug/name leniency is not part of the contract.
+     *
+     * @returns ApplicationView OK
      * @throws ApiError
      */
     public static getApplication(data: GetApplicationData): CancelablePromise<GetApplicationResponse> {
         return __request(OpenAPI, {
             method: 'GET',
-            url: '/api/v1/applications/{id}',
+            url: '/applications/{id}',
             path: {
                 id: data.id
             },
             errors: {
-                422: 'Validation Error'
+                404: 'Resource not found (`not_found`).',
+                default: 'Error envelope (`kind` -> HTTP status per info.description).'
             }
         });
     }
     
     /**
-     * Transition Application
-     * Apply a stage transition, append-only (transitionApplication).
+     * Apply a stage transition (append-only)
+     * The general stage-transition operation (the core loop). Legal moves are
+     * exactly those in the settled application-stage machine
+     * (state-machines.md#application-stages); an illegal target -> 422
+     * `invalid_transition`. Optimistic concurrency: `expectedVersion` must
+     * equal the current `Application.version` or the call fails 409 `conflict`.
      *
-     * Order of checks: unknown id -> 404; version mismatch -> 409 ``conflict``;
-     * illegal target per :data:`LEGAL_TRANSITIONS` -> 422 ``invalid_transition``;
-     * ``applied`` without ``resumeId`` -> 422 ``validation_error``. On success a
-     * transition to ``applied`` materializes the immutable ResumeSnapshot (D10);
-     * every transition appends an immutable StageTransition, bumps the version,
-     * and appends a timeline event.
+     * Side effect: a transition to `applied` materializes the immutable
+     * resume snapshot (D10) from `resumeId` (required for that target) and
+     * locks it; the snapshot is thereafter served by GET
+     * /applications/{id}/snapshot. Every transition appends an immutable
+     * StageTransition row; corrections are compensating transitions
+     * (`source=user_correction`), never updates/deletes.
+     *
      * @param data The data for the request.
-     * @param data.id
+     * @param data.id Resource UUID (RFC 4122). Resolved by UUID only -- the mock's legacy slug/name leniency is not part of the contract.
+     *
      * @param data.requestBody
-     * @returns TransitionResult Successful Response
+     * @returns TransitionResult Transition applied
      * @throws ApiError
      */
     public static transitionApplication(data: TransitionApplicationData): CancelablePromise<TransitionApplicationResponse> {
         return __request(OpenAPI, {
             method: 'POST',
-            url: '/api/v1/applications/{id}/transitions',
+            url: '/applications/{id}/transitions',
             path: {
                 id: data.id
             },
             body: data.requestBody,
             mediaType: 'application/json',
             errors: {
-                422: 'Validation Error'
+                404: 'Resource not found (`not_found`).',
+                409: 'Version/state conflict (`conflict`).',
+                422: 'Illegal stage transition (`invalid_transition`).',
+                default: 'Error envelope (`kind` -> HTTP status per info.description).'
             }
         });
     }
     
     /**
-     * Get Resume Snapshot
-     * Immutable submitted-resume snapshot (getResumeSnapshot, D10).
-     *
-     * Mock parity: 404 on unknown id; 409 ``conflict`` before APPLIED (no
-     * submitted copy exists until then). A real snapshot captured at the APPLIED
-     * transition takes precedence; otherwise one is synthesized from the
-     * application's selected resume (the seeded applied+ rows have no captured
-     * snapshot, mirroring the mock's on-the-fly synthesis).
+     * Immutable submitted-resume snapshot (D10)
+     * Materialized at the APPLIED transition; never changes afterward.
      * @param data The data for the request.
-     * @param data.id
-     * @returns ResumeSnapshot Successful Response
+     * @param data.id Resource UUID (RFC 4122). Resolved by UUID only -- the mock's legacy slug/name leniency is not part of the contract.
+     *
+     * @returns ResumeSnapshot OK
      * @throws ApiError
      */
     public static getResumeSnapshot(data: GetResumeSnapshotData): CancelablePromise<GetResumeSnapshotResponse> {
         return __request(OpenAPI, {
             method: 'GET',
-            url: '/api/v1/applications/{id}/snapshot',
+            url: '/applications/{id}/snapshot',
             path: {
                 id: data.id
             },
             errors: {
-                422: 'Validation Error'
+                404: 'Resource not found (`not_found`).',
+                409: 'No submitted copy exists until the application reaches APPLIED (`conflict`).',
+                default: 'Error envelope (`kind` -> HTTP status per info.description).'
             }
         });
     }
     
     /**
-     * Mark Won
-     * Mark an application WON, archive it, return a 300s undo grant (markWon).
+     * Mark an application WON (D18)
+     * Records the outcome, archives the active application, returns a
+     * time-boxed undo token (300 s). After the window, correcting a win is
+     * a deliberate OFFER_RESCINDED (see state-machines.md).
      *
-     * Records the outcome, moves the app from the active pool to the archive, and
-     * stores a time-boxed undo grant keyed by token (reversible via undoMarkWon).
      * @param data The data for the request.
-     * @param data.id
+     * @param data.id Resource UUID (RFC 4122). Resolved by UUID only -- the mock's legacy slug/name leniency is not part of the contract.
+     *
      * @param data.requestBody
-     * @returns MarkWonResult Successful Response
+     * @returns MarkWonResult OK
      * @throws ApiError
      */
     public static markWon(data: MarkWonData): CancelablePromise<MarkWonResponse> {
         return __request(OpenAPI, {
             method: 'POST',
-            url: '/api/v1/applications/{id}/mark-won',
+            url: '/applications/{id}/mark-won',
             path: {
                 id: data.id
             },
             body: data.requestBody,
             mediaType: 'application/json',
             errors: {
-                422: 'Validation Error'
+                404: 'Resource not found (`not_found`).',
+                default: 'Error envelope (`kind` -> HTTP status per info.description).'
             }
         });
     }
     
     /**
-     * Undo Mark Won
-     * Reverse a mark-won within the grace window (undoMarkWon, D18).
-     *
-     * Unknown token (or one not belonging to this application) -> 404; an expired
-     * window -> 409 ``undo_window_expired``. On success the original pre-win
-     * application is restored to the active pool.
+     * Reverse a mark-won within the grace window (D18)
      * @param data The data for the request.
-     * @param data.id
+     * @param data.id Resource UUID (RFC 4122). Resolved by UUID only -- the mock's legacy slug/name leniency is not part of the contract.
+     *
      * @param data.requestBody
-     * @returns ApplicationView Successful Response
+     * @returns ApplicationView OK
      * @throws ApiError
      */
     public static undoMarkWon(data: UndoMarkWonData): CancelablePromise<UndoMarkWonResponse> {
         return __request(OpenAPI, {
             method: 'POST',
-            url: '/api/v1/applications/{id}/undo-mark-won',
+            url: '/applications/{id}/undo-mark-won',
             path: {
                 id: data.id
             },
             body: data.requestBody,
             mediaType: 'application/json',
             errors: {
-                422: 'Validation Error'
+                404: 'Resource not found (`not_found`).',
+                409: 'Undo window expired (`undo_window_expired`).',
+                default: 'Error envelope (`kind` -> HTTP status per info.description).'
             }
         });
     }
     
     /**
-     * Reactivate Application
-     * Reactivate a closed/archived application (reactivateApplication, D19).
-     *
-     * Clears the terminal outcome and re-enters the pipeline at APPLIED with
-     * ``resurrected=true``. 404 if the id is not in the archive.
+     * Reactivate a closed/archived application (D19)
+     * Clears the terminal outcome and re-enters the pipeline at APPLIED.
      * @param data The data for the request.
-     * @param data.id
-     * @returns ApplicationView Successful Response
+     * @param data.id Resource UUID (RFC 4122). Resolved by UUID only -- the mock's legacy slug/name leniency is not part of the contract.
+     *
+     * @returns ApplicationView OK
      * @throws ApiError
      */
     public static reactivateApplication(data: ReactivateApplicationData): CancelablePromise<ReactivateApplicationResponse> {
         return __request(OpenAPI, {
             method: 'POST',
-            url: '/api/v1/applications/{id}/reactivate',
+            url: '/applications/{id}/reactivate',
             path: {
                 id: data.id
             },
             errors: {
-                422: 'Validation Error'
+                404: 'Resource not found (`not_found`).',
+                default: 'Error envelope (`kind` -> HTTP status per info.description).'
             }
         });
     }
     
     /**
-     * Dismiss Application
-     * Dismiss an application (dismissApplication, D12 dual-mode).
+     * Dismiss an application (D12)
+     * Pre-commit (SAVED/DRAFT) the application is removed outright.
+     * Post-APPLIED it maps to WITHDREW with reason chips and archives --
+     * a committed application is never silently deleted.
      *
-     * Pre-commit (SAVED/DRAFTING): hard-removed, ``outcome=removed``. Post-APPLIED
-     * (any later stage): maps to WITHDREW with reason chips and archives,
-     * ``outcome=withdrew`` -- a committed application is never silently deleted.
      * @param data The data for the request.
-     * @param data.id
+     * @param data.id Resource UUID (RFC 4122). Resolved by UUID only -- the mock's legacy slug/name leniency is not part of the contract.
+     *
      * @param data.requestBody
-     * @returns DismissResult Successful Response
+     * @returns DismissResult OK
      * @throws ApiError
      */
     public static dismissApplication(data: DismissApplicationData): CancelablePromise<DismissApplicationResponse> {
         return __request(OpenAPI, {
             method: 'POST',
-            url: '/api/v1/applications/{id}/dismiss',
+            url: '/applications/{id}/dismiss',
             path: {
                 id: data.id
             },
             body: data.requestBody,
             mediaType: 'application/json',
             errors: {
-                422: 'Validation Error'
+                404: 'Resource not found (`not_found`).',
+                default: 'Error envelope (`kind` -> HTTP status per info.description).'
             }
         });
     }
     
     /**
-     * Get Application Timeline
-     * Append-only audit timeline (getApplicationTimeline, TRK-118).
-     *
-     * Returns the seeded fixture timeline (plus any events appended by
-     * transitions); falls back to a single synthetic "Applied via <source>"
-     * event when an application has no seeded timeline. 404 on unknown id.
+     * Append-only audit timeline (TRK-118)
      * @param data The data for the request.
-     * @param data.id
-     * @returns TimelineEvent Successful Response
+     * @param data.id Resource UUID (RFC 4122). Resolved by UUID only -- the mock's legacy slug/name leniency is not part of the contract.
+     *
+     * @returns TimelineEvent OK
      * @throws ApiError
      */
     public static getApplicationTimeline(data: GetApplicationTimelineData): CancelablePromise<GetApplicationTimelineResponse> {
         return __request(OpenAPI, {
             method: 'GET',
-            url: '/api/v1/applications/{id}/timeline',
+            url: '/applications/{id}/timeline',
             path: {
                 id: data.id
             },
             errors: {
-                422: 'Validation Error'
+                404: 'Resource not found (`not_found`).',
+                default: 'Error envelope (`kind` -> HTTP status per info.description).'
             }
         });
     }
@@ -530,136 +522,124 @@ export class ApplicationsService {
 
 export class ArchiveService {
     /**
-     * Get Archive
-     * Archived applications by outcome bucket (getArchive, ORI-009).
-     *
-     * ``kind=won`` -> outcome WON; ``kind=passed`` -> outcome in
-     * (REJECTED, WITHDRAWN). Any other ``kind`` yields the passed bucket's
-     * predicate falling through to an empty list.
+     * Archived applications by outcome bucket (ORI-009)
      * @param data The data for the request.
-     * @param data.kind
-     * @returns ApplicationView Successful Response
+     * @param data.kind won -> outcome=won; passed -> outcome in (rejected, withdrawn).
+     * @returns ApplicationView OK
      * @throws ApiError
      */
     public static getArchive(data: GetArchiveData): CancelablePromise<GetArchiveResponse> {
         return __request(OpenAPI, {
             method: 'GET',
-            url: '/api/v1/archive',
+            url: '/archive',
             query: {
                 kind: data.kind
             },
             errors: {
-                422: 'Validation Error'
+                default: 'Error envelope (`kind` -> HTTP status per info.description).'
             }
         });
     }
     
     /**
-     * Get Archive Counts
-     * Live archive badge counts (getArchiveCounts).
-     *
-     * ``won`` = outcome WON; ``passed`` = outcome in (REJECTED, WITHDRAWN).
-     * @returns number Successful Response
+     * Live archive badge counts
+     * @returns unknown OK
      * @throws ApiError
      */
     public static getArchiveCounts(): CancelablePromise<GetArchiveCountsResponse> {
         return __request(OpenAPI, {
             method: 'GET',
-            url: '/api/v1/archive/counts'
+            url: '/archive/counts',
+            errors: {
+                default: 'Error envelope (`kind` -> HTTP status per info.description).'
+            }
         });
     }
 }
 
 export class CoachService {
     /**
-     * Get Coach Threads
-     * Coach threads (getCoachThreads).
-     * @returns CoachThread Successful Response
+     * Coach threads
+     * @returns CoachThread OK
      * @throws ApiError
      */
     public static getCoachThreads(): CancelablePromise<GetCoachThreadsResponse> {
         return __request(OpenAPI, {
             method: 'GET',
-            url: '/api/v1/coach/threads'
+            url: '/coach/threads',
+            errors: {
+                default: 'Error envelope (`kind` -> HTTP status per info.description).'
+            }
         });
     }
     
     /**
-     * Get Coach Thread
-     * One thread with messages + context cards (COA-021).
-     *
-     * Mirrors mock api.ts: only the "stripe-followup" thread realizes messages
-     * in the source design -- every other thread returns an empty list
-     * (CUR-024 empty state). Context cards fall back to the canonical set for
-     * any thread id not present in the per-thread map (matches mock's ``??``).
+     * One thread with messages + context cards (COA-021)
      * @param data The data for the request.
-     * @param data.id
-     * @returns CoachThreadBundle Successful Response
+     * @param data.id Resource UUID (RFC 4122). Resolved by UUID only -- the mock's legacy slug/name leniency is not part of the contract.
+     *
+     * @returns unknown OK
      * @throws ApiError
      */
     public static getCoachThread(data: GetCoachThreadData): CancelablePromise<GetCoachThreadResponse> {
         return __request(OpenAPI, {
             method: 'GET',
-            url: '/api/v1/coach/threads/{id}',
+            url: '/coach/threads/{id}',
             path: {
                 id: data.id
             },
             errors: {
-                422: 'Validation Error'
+                404: 'Resource not found (`not_found`).',
+                default: 'Error envelope (`kind` -> HTTP status per info.description).'
             }
         });
     }
     
     /**
-     * Propose Coach Edit
-     * Coach drafts a change proposal (COA-032, gate 1).
+     * Coach drafts a change proposal (COA-032, gate 1)
+     * Founder ruled 2026-07-04: DEFERRED (DECISIONS-NEEDED #1). Proposal-approval
+     * machine unresolved (state-machines.md stub). This IS an AI op (drives an
+     * AIProvider method), but it is not implementable in MVP; the AiRunEnvelope
+     * embedding lands if/when the machine is drawn.
      *
-     * # DEFERRED (DECISIONS-NEEDED #1): mock-parity stub, real semantics not
-     * frozen. Returns a canned pending ``CoachProposal`` keyed by
-     * ``subject.scope``, mirroring the mock's ``COACH_PROPOSAL_FIXTURES``
-     * lookup (falls back to the 'résumé' fixture for any other scope).
      * @param data The data for the request.
      * @param data.requestBody
-     * @returns CoachProposal Successful Response
+     * @returns CoachProposal Pending proposal
      * @throws ApiError
      */
     public static proposeCoachEdit(data: ProposeCoachEditData): CancelablePromise<ProposeCoachEditResponse> {
         return __request(OpenAPI, {
             method: 'POST',
-            url: '/api/v1/coach/proposals',
+            url: '/coach/proposals',
             body: data.requestBody,
             mediaType: 'application/json',
             errors: {
-                422: 'Validation Error'
+                default: 'Error envelope (`kind` -> HTTP status per info.description).'
             }
         });
     }
     
     /**
-     * Save Coach Proposal
-     * Persist an accepted proposal (COA-032 gate 2 / COA-033 / COA-036).
-     *
-     * # DEFERRED (DECISIONS-NEEDED #1): mock-parity stub, real semantics not
-     * frozen -- no proposal store exists yet to look ``id`` up against (the
-     * mock accepts any well-formed proposal it's handed). Returns an attributed
-     * audit event ("Coach, on behalf of you"), matching the mock's return shape.
+     * Persist an accepted proposal (COA-032 gate 2 / COA-033 / COA-036)
+     * Founder ruled 2026-07-04: DEFERRED (DECISIONS-NEEDED #1). Proposal-approval machine unresolved; not implementable in MVP.
      * @param data The data for the request.
-     * @param data.id
+     * @param data.id Resource UUID (RFC 4122). Resolved by UUID only -- the mock's legacy slug/name leniency is not part of the contract.
+     *
      * @param data.requestBody
-     * @returns TimelineEvent Successful Response
+     * @returns TimelineEvent Attributed audit event
      * @throws ApiError
      */
     public static saveCoachProposal(data: SaveCoachProposalData): CancelablePromise<SaveCoachProposalResponse> {
         return __request(OpenAPI, {
             method: 'POST',
-            url: '/api/v1/coach/proposals/{id}/accept',
+            url: '/coach/proposals/{id}/accept',
             path: {
                 id: data.id
             },
             body: data.requestBody,
             mediaType: 'application/json',
             errors: {
-                422: 'Validation Error'
+                default: 'Error envelope (`kind` -> HTTP status per info.description).'
             }
         });
     }
@@ -667,47 +647,40 @@ export class CoachService {
 
 export class InterviewsService {
     /**
-     * Get Interview Rounds
-     * Interview rounds for an application (getInterviewRounds, TRK-117).
-     *
-     * Filters the round store by ``appId`` (mock parity: an application with no
-     * rounds returns an empty list, not a 404).
+     * Interview rounds for an application (TRK-117)
      * @param data The data for the request.
-     * @param data.id
-     * @returns InterviewRound Successful Response
+     * @param data.id Resource UUID (RFC 4122). Resolved by UUID only -- the mock's legacy slug/name leniency is not part of the contract.
+     *
+     * @returns InterviewRound OK
      * @throws ApiError
      */
     public static getInterviewRounds(data: GetInterviewRoundsData): CancelablePromise<GetInterviewRoundsResponse> {
         return __request(OpenAPI, {
             method: 'GET',
-            url: '/api/v1/applications/{id}/interviews',
+            url: '/applications/{id}/interviews',
             path: {
                 id: data.id
             },
             errors: {
-                422: 'Validation Error'
+                default: 'Error envelope (`kind` -> HTTP status per info.description).'
             }
         });
     }
     
     /**
-     * Patch Interview Round
-     * Update an interview round, allowlisted fields only (patchInterviewRound).
-     *
-     * 404 when the round (belonging to that application) does not exist. Only the
-     * client-sent allowlisted fields are merged (``exclude_unset``); disallowed
-     * keys are rejected upstream by the strict body model (422).
+     * Update an interview round (D3 / TRK-127)
+     * Only date/type/format/status are mutable; other keys are dropped.
      * @param data The data for the request.
      * @param data.appId
      * @param data.roundId
      * @param data.requestBody
-     * @returns InterviewRound Successful Response
+     * @returns InterviewRound OK
      * @throws ApiError
      */
     public static patchInterviewRound(data: PatchInterviewRoundData): CancelablePromise<PatchInterviewRoundResponse> {
         return __request(OpenAPI, {
             method: 'PATCH',
-            url: '/api/v1/applications/{appId}/interviews/{roundId}',
+            url: '/applications/{appId}/interviews/{roundId}',
             path: {
                 appId: data.appId,
                 roundId: data.roundId
@@ -715,7 +688,8 @@ export class InterviewsService {
             body: data.requestBody,
             mediaType: 'application/json',
             errors: {
-                422: 'Validation Error'
+                404: 'Resource not found (`not_found`).',
+                default: 'Error envelope (`kind` -> HTTP status per info.description).'
             }
         });
     }
@@ -723,56 +697,58 @@ export class InterviewsService {
 
 export class JobsService {
     /**
-     * Get Jobs
-     * All captured postings (getJobs, ADR-006 canonical collection).
-     * @returns Job Successful Response
+     * All captured postings (ADR-006 canonical collection)
+     * @returns Job OK
      * @throws ApiError
      */
     public static getJobs(): CancelablePromise<GetJobsResponse> {
         return __request(OpenAPI, {
             method: 'GET',
-            url: '/api/v1/jobs'
-        });
-    }
-    
-    /**
-     * Get Jobs Inbox
-     * Jobs inbox, optionally scoped to one saved search (getJobsInbox).
-     * @param data The data for the request.
-     * @param data.searchId
-     * @returns JobInboxItem Successful Response
-     * @throws ApiError
-     */
-    public static getJobsInbox(data: GetJobsInboxData = {}): CancelablePromise<GetJobsInboxResponse> {
-        return __request(OpenAPI, {
-            method: 'GET',
-            url: '/api/v1/jobs/inbox',
-            query: {
-                searchId: data.searchId
-            },
+            url: '/jobs',
             errors: {
-                422: 'Validation Error'
+                default: 'Error envelope (`kind` -> HTTP status per info.description).'
             }
         });
     }
     
     /**
-     * Get Job
-     * One captured posting (getJob). 404 envelope on unknown id.
+     * Jobs inbox (optionally per-search)
      * @param data The data for the request.
-     * @param data.id
-     * @returns Job Successful Response
+     * @param data.searchId
+     * @returns JobInboxItem OK
+     * @throws ApiError
+     */
+    public static getJobsInbox(data: GetJobsInboxData = {}): CancelablePromise<GetJobsInboxResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/jobs/inbox',
+            query: {
+                searchId: data.searchId
+            },
+            errors: {
+                default: 'Error envelope (`kind` -> HTTP status per info.description).'
+            }
+        });
+    }
+    
+    /**
+     * One captured posting
+     * @param data The data for the request.
+     * @param data.id Resource UUID (RFC 4122). Resolved by UUID only -- the mock's legacy slug/name leniency is not part of the contract.
+     *
+     * @returns Job OK
      * @throws ApiError
      */
     public static getJob(data: GetJobData): CancelablePromise<GetJobResponse> {
         return __request(OpenAPI, {
             method: 'GET',
-            url: '/api/v1/jobs/{id}',
+            url: '/jobs/{id}',
             path: {
                 id: data.id
             },
             errors: {
-                422: 'Validation Error'
+                404: 'Resource not found (`not_found`).',
+                default: 'Error envelope (`kind` -> HTTP status per info.description).'
             }
         });
     }
@@ -780,558 +756,469 @@ export class JobsService {
 
 export class LibraryService {
     /**
-     * Get Contacts
-     * Contacts, soft-deleted excluded (getContacts, D24).
-     * @returns Contact Successful Response
+     * Contacts (soft-deleted excluded, D24)
+     * @returns Contact OK
      * @throws ApiError
      */
     public static getContacts(): CancelablePromise<GetContactsResponse> {
         return __request(OpenAPI, {
             method: 'GET',
-            url: '/api/v1/contacts'
+            url: '/contacts',
+            errors: {
+                default: 'Error envelope (`kind` -> HTTP status per info.description).'
+            }
         });
     }
     
     /**
-     * Create Contact
-     * Create a contact (createContact, CON-001/002).
+     * Create a contact (CON-001/002)
      * @param data The data for the request.
      * @param data.requestBody
-     * @returns Contact Successful Response
+     * @returns Contact Created
      * @throws ApiError
      */
     public static createContact(data: CreateContactData): CancelablePromise<CreateContactResponse> {
         return __request(OpenAPI, {
             method: 'POST',
-            url: '/api/v1/contacts',
+            url: '/contacts',
             body: data.requestBody,
             mediaType: 'application/json',
             errors: {
-                422: 'Validation Error'
+                default: 'Error envelope (`kind` -> HTTP status per info.description).'
             }
         });
     }
     
     /**
-     * Get Contact
-     * One contact (getContact). 404 envelope on unknown id.
+     * One contact
      * @param data The data for the request.
-     * @param data.id
-     * @returns Contact Successful Response
+     * @param data.id Resource UUID (RFC 4122). Resolved by UUID only -- the mock's legacy slug/name leniency is not part of the contract.
+     *
+     * @returns Contact OK
      * @throws ApiError
      */
     public static getContact(data: GetContactData): CancelablePromise<GetContactResponse> {
         return __request(OpenAPI, {
             method: 'GET',
-            url: '/api/v1/contacts/{id}',
+            url: '/contacts/{id}',
             path: {
                 id: data.id
             },
             errors: {
-                422: 'Validation Error'
+                404: 'Resource not found (`not_found`).',
+                default: 'Error envelope (`kind` -> HTTP status per info.description).'
             }
         });
     }
     
     /**
-     * Update Contact
-     * Update a contact (updateContact). Replaces draft fields, bumps updated.
+     * Update a contact
      * @param data The data for the request.
-     * @param data.id
+     * @param data.id Resource UUID (RFC 4122). Resolved by UUID only -- the mock's legacy slug/name leniency is not part of the contract.
+     *
      * @param data.requestBody
-     * @returns Contact Successful Response
+     * @returns Contact OK
      * @throws ApiError
      */
     public static updateContact(data: UpdateContactData): CancelablePromise<UpdateContactResponse> {
         return __request(OpenAPI, {
             method: 'PATCH',
-            url: '/api/v1/contacts/{id}',
+            url: '/contacts/{id}',
             path: {
                 id: data.id
             },
             body: data.requestBody,
             mediaType: 'application/json',
             errors: {
-                422: 'Validation Error'
+                404: 'Resource not found (`not_found`).',
+                default: 'Error envelope (`kind` -> HTTP status per info.description).'
             }
         });
     }
     
     /**
-     * Delete Contact
-     * Soft-delete a contact into the trash (deleteContact, D24).
+     * Soft-delete a contact into the trash (D24)
      * @param data The data for the request.
-     * @param data.id
-     * @returns void Successful Response
+     * @param data.id Resource UUID (RFC 4122). Resolved by UUID only -- the mock's legacy slug/name leniency is not part of the contract.
+     *
+     * @returns void Soft-deleted.
      * @throws ApiError
      */
     public static deleteContact(data: DeleteContactData): CancelablePromise<DeleteContactResponse> {
         return __request(OpenAPI, {
             method: 'DELETE',
-            url: '/api/v1/contacts/{id}',
+            url: '/contacts/{id}',
             path: {
                 id: data.id
             },
             errors: {
-                422: 'Validation Error'
+                default: 'Error envelope (`kind` -> HTTP status per info.description).'
             }
         });
     }
     
     /**
-     * Get Accomplishments
-     * Accomplishments, soft-deleted excluded (getAccomplishments, D24).
-     * @returns Accomplishment Successful Response
+     * Accomplishments (soft-deleted excluded, D24)
+     * @returns Accomplishment OK
      * @throws ApiError
      */
     public static getAccomplishments(): CancelablePromise<GetAccomplishmentsResponse> {
         return __request(OpenAPI, {
             method: 'GET',
-            url: '/api/v1/accomplishments'
+            url: '/accomplishments',
+            errors: {
+                default: 'Error envelope (`kind` -> HTTP status per info.description).'
+            }
         });
     }
     
     /**
-     * Create Accomplishment
-     * Create an accomplishment (createAccomplishment, ACC-001).
+     * Create an accomplishment (ACC-001)
      * @param data The data for the request.
      * @param data.requestBody
-     * @returns Accomplishment Successful Response
+     * @returns Accomplishment Created
      * @throws ApiError
      */
     public static createAccomplishment(data: CreateAccomplishmentData): CancelablePromise<CreateAccomplishmentResponse> {
         return __request(OpenAPI, {
             method: 'POST',
-            url: '/api/v1/accomplishments',
+            url: '/accomplishments',
             body: data.requestBody,
             mediaType: 'application/json',
             errors: {
-                422: 'Validation Error'
+                default: 'Error envelope (`kind` -> HTTP status per info.description).'
             }
         });
     }
     
     /**
-     * Update Accomplishment
-     * Update an accomplishment. Replaces draft fields, bumps updated.
+     * Update an accomplishment
      * @param data The data for the request.
-     * @param data.id
+     * @param data.id Resource UUID (RFC 4122). Resolved by UUID only -- the mock's legacy slug/name leniency is not part of the contract.
+     *
      * @param data.requestBody
-     * @returns Accomplishment Successful Response
+     * @returns Accomplishment OK
      * @throws ApiError
      */
     public static updateAccomplishment(data: UpdateAccomplishmentData): CancelablePromise<UpdateAccomplishmentResponse> {
         return __request(OpenAPI, {
             method: 'PATCH',
-            url: '/api/v1/accomplishments/{id}',
+            url: '/accomplishments/{id}',
             path: {
                 id: data.id
             },
             body: data.requestBody,
             mediaType: 'application/json',
             errors: {
-                422: 'Validation Error'
+                404: 'Resource not found (`not_found`).',
+                default: 'Error envelope (`kind` -> HTTP status per info.description).'
             }
         });
     }
     
     /**
-     * Delete Accomplishment
-     * Soft-delete an accomplishment (deleteAccomplishment, D24).
+     * Soft-delete an accomplishment (D24)
      * @param data The data for the request.
-     * @param data.id
-     * @returns void Successful Response
+     * @param data.id Resource UUID (RFC 4122). Resolved by UUID only -- the mock's legacy slug/name leniency is not part of the contract.
+     *
+     * @returns void Soft-deleted.
      * @throws ApiError
      */
     public static deleteAccomplishment(data: DeleteAccomplishmentData): CancelablePromise<DeleteAccomplishmentResponse> {
         return __request(OpenAPI, {
             method: 'DELETE',
-            url: '/api/v1/accomplishments/{id}',
+            url: '/accomplishments/{id}',
             path: {
                 id: data.id
             },
             errors: {
-                422: 'Validation Error'
+                default: 'Error envelope (`kind` -> HTTP status per info.description).'
             }
         });
     }
     
     /**
-     * Derive Accomplishment From Project
-     * Distill a Project into a NEW accomplishment (deriveAccomplishmentFromProject, ACC-002).
+     * Distill a Project into a NEW accomplishment (ACC-002)
+     * AI operation (synchronous): the model distills the Project into a new
+     * accomplishment (snapshot + backlink `source.projectId`, not live-bound).
+     * Response embeds `aiRun`. Provider unavailable -> 503; queue overflow -> 429.
      *
-     * Synthetic AI op -- no provider in the mock backend. Snapshots + backlinks the
-     * source Project (mirrors mock api.ts: title copied verbatim, summary is
-     * the project body truncated to 160 chars, tags copied, ``source.projectId``
-     * set). The result is NOT live-bound to the Project. 404 if the project is
-     * missing or already soft-deleted (D24: soft-deleted items are not valid
-     * derive sources).
      * @param data The data for the request.
      * @param data.requestBody
-     * @returns AccomplishmentDeriveResult Successful Response
+     * @returns AccomplishmentDeriveResult Created
      * @throws ApiError
      */
     public static deriveAccomplishmentFromProject(data: DeriveAccomplishmentFromProjectData): CancelablePromise<DeriveAccomplishmentFromProjectResponse> {
         return __request(OpenAPI, {
             method: 'POST',
-            url: '/api/v1/accomplishments/derive-from-project',
+            url: '/accomplishments/derive-from-project',
             body: data.requestBody,
             mediaType: 'application/json',
             errors: {
-                422: 'Validation Error'
+                404: 'Resource not found (`not_found`).',
+                429: 'AI queue overflow / too many requests (`rate_limited`).',
+                503: 'AI provider unavailable or failed (`provider_unavailable`).',
+                default: 'Error envelope (`kind` -> HTTP status per info.description).'
             }
         });
     }
     
     /**
-     * Get Answers
-     * Saved answers, soft-deleted excluded (getAnswers, D24).
-     * @returns Answer Successful Response
+     * Saved answers (soft-deleted excluded, D24)
+     * @returns Answer OK
      * @throws ApiError
      */
     public static getAnswers(): CancelablePromise<GetAnswersResponse> {
         return __request(OpenAPI, {
             method: 'GET',
-            url: '/api/v1/answers'
+            url: '/answers',
+            errors: {
+                default: 'Error envelope (`kind` -> HTTP status per info.description).'
+            }
         });
     }
     
     /**
-     * Create Answer
-     * Create an answer (createAnswer, ANS-001).
+     * Create an answer (ANS-001)
      * @param data The data for the request.
      * @param data.requestBody
-     * @returns Answer Successful Response
+     * @returns Answer Created
      * @throws ApiError
      */
     public static createAnswer(data: CreateAnswerData): CancelablePromise<CreateAnswerResponse> {
         return __request(OpenAPI, {
             method: 'POST',
-            url: '/api/v1/answers',
+            url: '/answers',
             body: data.requestBody,
             mediaType: 'application/json',
             errors: {
-                422: 'Validation Error'
+                default: 'Error envelope (`kind` -> HTTP status per info.description).'
             }
         });
     }
     
     /**
-     * Update Answer
-     * Update an answer. Replaces draft fields, bumps updated.
+     * Update an answer
      * @param data The data for the request.
-     * @param data.id
+     * @param data.id Resource UUID (RFC 4122). Resolved by UUID only -- the mock's legacy slug/name leniency is not part of the contract.
+     *
      * @param data.requestBody
-     * @returns Answer Successful Response
+     * @returns Answer OK
      * @throws ApiError
      */
     public static updateAnswer(data: UpdateAnswerData): CancelablePromise<UpdateAnswerResponse> {
         return __request(OpenAPI, {
             method: 'PATCH',
-            url: '/api/v1/answers/{id}',
+            url: '/answers/{id}',
             path: {
                 id: data.id
             },
             body: data.requestBody,
             mediaType: 'application/json',
             errors: {
-                422: 'Validation Error'
+                404: 'Resource not found (`not_found`).',
+                default: 'Error envelope (`kind` -> HTTP status per info.description).'
             }
         });
     }
     
     /**
-     * Delete Answer
-     * Soft-delete an answer (deleteAnswer, D24).
+     * Soft-delete an answer (D24)
      * @param data The data for the request.
-     * @param data.id
-     * @returns void Successful Response
+     * @param data.id Resource UUID (RFC 4122). Resolved by UUID only -- the mock's legacy slug/name leniency is not part of the contract.
+     *
+     * @returns void Soft-deleted.
      * @throws ApiError
      */
     public static deleteAnswer(data: DeleteAnswerData): CancelablePromise<DeleteAnswerResponse> {
         return __request(OpenAPI, {
             method: 'DELETE',
-            url: '/api/v1/answers/{id}',
+            url: '/answers/{id}',
             path: {
                 id: data.id
             },
             errors: {
-                422: 'Validation Error'
+                default: 'Error envelope (`kind` -> HTTP status per info.description).'
             }
         });
     }
     
     /**
-     * Get Projects
-     * Projects, soft-deleted excluded (getProjects, D24).
-     * @returns Project Successful Response
+     * Projects (soft-deleted excluded, D24)
+     * @returns Project OK
      * @throws ApiError
      */
     public static getProjects(): CancelablePromise<GetProjectsResponse> {
         return __request(OpenAPI, {
             method: 'GET',
-            url: '/api/v1/projects'
+            url: '/projects',
+            errors: {
+                default: 'Error envelope (`kind` -> HTTP status per info.description).'
+            }
         });
     }
     
     /**
-     * Create Project
-     * Create a project (createProject, PRJ-001).
+     * Create a project (PRJ-001)
      * @param data The data for the request.
      * @param data.requestBody
-     * @returns Project Successful Response
+     * @returns Project Created
      * @throws ApiError
      */
     public static createProject(data: CreateProjectData): CancelablePromise<CreateProjectResponse> {
         return __request(OpenAPI, {
             method: 'POST',
-            url: '/api/v1/projects',
+            url: '/projects',
             body: data.requestBody,
             mediaType: 'application/json',
             errors: {
-                422: 'Validation Error'
+                default: 'Error envelope (`kind` -> HTTP status per info.description).'
             }
         });
     }
     
     /**
-     * Update Project
-     * Update a project. Replaces draft fields, bumps updated.
+     * Update a project
      * @param data The data for the request.
-     * @param data.id
+     * @param data.id Resource UUID (RFC 4122). Resolved by UUID only -- the mock's legacy slug/name leniency is not part of the contract.
+     *
      * @param data.requestBody
-     * @returns Project Successful Response
+     * @returns Project OK
      * @throws ApiError
      */
     public static updateProject(data: UpdateProjectData): CancelablePromise<UpdateProjectResponse> {
         return __request(OpenAPI, {
             method: 'PATCH',
-            url: '/api/v1/projects/{id}',
+            url: '/projects/{id}',
             path: {
                 id: data.id
             },
             body: data.requestBody,
             mediaType: 'application/json',
             errors: {
-                422: 'Validation Error'
+                404: 'Resource not found (`not_found`).',
+                default: 'Error envelope (`kind` -> HTTP status per info.description).'
             }
         });
     }
     
     /**
-     * Delete Project
-     * Soft-delete a project (deleteProject, D24).
+     * Soft-delete a project (D24)
      * @param data The data for the request.
-     * @param data.id
-     * @returns void Successful Response
+     * @param data.id Resource UUID (RFC 4122). Resolved by UUID only -- the mock's legacy slug/name leniency is not part of the contract.
+     *
+     * @returns void Soft-deleted.
      * @throws ApiError
      */
     public static deleteProject(data: DeleteProjectData): CancelablePromise<DeleteProjectResponse> {
         return __request(OpenAPI, {
             method: 'DELETE',
-            url: '/api/v1/projects/{id}',
+            url: '/projects/{id}',
             path: {
                 id: data.id
             },
             errors: {
-                422: 'Validation Error'
+                default: 'Error envelope (`kind` -> HTTP status per info.description).'
             }
         });
     }
     
     /**
-     * Get Credentials
-     * Credentials, read-only list (getCredentials, CRD-001).
-     * @returns Credential Successful Response
+     * Credentials (CRD-001, Post-MVP)
+     * @returns Credential OK
      * @throws ApiError
      */
     public static getCredentials(): CancelablePromise<GetCredentialsResponse> {
         return __request(OpenAPI, {
             method: 'GET',
-            url: '/api/v1/credentials'
+            url: '/credentials',
+            errors: {
+                default: 'Error envelope (`kind` -> HTTP status per info.description).'
+            }
         });
     }
     
     /**
-     * Get Trash
-     * All soft-deleted Library entities, newest-deleted first (getTrash, D24).
-     * @returns TrashEntry Successful Response
+     * All soft-deleted Library entities, newest-deleted first (D24)
+     * @returns TrashEntry OK
      * @throws ApiError
      */
     public static getTrash(): CancelablePromise<GetTrashResponse> {
         return __request(OpenAPI, {
             method: 'GET',
-            url: '/api/v1/library/trash'
+            url: '/library/trash',
+            errors: {
+                default: 'Error envelope (`kind` -> HTTP status per info.description).'
+            }
         });
     }
     
     /**
-     * Restore Library Item
-     * Restore a soft-deleted Library item (restoreLibraryItem, D24).
+     * Restore a soft-deleted Library item (D24)
      * @param data The data for the request.
      * @param data.kind
-     * @param data.id
-     * @returns void Successful Response
+     * @param data.id Resource UUID (RFC 4122). Resolved by UUID only -- the mock's legacy slug/name leniency is not part of the contract.
+     *
+     * @returns void Restored.
      * @throws ApiError
      */
     public static restoreLibraryItem(data: RestoreLibraryItemData): CancelablePromise<RestoreLibraryItemResponse> {
         return __request(OpenAPI, {
             method: 'POST',
-            url: '/api/v1/library/{kind}/{id}/restore',
+            url: '/library/{kind}/{id}/restore',
             path: {
                 kind: data.kind,
                 id: data.id
             },
             errors: {
-                422: 'Validation Error'
+                default: 'Error envelope (`kind` -> HTTP status per info.description).'
             }
         });
     }
     
     /**
-     * Purge Library Item
-     * Permanently purge a soft-deleted item -- frees quota (purgeLibraryItem, D24).
+     * Permanently purge a soft-deleted item -- frees quota (D24)
      * @param data The data for the request.
      * @param data.kind
-     * @param data.id
-     * @returns void Successful Response
+     * @param data.id Resource UUID (RFC 4122). Resolved by UUID only -- the mock's legacy slug/name leniency is not part of the contract.
+     *
+     * @returns void Purged.
      * @throws ApiError
      */
     public static purgeLibraryItem(data: PurgeLibraryItemData): CancelablePromise<PurgeLibraryItemResponse> {
         return __request(OpenAPI, {
             method: 'DELETE',
-            url: '/api/v1/library/{kind}/{id}/purge',
+            url: '/library/{kind}/{id}/purge',
             path: {
                 kind: data.kind,
                 id: data.id
             },
             errors: {
-                422: 'Validation Error'
+                default: 'Error envelope (`kind` -> HTTP status per info.description).'
             }
         });
     }
     
     /**
-     * Get Deletion Impact
-     * Dependent-count report before a delete (getDeletionImpact, D24).
-     *
-     * Only Projects have dependents in the frozen contract: Accomplishments
-     * distilled from a Project reference it via ``source.projectId`` (ACC-002).
-     * Mirrors mock api.ts, which only reports accomplishment dependents (and
-     * only live, non-soft-deleted ones) for the ``project`` kind.
+     * Dependent-count report before a delete (D24)
+     * Drives the typed-count confirm dialog.
      * @param data The data for the request.
      * @param data.kind
-     * @param data.id
-     * @returns DeletionImpact Successful Response
+     * @param data.id Resource UUID (RFC 4122). Resolved by UUID only -- the mock's legacy slug/name leniency is not part of the contract.
+     *
+     * @returns DeletionImpact OK
      * @throws ApiError
      */
     public static getDeletionImpact(data: GetDeletionImpactData): CancelablePromise<GetDeletionImpactResponse> {
         return __request(OpenAPI, {
             method: 'GET',
-            url: '/api/v1/library/{kind}/{id}/deletion-impact',
+            url: '/library/{kind}/{id}/deletion-impact',
             path: {
                 kind: data.kind,
                 id: data.id
             },
             errors: {
-                422: 'Validation Error'
-            }
-        });
-    }
-}
-
-export class LoginService {
-    /**
-     * Login Access Token
-     * OAuth2 compatible token login, get an access token for future requests
-     * @param data The data for the request.
-     * @param data.formData
-     * @returns Token Successful Response
-     * @throws ApiError
-     */
-    public static loginAccessToken(data: LoginLoginAccessTokenData): CancelablePromise<LoginLoginAccessTokenResponse> {
-        return __request(OpenAPI, {
-            method: 'POST',
-            url: '/api/v1/login/access-token',
-            formData: data.formData,
-            mediaType: 'application/x-www-form-urlencoded',
-            errors: {
-                422: 'Validation Error'
-            }
-        });
-    }
-    
-    /**
-     * Test Token
-     * Test access token
-     * @returns UserPublic Successful Response
-     * @throws ApiError
-     */
-    public static testToken(): CancelablePromise<LoginTestTokenResponse> {
-        return __request(OpenAPI, {
-            method: 'POST',
-            url: '/api/v1/login/test-token'
-        });
-    }
-    
-    /**
-     * Recover Password
-     * Password Recovery
-     * @param data The data for the request.
-     * @param data.email
-     * @returns Message Successful Response
-     * @throws ApiError
-     */
-    public static recoverPassword(data: LoginRecoverPasswordData): CancelablePromise<LoginRecoverPasswordResponse> {
-        return __request(OpenAPI, {
-            method: 'POST',
-            url: '/api/v1/password-recovery/{email}',
-            path: {
-                email: data.email
-            },
-            errors: {
-                422: 'Validation Error'
-            }
-        });
-    }
-    
-    /**
-     * Reset Password
-     * Reset password
-     * @param data The data for the request.
-     * @param data.requestBody
-     * @returns Message Successful Response
-     * @throws ApiError
-     */
-    public static resetPassword(data: LoginResetPasswordData): CancelablePromise<LoginResetPasswordResponse> {
-        return __request(OpenAPI, {
-            method: 'POST',
-            url: '/api/v1/reset-password/',
-            body: data.requestBody,
-            mediaType: 'application/json',
-            errors: {
-                422: 'Validation Error'
-            }
-        });
-    }
-    
-    /**
-     * Recover Password Html Content
-     * HTML Content for Password Recovery
-     * @param data The data for the request.
-     * @param data.email
-     * @returns string Successful Response
-     * @throws ApiError
-     */
-    public static recoverPasswordHtmlContent(data: LoginRecoverPasswordHtmlContentData): CancelablePromise<LoginRecoverPasswordHtmlContentResponse> {
-        return __request(OpenAPI, {
-            method: 'POST',
-            url: '/api/v1/password-recovery-html-content/{email}',
-            path: {
-                email: data.email
-            },
-            errors: {
-                422: 'Validation Error'
+                default: 'Error envelope (`kind` -> HTTP status per info.description).'
             }
         });
     }
@@ -1339,86 +1226,83 @@ export class LoginService {
 
 export class MatchService {
     /**
-     * Preview Deep Match Score
-     * Cost preview for a deep (paid) match score (previewDeepMatchScore, D8b/D21).
+     * Cost preview for a deep (paid) match score (D8b / D21)
+     * NON-AI: pure cost arithmetic (no model invocation). One itemized line
+     * per resume; free rough heuristic scores never appear here.
      *
-     * NON-AI: pure cost arithmetic, one itemized line per resume. Mirrors mock
-     * api.ts ``previewDeepMatchScore``: unit cost from the deep-match-score cost
-     * table, ``overCap`` iff the itemized total exceeds remaining cap headroom.
      * @param data The data for the request.
-     * @param data.id
+     * @param data.id Resource UUID (RFC 4122). Resolved by UUID only -- the mock's legacy slug/name leniency is not part of the contract.
+     *
      * @param data.requestBody
-     * @returns CostPreview Successful Response
+     * @returns CostPreview OK
      * @throws ApiError
      */
     public static previewDeepMatchScore(data: PreviewDeepMatchScoreData): CancelablePromise<PreviewDeepMatchScoreResponse> {
         return __request(OpenAPI, {
             method: 'POST',
-            url: '/api/v1/jobs/{id}/preview-deep-score',
+            url: '/jobs/{id}/preview-deep-score',
             path: {
                 id: data.id
             },
             body: data.requestBody,
             mediaType: 'application/json',
             errors: {
-                422: 'Validation Error'
+                default: 'Error envelope (`kind` -> HTTP status per info.description).'
             }
         });
     }
     
     /**
-     * Run Deep Match Score
-     * Run a deep (paid) match score (runDeepMatchScore, D8/D9a).
+     * Run a deep (paid) match score (D8 / D9a)
+     * AI operation (synchronous). Completes on the chosen provider and
+     * returns the result with `aiRun` embedded. If the monthly cap is
+     * reached it fails with `cap_reached` so the UI can re-consent -- never a
+     * silent model downgrade. Bounded-concurrency queue overflow -> 429
+     * `rate_limited`; provider unavailable/failed -> 503 `provider_unavailable`.
      *
-     * Synchronous "AI" operation served by the synthetic FakeProvider (no real
-     * provider in the mock backend). Raises ``CapReachedError`` (402) BEFORE
-     * recording any spend if the unit cost would exceed the remaining monthly
-     * cap -- see module docstring.
      * @param data The data for the request.
-     * @param data.id
+     * @param data.id Resource UUID (RFC 4122). Resolved by UUID only -- the mock's legacy slug/name leniency is not part of the contract.
+     *
      * @param data.requestBody
-     * @returns DeepMatchResult Successful Response
+     * @returns DeepMatchResult OK
      * @throws ApiError
      */
     public static runDeepMatchScore(data: RunDeepMatchScoreData): CancelablePromise<RunDeepMatchScoreResponse> {
         return __request(OpenAPI, {
             method: 'POST',
-            url: '/api/v1/jobs/{id}/deep-score',
+            url: '/jobs/{id}/deep-score',
             path: {
                 id: data.id
             },
             body: data.requestBody,
             mediaType: 'application/json',
             errors: {
-                422: 'Validation Error'
+                402: 'Monthly LLM cap reached (`cap_reached`).',
+                429: 'AI queue overflow / too many requests (`rate_limited`).',
+                503: 'AI provider unavailable or failed (`provider_unavailable`).',
+                default: 'Error envelope (`kind` -> HTTP status per info.description).'
             }
         });
     }
     
     /**
-     * Get Match Report
-     * Match report for a (resume, job) pair (getMatchReport).
-     *
-     * Judgment call, mirrors mock api.ts exactly: the design renders only one
-     * canonical match report, so ``resumeId``/``jobId`` are echoed back onto a
-     * single fixture rather than validated against the resume/job stores (which
-     * are out of this slice's scope).
+     * Match report for a (resume, job) pair
      * @param data The data for the request.
      * @param data.resumeId
      * @param data.jobId
-     * @returns MatchReport Successful Response
+     * @returns MatchReport OK
      * @throws ApiError
      */
     public static getMatchReport(data: GetMatchReportData): CancelablePromise<GetMatchReportResponse> {
         return __request(OpenAPI, {
             method: 'GET',
-            url: '/api/v1/match-report',
+            url: '/match-report',
             query: {
                 resumeId: data.resumeId,
                 jobId: data.jobId
             },
             errors: {
-                422: 'Validation Error'
+                default: 'Error envelope (`kind` -> HTTP status per info.description).'
             }
         });
     }
@@ -1426,213 +1310,218 @@ export class MatchService {
 
 export class NotificationsService {
     /**
-     * Get Notifications
-     * Notifications (getNotifications).
-     * @returns Notification Successful Response
+     * Notifications
+     * @returns Notification OK
      * @throws ApiError
      */
     public static getNotifications(): CancelablePromise<GetNotificationsResponse> {
         return __request(OpenAPI, {
             method: 'GET',
-            url: '/api/v1/notifications'
-        });
-    }
-    
-    /**
-     * Mark Notification Read
-     * Mark one notification read (markNotificationRead, ORI-012).
-     *
-     * 404 envelope on unknown id. Mirrors mock api.ts: replaces the notification
-     * with ``unread=False``, all other fields preserved.
-     * @param data The data for the request.
-     * @param data.id
-     * @returns Notification Successful Response
-     * @throws ApiError
-     */
-    public static markNotificationRead(data: MarkNotificationReadData): CancelablePromise<MarkNotificationReadResponse> {
-        return __request(OpenAPI, {
-            method: 'POST',
-            url: '/api/v1/notifications/{id}/read',
-            path: {
-                id: data.id
-            },
+            url: '/notifications',
             errors: {
-                422: 'Validation Error'
+                default: 'Error envelope (`kind` -> HTTP status per info.description).'
             }
         });
     }
     
     /**
-     * Mark All Notifications Read
-     * Mark all notifications read (markAllNotificationsRead, ORI-012).
-     * @returns Notification Successful Response
+     * Mark one notification read (ORI-012)
+     * @param data The data for the request.
+     * @param data.id Resource UUID (RFC 4122). Resolved by UUID only -- the mock's legacy slug/name leniency is not part of the contract.
+     *
+     * @returns Notification OK
+     * @throws ApiError
+     */
+    public static markNotificationRead(data: MarkNotificationReadData): CancelablePromise<MarkNotificationReadResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/notifications/{id}/read',
+            path: {
+                id: data.id
+            },
+            errors: {
+                404: 'Resource not found (`not_found`).',
+                default: 'Error envelope (`kind` -> HTTP status per info.description).'
+            }
+        });
+    }
+    
+    /**
+     * Mark all notifications read (ORI-012)
+     * @returns Notification OK
      * @throws ApiError
      */
     public static markAllNotificationsRead(): CancelablePromise<MarkAllNotificationsReadResponse> {
         return __request(OpenAPI, {
             method: 'POST',
-            url: '/api/v1/notifications/mark-all-read'
+            url: '/notifications/mark-all-read',
+            errors: {
+                default: 'Error envelope (`kind` -> HTTP status per info.description).'
+            }
         });
     }
 }
 
 export class ResumeLifecycleService {
     /**
-     * Get Resume Uploads
-     * Uploaded resume files, immutable (getResumeUploads, RES-030).
-     * @returns ResumeUpload Successful Response
+     * Uploaded resume files (RES-030, immutable)
+     * @returns ResumeUpload OK
      * @throws ApiError
      */
     public static getResumeUploads(): CancelablePromise<GetResumeUploadsResponse> {
         return __request(OpenAPI, {
             method: 'GET',
-            url: '/api/v1/resumes/uploads'
+            url: '/resumes/uploads',
+            errors: {
+                default: 'Error envelope (`kind` -> HTTP status per info.description).'
+            }
         });
     }
     
     /**
-     * Get Career History
-     * Parsed career-history items, ordered by ordinal (getCareerHistory, RES-031).
-     * @returns CareerHistoryItem Successful Response
+     * Parsed career-history items (RES-031), ordered by ordinal
+     * @returns CareerHistoryItem OK
      * @throws ApiError
      */
     public static getCareerHistory(): CancelablePromise<GetCareerHistoryResponse> {
         return __request(OpenAPI, {
             method: 'GET',
-            url: '/api/v1/career-history'
+            url: '/career-history',
+            errors: {
+                default: 'Error envelope (`kind` -> HTTP status per info.description).'
+            }
         });
     }
     
     /**
-     * Get Resume Templates
-     * Resume layout templates (getResumeTemplates, TPL-001).
-     * @returns ResumeTemplate Successful Response
+     * Resume layout templates (TPL-001)
+     * @returns ResumeTemplate OK
      * @throws ApiError
      */
     public static getResumeTemplates(): CancelablePromise<GetResumeTemplatesResponse> {
         return __request(OpenAPI, {
             method: 'GET',
-            url: '/api/v1/resumes/templates'
+            url: '/resumes/templates',
+            errors: {
+                default: 'Error envelope (`kind` -> HTTP status per info.description).'
+            }
         });
     }
     
     /**
-     * Get Resume Exports
-     * Rendered exports, one-way (getResumeExports, RES-037).
-     * @returns ResumeExport Successful Response
+     * Rendered exports (RES-037, one-way)
+     * @returns ResumeExport OK
      * @throws ApiError
      */
     public static getResumeExports(): CancelablePromise<GetResumeExportsResponse> {
         return __request(OpenAPI, {
             method: 'GET',
-            url: '/api/v1/resumes/exports'
+            url: '/resumes/exports',
+            errors: {
+                default: 'Error envelope (`kind` -> HTTP status per info.description).'
+            }
         });
     }
     
     /**
-     * Get Projections
-     * Projections = non-FORMAT resumes (getProjections, RES-034).
-     * @returns Resume Successful Response
+     * Projections = non-FORMAT resumes (RES-034)
+     * @returns Resume OK
      * @throws ApiError
      */
     public static getProjections(): CancelablePromise<GetProjectionsResponse> {
         return __request(OpenAPI, {
             method: 'GET',
-            url: '/api/v1/projections'
+            url: '/projections',
+            errors: {
+                default: 'Error envelope (`kind` -> HTTP status per info.description).'
+            }
         });
     }
     
     /**
-     * Create Projection
-     * Create a master/variant projection (createProjection, RES-034/035).
-     *
-     * Pins ``itemIds`` at creation time: the ``body`` summary text and the
-     * ``store.resume_projection_items`` snapshot are both computed ONCE here
-     * and never recomputed from live career-history state, so a later
-     * career-history change cannot retroactively mutate an existing
-     * projection (RES-034/035 pinning: "new career history never auto-injects
-     * into existing projections").
+     * Create a master/variant projection (RES-034/035)
+     * New career history never auto-injects into existing projections (pinning).
      * @param data The data for the request.
      * @param data.requestBody
-     * @returns Resume Successful Response
+     * @returns Resume Created
      * @throws ApiError
      */
     public static createProjection(data: CreateProjectionData): CancelablePromise<CreateProjectionResponse> {
         return __request(OpenAPI, {
             method: 'POST',
-            url: '/api/v1/projections',
+            url: '/projections',
             body: data.requestBody,
             mediaType: 'application/json',
             errors: {
-                422: 'Validation Error'
+                default: 'Error envelope (`kind` -> HTTP status per info.description).'
             }
         });
     }
     
     /**
-     * Assign Template
-     * Assign a template to a projection (assignTemplate, TPL-002).
+     * Assign a template to a projection (TPL-002)
      * @param data The data for the request.
-     * @param data.id
+     * @param data.id Resource UUID (RFC 4122). Resolved by UUID only -- the mock's legacy slug/name leniency is not part of the contract.
+     *
      * @param data.requestBody
-     * @returns Resume Successful Response
+     * @returns Resume OK
      * @throws ApiError
      */
     public static assignTemplate(data: AssignTemplateData): CancelablePromise<AssignTemplateResponse> {
         return __request(OpenAPI, {
             method: 'PUT',
-            url: '/api/v1/projections/{id}/template',
+            url: '/projections/{id}/template',
             path: {
                 id: data.id
             },
             body: data.requestBody,
             mediaType: 'application/json',
             errors: {
-                422: 'Validation Error'
+                404: 'Resource not found (`not_found`).',
+                default: 'Error envelope (`kind` -> HTTP status per info.description).'
             }
         });
     }
     
     /**
-     * Render Export
-     * Render a projection through its template into an export (renderExport, RES-037).
+     * Render a projection through its template into an export (RES-037)
      * @param data The data for the request.
      * @param data.requestBody
-     * @returns ResumeExport Successful Response
+     * @returns ResumeExport Created
      * @throws ApiError
      */
     public static renderExport(data: RenderExportData): CancelablePromise<RenderExportResponse> {
         return __request(OpenAPI, {
             method: 'POST',
-            url: '/api/v1/exports',
+            url: '/exports',
             body: data.requestBody,
             mediaType: 'application/json',
             errors: {
-                422: 'Validation Error'
+                404: 'Resource not found (`not_found`).',
+                default: 'Error envelope (`kind` -> HTTP status per info.description).'
             }
         });
     }
     
     /**
-     * Regenerate Export
-     * Regenerate an export at the current (bumped) template version.
-     *
-     * Creates a NEW export; the original keeps its own provenance and is never
-     * silently restyled (regenerateExport, RES-037 / D17).
+     * Regenerate an export at the current template version (RES-037 / D17)
+     * Creates a NEW export; the original keeps its own provenance -- never silently restyled.
      * @param data The data for the request.
-     * @param data.id
-     * @returns ResumeExport Successful Response
+     * @param data.id Resource UUID (RFC 4122). Resolved by UUID only -- the mock's legacy slug/name leniency is not part of the contract.
+     *
+     * @returns ResumeExport Created
      * @throws ApiError
      */
     public static regenerateExport(data: RegenerateExportData): CancelablePromise<RegenerateExportResponse> {
         return __request(OpenAPI, {
             method: 'POST',
-            url: '/api/v1/exports/{id}/regenerate',
+            url: '/exports/{id}/regenerate',
             path: {
                 id: data.id
             },
             errors: {
-                422: 'Validation Error'
+                404: 'Resource not found (`not_found`).',
+                default: 'Error envelope (`kind` -> HTTP status per info.description).'
             }
         });
     }
@@ -1640,183 +1529,177 @@ export class ResumeLifecycleService {
 
 export class ResumesService {
     /**
-     * Get Resumes
-     * All resumes (getResumes).
-     * @returns Resume Successful Response
+     * All resumes
+     * @returns Resume OK
      * @throws ApiError
      */
     public static getResumes(): CancelablePromise<GetResumesResponse> {
         return __request(OpenAPI, {
             method: 'GET',
-            url: '/api/v1/resumes'
+            url: '/resumes',
+            errors: {
+                default: 'Error envelope (`kind` -> HTTP status per info.description).'
+            }
         });
     }
     
     /**
-     * Create Resume
-     * Create a blank draft resume (createResume, RES-019).
-     *
-     * Mirrors mock api.ts ``createResume``: no request body, fixed blank
-     * defaults, tag=DRAFT.
-     * @returns Resume Successful Response
+     * Create a blank draft resume (RES-019)
+     * @returns Resume Created
      * @throws ApiError
      */
     public static createResume(): CancelablePromise<CreateResumeResponse> {
         return __request(OpenAPI, {
             method: 'POST',
-            url: '/api/v1/resumes'
+            url: '/resumes',
+            errors: {
+                default: 'Error envelope (`kind` -> HTTP status per info.description).'
+            }
         });
     }
     
     /**
-     * Get Resume
-     * One resume, id-only (getResume). 404 envelope on unknown id.
-     *
-     * MOCK QUIRK dropped per contract: the mock also resolves by name/array
-     * index for backwards compat; this route resolves by id only.
+     * One resume
+     * MOCK QUIRK: the mock also resolves by name or array index for backwards compat; the real API resolves by id only.
      * @param data The data for the request.
-     * @param data.id
-     * @returns Resume Successful Response
+     * @param data.id Resource UUID (RFC 4122). Resolved by UUID only -- the mock's legacy slug/name leniency is not part of the contract.
+     *
+     * @returns Resume OK
      * @throws ApiError
      */
     public static getResume(data: GetResumeData): CancelablePromise<GetResumeResponse> {
         return __request(OpenAPI, {
             method: 'GET',
-            url: '/api/v1/resumes/{id}',
+            url: '/resumes/{id}',
             path: {
                 id: data.id
             },
             errors: {
-                422: 'Validation Error'
+                404: 'Resource not found (`not_found`).',
+                default: 'Error envelope (`kind` -> HTTP status per info.description).'
             }
         });
     }
     
     /**
-     * Patch Resume
-     * Patch a resume: rename / save body / toggle scoring (patchResume).
+     * Patch a resume (rename / save body / toggle scoring)
+     * Collapses three mock mutations onto one PATCH:
+     * `renameResume` (name), `saveResumeBody` (body, serialized editor HTML,
+     * RES-022), `patchResumeScoring` (scoringEnabled, D21).
      *
-     * Collapses 3 mock mutations onto one PATCH; only client-sent fields are
-     * merged in (``exclude_unset``), matching mock api.ts semantics -- none of
-     * the three mock mutations touch ``updated`` either, so this route doesn't.
      * @param data The data for the request.
-     * @param data.id
+     * @param data.id Resource UUID (RFC 4122). Resolved by UUID only -- the mock's legacy slug/name leniency is not part of the contract.
+     *
      * @param data.requestBody
-     * @returns Resume Successful Response
+     * @returns Resume OK
      * @throws ApiError
      */
     public static patchResume(data: PatchResumeData): CancelablePromise<PatchResumeResponse> {
         return __request(OpenAPI, {
             method: 'PATCH',
-            url: '/api/v1/resumes/{id}',
+            url: '/resumes/{id}',
             path: {
                 id: data.id
             },
             body: data.requestBody,
             mediaType: 'application/json',
             errors: {
-                422: 'Validation Error'
+                404: 'Resource not found (`not_found`).',
+                default: 'Error envelope (`kind` -> HTTP status per info.description).'
             }
         });
     }
     
     /**
-     * Delete Resume
-     * Delete a resume (deleteResume, RES-019).
-     *
-     * Guards locked resumes: TAILORED / MASTER / DEFAULT tag, or ``usedIn`` > 0
-     * -> 409 conflict envelope. Mirrors mock api.ts ``deleteResume``.
+     * Delete a resume (RES-019)
+     * Guards locked resumes (TAILORED / MASTER / DEFAULT / usedIn > 0).
      * @param data The data for the request.
-     * @param data.id
-     * @returns void Successful Response
+     * @param data.id Resource UUID (RFC 4122). Resolved by UUID only -- the mock's legacy slug/name leniency is not part of the contract.
+     *
+     * @returns void Deleted.
      * @throws ApiError
      */
     public static deleteResume(data: DeleteResumeData): CancelablePromise<DeleteResumeResponse> {
         return __request(OpenAPI, {
             method: 'DELETE',
-            url: '/api/v1/resumes/{id}',
+            url: '/resumes/{id}',
             path: {
                 id: data.id
             },
             errors: {
-                422: 'Validation Error'
+                404: 'Resource not found (`not_found`).',
+                409: 'Resume is locked.',
+                default: 'Error envelope (`kind` -> HTTP status per info.description).'
             }
         });
     }
     
     /**
-     * Duplicate Resume
-     * Duplicate a resume as a DRAFT (duplicateResume, RES-019).
+     * Duplicate a resume as a DRAFT (RES-019)
      * @param data The data for the request.
-     * @param data.id
-     * @returns Resume Successful Response
+     * @param data.id Resource UUID (RFC 4122). Resolved by UUID only -- the mock's legacy slug/name leniency is not part of the contract.
+     *
+     * @returns Resume Created
      * @throws ApiError
      */
     public static duplicateResume(data: DuplicateResumeData): CancelablePromise<DuplicateResumeResponse> {
         return __request(OpenAPI, {
             method: 'POST',
-            url: '/api/v1/resumes/{id}/duplicate',
+            url: '/resumes/{id}/duplicate',
             path: {
                 id: data.id
             },
             errors: {
-                422: 'Validation Error'
+                404: 'Resource not found (`not_found`).',
+                default: 'Error envelope (`kind` -> HTTP status per info.description).'
             }
         });
     }
     
     /**
-     * Set Default Resume
-     * Set a resume as DEFAULT, demoting the previous DEFAULT to VARIANT.
-     *
-     * Returns the full updated collection (setDefaultResume, RES-019). Mirrors
-     * mock api.ts: only ``tag`` changes, ``updated`` is left untouched on both
-     * the promoted and demoted resumes.
+     * Set a resume as the default (RES-019)
+     * Demotes the previous DEFAULT to VARIANT; returns the full updated collection.
      * @param data The data for the request.
-     * @param data.id
-     * @returns Resume Successful Response
+     * @param data.id Resource UUID (RFC 4122). Resolved by UUID only -- the mock's legacy slug/name leniency is not part of the contract.
+     *
+     * @returns Resume OK
      * @throws ApiError
      */
     public static setDefaultResume(data: SetDefaultResumeData): CancelablePromise<SetDefaultResumeResponse> {
         return __request(OpenAPI, {
             method: 'POST',
-            url: '/api/v1/resumes/{id}/set-default',
+            url: '/resumes/{id}/set-default',
             path: {
                 id: data.id
             },
             errors: {
-                422: 'Validation Error'
+                404: 'Resource not found (`not_found`).',
+                default: 'Error envelope (`kind` -> HTTP status per info.description).'
             }
         });
     }
     
     /**
-     * Fork Resume As Draft
-     * Fork a resume as a tailored draft for a job (forkResumeAsDraft, CUR-020).
-     *
-     * Mirrors mock api.ts ``forkResumeAsDraft``: copies the basis resume, tags
-     * the fork DRAFT, resets usedIn/updated. ``jobId`` has no field on the
-     * ``Resume`` wire shape (mock: "the seam stays -- in a real API this would
-     * associate the draft"); it's recorded in the private
-     * ``store.resume_fork_jobs`` provenance side-store instead of being
-     * silently dropped.
+     * Fork a resume as a tailored draft for a job (CUR-020)
      * @param data The data for the request.
-     * @param data.id
+     * @param data.id Resource UUID (RFC 4122). Resolved by UUID only -- the mock's legacy slug/name leniency is not part of the contract.
+     *
      * @param data.requestBody
-     * @returns Resume Successful Response
+     * @returns Resume Created
      * @throws ApiError
      */
     public static forkResumeAsDraft(data: ForkResumeAsDraftData): CancelablePromise<ForkResumeAsDraftResponse> {
         return __request(OpenAPI, {
             method: 'POST',
-            url: '/api/v1/resumes/{id}/fork',
+            url: '/resumes/{id}/fork',
             path: {
                 id: data.id
             },
             body: data.requestBody,
             mediaType: 'application/json',
             errors: {
-                422: 'Validation Error'
+                404: 'Resource not found (`not_found`).',
+                default: 'Error envelope (`kind` -> HTTP status per info.description).'
             }
         });
     }
@@ -1824,86 +1707,82 @@ export class ResumesService {
 
 export class SearchesService {
     /**
-     * Get Searches
-     * Saved searches (getSearches).
-     * @returns Search Successful Response
+     * Saved searches
+     * @returns Search OK
      * @throws ApiError
      */
     public static getSearches(): CancelablePromise<GetSearchesResponse> {
         return __request(OpenAPI, {
             method: 'GET',
-            url: '/api/v1/searches'
+            url: '/searches',
+            errors: {
+                default: 'Error envelope (`kind` -> HTTP status per info.description).'
+            }
         });
     }
     
     /**
-     * Create Search
-     * Create a saved search (createSearch, ADD-010).
-     *
-     * Mirrors mock api.ts: new id, ``state=active``, zeroed counts and spend,
-     * criteria = blank defaults overlaid with the client-sent criteria fields.
+     * Create a saved search (ADD-010)
      * @param data The data for the request.
      * @param data.requestBody
-     * @returns Search Successful Response
+     * @returns Search Created
      * @throws ApiError
      */
     public static createSearch(data: CreateSearchData): CancelablePromise<CreateSearchResponse> {
         return __request(OpenAPI, {
             method: 'POST',
-            url: '/api/v1/searches',
+            url: '/searches',
             body: data.requestBody,
             mediaType: 'application/json',
             errors: {
-                422: 'Validation Error'
+                default: 'Error envelope (`kind` -> HTTP status per info.description).'
             }
         });
     }
     
     /**
-     * Get Search
-     * One saved search (getSearch). 404 envelope on unknown id.
+     * One saved search
      * @param data The data for the request.
-     * @param data.id
-     * @returns Search Successful Response
+     * @param data.id Resource UUID (RFC 4122). Resolved by UUID only -- the mock's legacy slug/name leniency is not part of the contract.
+     *
+     * @returns Search OK
      * @throws ApiError
      */
     public static getSearch(data: GetSearchData): CancelablePromise<GetSearchResponse> {
         return __request(OpenAPI, {
             method: 'GET',
-            url: '/api/v1/searches/{id}',
+            url: '/searches/{id}',
             path: {
                 id: data.id
             },
             errors: {
-                422: 'Validation Error'
+                404: 'Resource not found (`not_found`).',
+                default: 'Error envelope (`kind` -> HTTP status per info.description).'
             }
         });
     }
     
     /**
-     * Update Search Criteria
-     * Update search criteria in-place (updateSearchCriteria, ADD-006).
-     *
-     * Request body is ``{"criteria": {...}}`` per the contract (``embed=True``).
-     * Mirrors mock api.ts merge semantics: existing criteria overlaid with the
-     * client-sent criteria fields; all other Search fields are preserved.
+     * Update search criteria in-place (ADD-006)
      * @param data The data for the request.
-     * @param data.id
+     * @param data.id Resource UUID (RFC 4122). Resolved by UUID only -- the mock's legacy slug/name leniency is not part of the contract.
+     *
      * @param data.requestBody
-     * @returns Search Successful Response
+     * @returns Search OK
      * @throws ApiError
      */
     public static updateSearchCriteria(data: UpdateSearchCriteriaData): CancelablePromise<UpdateSearchCriteriaResponse> {
         return __request(OpenAPI, {
             method: 'PATCH',
-            url: '/api/v1/searches/{id}',
+            url: '/searches/{id}',
             path: {
                 id: data.id
             },
             body: data.requestBody,
             mediaType: 'application/json',
             errors: {
-                422: 'Validation Error'
+                404: 'Resource not found (`not_found`).',
+                default: 'Error envelope (`kind` -> HTTP status per info.description).'
             }
         });
     }
@@ -1911,98 +1790,96 @@ export class SearchesService {
 
 export class SettingsService {
     /**
-     * Get Settings
-     * Full settings bundle (getSettings).
-     * @returns Settings Successful Response
+     * Full settings bundle
+     * @returns Settings OK
      * @throws ApiError
      */
     public static getSettings(): CancelablePromise<GetSettingsResponse> {
         return __request(OpenAPI, {
             method: 'GET',
-            url: '/api/v1/settings'
+            url: '/settings',
+            errors: {
+                default: 'Error envelope (`kind` -> HTTP status per info.description).'
+            }
         });
     }
     
     /**
-     * Get Usage Aggregate
-     * Aggregated token-usage summary for the current billing period (getUsageAggregate).
-     * @returns UsageAggregate Successful Response
+     * Aggregated token-usage summary for the current billing period
+     * @returns UsageAggregate OK
      * @throws ApiError
      */
     public static getUsageAggregate(): CancelablePromise<GetUsageAggregateResponse> {
         return __request(OpenAPI, {
             method: 'GET',
-            url: '/api/v1/usage-aggregate'
+            url: '/usage-aggregate',
+            errors: {
+                default: 'Error envelope (`kind` -> HTTP status per info.description).'
+            }
         });
     }
 }
 
 export class ShortlistService {
     /**
-     * Get Shortlist
-     * Shortlist entries, optionally scoped to one saved search (getShortlist).
+     * Shortlist entries (optionally per-search)
      * @param data The data for the request.
      * @param data.searchId
-     * @returns ShortlistEntry Successful Response
+     * @returns ShortlistEntry OK
      * @throws ApiError
      */
     public static getShortlist(data: GetShortlistData = {}): CancelablePromise<GetShortlistResponse> {
         return __request(OpenAPI, {
             method: 'GET',
-            url: '/api/v1/shortlist',
+            url: '/shortlist',
             query: {
                 searchId: data.searchId
             },
             errors: {
-                422: 'Validation Error'
+                default: 'Error envelope (`kind` -> HTTP status per info.description).'
             }
         });
     }
     
     /**
-     * Add To Shortlist
-     * Add a job to the shortlist (addToShortlist, ORI-014).
-     *
-     * Mirrors mock api.ts: new entry appended with ``source=you`` and
-     * ``saved=now``. Only mutates the default (no-searchId) view -- see the
-     * store docstring for why the per-search index is untouched.
+     * Add a job to the shortlist (ORI-014)
      * @param data The data for the request.
      * @param data.requestBody
-     * @returns ShortlistEntry Successful Response
+     * @returns ShortlistEntry Created
      * @throws ApiError
      */
     public static addToShortlist(data: AddToShortlistData): CancelablePromise<AddToShortlistResponse> {
         return __request(OpenAPI, {
             method: 'POST',
-            url: '/api/v1/shortlist',
+            url: '/shortlist',
             body: data.requestBody,
             mediaType: 'application/json',
             errors: {
-                422: 'Validation Error'
+                default: 'Error envelope (`kind` -> HTTP status per info.description).'
             }
         });
     }
     
     /**
-     * Dismiss From Shortlist
-     * Remove a shortlist entry by id (dismissFromShortlist).
+     * Remove a shortlist entry by UUID
+     * UUID-ified: keyed by the shortlist entry id (the mock's role-string key is dropped from the contract).
      *
-     * UUID-ified per the contract note: keyed by the shortlist entry id, not
-     * the mock's role-string key. 404 envelope on unknown id.
      * @param data The data for the request.
-     * @param data.id
-     * @returns void Successful Response
+     * @param data.id Resource UUID (RFC 4122). Resolved by UUID only -- the mock's legacy slug/name leniency is not part of the contract.
+     *
+     * @returns void Removed.
      * @throws ApiError
      */
     public static dismissFromShortlist(data: DismissFromShortlistData): CancelablePromise<DismissFromShortlistResponse> {
         return __request(OpenAPI, {
             method: 'DELETE',
-            url: '/api/v1/shortlist/{id}',
+            url: '/shortlist/{id}',
             path: {
                 id: data.id
             },
             errors: {
-                422: 'Validation Error'
+                404: 'Resource not found (`not_found`).',
+                default: 'Error envelope (`kind` -> HTTP status per info.description).'
             }
         });
     }
@@ -2010,247 +1887,17 @@ export class ShortlistService {
 
 export class UserService {
     /**
-     * Get Current User
-     * Current user / persona (getCurrentUser). REMY, seeded verbatim.
-     * @returns User Successful Response
+     * Current user / persona
+     * @returns User OK
      * @throws ApiError
      */
     public static getCurrentUser(): CancelablePromise<GetCurrentUserResponse> {
         return __request(OpenAPI, {
             method: 'GET',
-            url: '/api/v1/user'
-        });
-    }
-}
-
-export class UsersService {
-    /**
-     * Read Users
-     * Retrieve users.
-     * @param data The data for the request.
-     * @param data.skip
-     * @param data.limit
-     * @returns UsersPublic Successful Response
-     * @throws ApiError
-     */
-    public static readUsers(data: UsersReadUsersData = {}): CancelablePromise<UsersReadUsersResponse> {
-        return __request(OpenAPI, {
-            method: 'GET',
-            url: '/api/v1/users/',
-            query: {
-                skip: data.skip,
-                limit: data.limit
-            },
+            url: '/user',
             errors: {
-                422: 'Validation Error'
+                default: 'Error envelope (`kind` -> HTTP status per info.description).'
             }
-        });
-    }
-    
-    /**
-     * Create User
-     * Create new user.
-     * @param data The data for the request.
-     * @param data.requestBody
-     * @returns UserPublic Successful Response
-     * @throws ApiError
-     */
-    public static createUser(data: UsersCreateUserData): CancelablePromise<UsersCreateUserResponse> {
-        return __request(OpenAPI, {
-            method: 'POST',
-            url: '/api/v1/users/',
-            body: data.requestBody,
-            mediaType: 'application/json',
-            errors: {
-                422: 'Validation Error'
-            }
-        });
-    }
-    
-    /**
-     * Read User Me
-     * Get current user.
-     * @returns UserPublic Successful Response
-     * @throws ApiError
-     */
-    public static readUserMe(): CancelablePromise<UsersReadUserMeResponse> {
-        return __request(OpenAPI, {
-            method: 'GET',
-            url: '/api/v1/users/me'
-        });
-    }
-    
-    /**
-     * Delete User Me
-     * Delete own user.
-     * @returns Message Successful Response
-     * @throws ApiError
-     */
-    public static deleteUserMe(): CancelablePromise<UsersDeleteUserMeResponse> {
-        return __request(OpenAPI, {
-            method: 'DELETE',
-            url: '/api/v1/users/me'
-        });
-    }
-    
-    /**
-     * Update User Me
-     * Update own user.
-     * @param data The data for the request.
-     * @param data.requestBody
-     * @returns UserPublic Successful Response
-     * @throws ApiError
-     */
-    public static updateUserMe(data: UsersUpdateUserMeData): CancelablePromise<UsersUpdateUserMeResponse> {
-        return __request(OpenAPI, {
-            method: 'PATCH',
-            url: '/api/v1/users/me',
-            body: data.requestBody,
-            mediaType: 'application/json',
-            errors: {
-                422: 'Validation Error'
-            }
-        });
-    }
-    
-    /**
-     * Update Password Me
-     * Update own password.
-     * @param data The data for the request.
-     * @param data.requestBody
-     * @returns Message Successful Response
-     * @throws ApiError
-     */
-    public static updatePasswordMe(data: UsersUpdatePasswordMeData): CancelablePromise<UsersUpdatePasswordMeResponse> {
-        return __request(OpenAPI, {
-            method: 'PATCH',
-            url: '/api/v1/users/me/password',
-            body: data.requestBody,
-            mediaType: 'application/json',
-            errors: {
-                422: 'Validation Error'
-            }
-        });
-    }
-    
-    /**
-     * Register User
-     * Create new user without the need to be logged in.
-     * @param data The data for the request.
-     * @param data.requestBody
-     * @returns UserPublic Successful Response
-     * @throws ApiError
-     */
-    public static registerUser(data: UsersRegisterUserData): CancelablePromise<UsersRegisterUserResponse> {
-        return __request(OpenAPI, {
-            method: 'POST',
-            url: '/api/v1/users/signup',
-            body: data.requestBody,
-            mediaType: 'application/json',
-            errors: {
-                422: 'Validation Error'
-            }
-        });
-    }
-    
-    /**
-     * Read User By Id
-     * Get a specific user by id.
-     * @param data The data for the request.
-     * @param data.userId
-     * @returns UserPublic Successful Response
-     * @throws ApiError
-     */
-    public static readUserById(data: UsersReadUserByIdData): CancelablePromise<UsersReadUserByIdResponse> {
-        return __request(OpenAPI, {
-            method: 'GET',
-            url: '/api/v1/users/{user_id}',
-            path: {
-                user_id: data.userId
-            },
-            errors: {
-                422: 'Validation Error'
-            }
-        });
-    }
-    
-    /**
-     * Update User
-     * Update a user.
-     * @param data The data for the request.
-     * @param data.userId
-     * @param data.requestBody
-     * @returns UserPublic Successful Response
-     * @throws ApiError
-     */
-    public static updateUser(data: UsersUpdateUserData): CancelablePromise<UsersUpdateUserResponse> {
-        return __request(OpenAPI, {
-            method: 'PATCH',
-            url: '/api/v1/users/{user_id}',
-            path: {
-                user_id: data.userId
-            },
-            body: data.requestBody,
-            mediaType: 'application/json',
-            errors: {
-                422: 'Validation Error'
-            }
-        });
-    }
-    
-    /**
-     * Delete User
-     * Delete a user.
-     * @param data The data for the request.
-     * @param data.userId
-     * @returns Message Successful Response
-     * @throws ApiError
-     */
-    public static deleteUser(data: UsersDeleteUserData): CancelablePromise<UsersDeleteUserResponse> {
-        return __request(OpenAPI, {
-            method: 'DELETE',
-            url: '/api/v1/users/{user_id}',
-            path: {
-                user_id: data.userId
-            },
-            errors: {
-                422: 'Validation Error'
-            }
-        });
-    }
-}
-
-export class UtilsService {
-    /**
-     * Test Email
-     * Test emails.
-     * @param data The data for the request.
-     * @param data.emailTo
-     * @returns Message Successful Response
-     * @throws ApiError
-     */
-    public static testEmail(data: UtilsTestEmailData): CancelablePromise<UtilsTestEmailResponse> {
-        return __request(OpenAPI, {
-            method: 'POST',
-            url: '/api/v1/utils/test-email/',
-            query: {
-                email_to: data.emailTo
-            },
-            errors: {
-                422: 'Validation Error'
-            }
-        });
-    }
-    
-    /**
-     * Health Check
-     * @returns boolean Successful Response
-     * @throws ApiError
-     */
-    public static healthCheck(): CancelablePromise<UtilsHealthCheckResponse> {
-        return __request(OpenAPI, {
-            method: 'GET',
-            url: '/api/v1/utils/health-check/'
         });
     }
 }
