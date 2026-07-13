@@ -166,22 +166,59 @@ function StepCapture({ onNext }: { onNext: () => void }) {
   )
 }
 
+export type ReviewDraft = {
+  company: string
+  role: string
+  location: string
+}
+
 function StepReview({
+  draft,
+  onDraftChange,
   onBack,
   onSave,
   saving,
 }: {
+  draft: ReviewDraft
+  onDraftChange: (draft: ReviewDraft) => void
   onBack: () => void
   onSave: () => void
   saving: boolean
 }) {
+  // The parsed posting is editable before saving -- this is the manual
+  // capture path (sprint-02 PIN-9): the fields ship to createApplication,
+  // which mints the real job row.
   return (
     <div className="card p-6">
-      <h2 className="m-0 mb-2 text-2xl font-semibold">
-        Staff Engineer, Payments core
-      </h2>
-      <div className="mb-4 text-sm text-[var(--fg-muted)]">
-        Stripe - Remote - US
+      <div className="mb-4 grid gap-3">
+        <label className="grid gap-1 text-sm font-medium">
+          Role
+          <Input
+            name="role"
+            value={draft.role}
+            onChange={(e) => onDraftChange({ ...draft, role: e.target.value })}
+          />
+        </label>
+        <label className="grid gap-1 text-sm font-medium">
+          Company
+          <Input
+            name="company"
+            value={draft.company}
+            onChange={(e) =>
+              onDraftChange({ ...draft, company: e.target.value })
+            }
+          />
+        </label>
+        <label className="grid gap-1 text-sm font-medium">
+          Location
+          <Input
+            name="location"
+            value={draft.location}
+            onChange={(e) =>
+              onDraftChange({ ...draft, location: e.target.value })
+            }
+          />
+        </label>
       </div>
       <div className="font-mono text-[12.5px] text-[var(--fg-subtle)]">
         $255-305k - full-time - greenhouse.io
@@ -200,17 +237,23 @@ function StepReview({
 
 export default function AddAppScreen() {
   const [step, setStep] = React.useState<1 | 2>(1)
+  // "Parsed" posting defaults (the capture step is still mocked); the review
+  // step lets the user correct them before the save persists a real job.
+  const [draft, setDraft] = React.useState<ReviewDraft>({
+    company: "Stripe",
+    role: "Staff Engineer, Payments core",
+    location: "Remote - US",
+  })
   const navigate = useNavigate()
   const { createApplication, isCreating } = useCreateApplication()
 
   async function handleSave() {
     try {
-      // Mock: the review step shows a fixed parsed posting; persist it as a draft.
       const createdApplication = await createApplication({
-        company: "Stripe",
-        role: "Staff Engineer, Payments core",
+        company: draft.company,
+        role: draft.role,
         stageLabel: "drafting",
-        location: "Remote - US",
+        location: draft.location,
         salary: { min: 255000, max: 305000, extra: [] },
         resume: "No resume selected yet",
         match: 0,
@@ -238,6 +281,8 @@ export default function AddAppScreen() {
           <StepCapture onNext={() => setStep(2)} />
         ) : (
           <StepReview
+            draft={draft}
+            onDraftChange={setDraft}
             onBack={() => setStep(1)}
             onSave={handleSave}
             saving={isCreating}

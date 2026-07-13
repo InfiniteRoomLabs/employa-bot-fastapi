@@ -42,13 +42,45 @@ import { Button } from "@/components/ui/button-eb"
 import { Chip } from "@/components/ui/chip"
 import { Skeleton } from "@/components/ui/skeleton"
 import { toast } from "@/components/ui/toast"
-import type { JobInboxItem } from "@/data/types"
-import { useAddJobToShortlist, useJobsInbox, useSearch } from "@/hooks"
+import type { Job, JobInboxItem } from "@/data/types"
+import { useAddJobToShortlist, useJobs, useJobsInbox, useSearch } from "@/hooks"
+import { formatSalary } from "@/lib/salary"
 
 type InboxRow = {
   job: JobInboxItem
   key: number
   status: "active" | "archived"
+}
+
+/**
+ * Project a captured Job (the DB-backed canonical collection, ADR-006) onto
+ * the row shape this screen renders. The default /jobs view lists captured
+ * jobs via getJobs since sprint-02 (PIN-2); search-scoped views keep the
+ * mock inbox feed, so both sources meet at JobInboxItem.
+ */
+function jobToInboxItem(job: Job): JobInboxItem {
+  return {
+    jobId: job.id,
+    company: job.company,
+    role: job.title,
+    location: job.location.raw,
+    compensation: formatSalary(job.compensation),
+    match: job.match?.score ?? 0,
+    source: job.source.board,
+    isNew: job.isNew,
+    posted: job.posted,
+    capturedVia: job.source.channel,
+    capturedAt: job.source.capturedAt,
+    sourceUrl: job.source.url,
+    workMode: job.workMode,
+    seniority: job.seniority,
+    summary: job.summary,
+    tags: job.tags,
+    requirements: job.requirements,
+    strengths: job.match?.strengths,
+    gaps: job.match?.gaps,
+    jd: job.description,
+  }
 }
 
 export default function JobsScreen() {
@@ -66,8 +98,23 @@ export default function JobsScreen() {
     navigate("/applications/new")
   }
 
-  // Primary data hooks - CUR-017: destructure error + refetch
-  const { data, isLoading, error, refetch } = useJobsInbox(searchId)
+  // Primary data hooks - CUR-017: destructure error + refetch.
+  // PIN-2 routing split (sprint-02): the default /jobs view lists the
+  // canonical captured collection (DB-backed getJobs); a search-scoped view
+  // keeps the mock inbox feed. Both hooks run unconditionally (rules of
+  // hooks); the unused one is ignored.
+  const inbox = useJobsInbox(searchId)
+  const captured = useJobs()
+  // Memoized: a fresh .map() array every render would re-fire the rows
+  // effect below forever.
+  const data = React.useMemo(
+    () =>
+      searchId ? inbox.data : captured.data?.map((job) => jobToInboxItem(job)),
+    [searchId, inbox.data, captured.data],
+  )
+  const isLoading = searchId ? inbox.isLoading : captured.isLoading
+  const error = searchId ? inbox.error : captured.error
+  const refetch = searchId ? inbox.refetch : captured.refetch
 
   // Secondary hook: fall back gracefully; never full-page error for a subtitle
   const { data: search } = useSearch(searchId ?? "")

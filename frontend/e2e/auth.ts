@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url"
 
 export const API_ROOT = process.env.VITE_API_URL ?? "http://localhost:8000"
 
-function envVal(key: string): string {
+export function envVal(key: string, fallback?: string): string {
   const fromProcess = process.env[key]
   if (fromProcess) {
     return fromProcess
@@ -18,18 +18,25 @@ function envVal(key: string): string {
   const env = readFileSync(resolve(specDir, "../../.env"), "utf-8")
   const line = env.split("\n").find((l) => l.startsWith(`${key}=`))
   if (!line) {
+    if (fallback !== undefined) {
+      return fallback
+    }
     throw new Error(`${key} not set and not found in ../.env`)
   }
   return line.slice(key.length + 1).trim()
 }
 
 export async function fetchAccessToken(): Promise<string> {
+  // The DEMO user (seeded with SEED_DEMO_DATA=true, the compose default):
+  // since sprint-02 the jobs surface is DB-backed and tenant-filtered, and
+  // the demo tenant is the one that owns the seeded postings the smoke
+  // fixtures (JOB_ID_STRIPE etc.) point at. Defaults mirror Settings.
   const res = await fetch(`${API_ROOT}/api/v1/login/access-token`, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
-      username: envVal("FIRST_SUPERUSER"),
-      password: envVal("FIRST_SUPERUSER_PASSWORD"),
+      username: envVal("SEED_DEMO_EMAIL", "wes.gilleland@gmail.com"),
+      password: envVal("SEED_DEMO_PASSWORD", "employa-demo-1"),
     }).toString(),
   })
   if (!res.ok) {
