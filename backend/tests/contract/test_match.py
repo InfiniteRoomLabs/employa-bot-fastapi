@@ -55,7 +55,9 @@ def test_preview_deep_match_score_unknown_job_404(store_client: TestClient) -> N
     assert resp.json()["kind"] == "not_found"
 
 
-def test_run_deep_match_score_returns_synthetic_ai_run(store_client: TestClient) -> None:
+def test_run_deep_match_score_returns_synthetic_ai_run(
+    store_client: TestClient,
+) -> None:
     resp = store_client.post(
         f"/api/v1/jobs/{JOB_ID_STRIPE}/deep-score",
         json={"resumeId": RESUME_ID},

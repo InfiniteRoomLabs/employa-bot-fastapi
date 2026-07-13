@@ -4,6 +4,9 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- The meta-tag CSP (spec PIN-7) is injected at BUILD time by the
+         inject-csp plugin in vite.config.ts: dev mode needs react-refresh's
+         inline preamble, which script-src 'self' would block. -->
     <title>Employa-Bot</title>
   </head>
   <body>

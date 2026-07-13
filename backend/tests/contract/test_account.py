@@ -32,7 +32,9 @@ def test_get_current_user_returns_remy_persona(store_client: TestClient) -> None
 # ---------------------------------------------------------------------------
 
 
-def test_request_data_export_returns_202_with_signed_url(store_client: TestClient) -> None:
+def test_request_data_export_returns_202_with_signed_url(
+    store_client: TestClient,
+) -> None:
     resp = store_client.post("/api/v1/account/data-export")
     assert resp.status_code == 202
     body = resp.json()

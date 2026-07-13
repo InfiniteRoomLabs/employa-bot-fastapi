@@ -91,7 +91,9 @@ def test_delete_resume_removes_unlocked_draft(store_client: TestClient) -> None:
     assert str(store.RESUME_ID_FOUNDER) not in {r["id"] for r in listing}
 
 
-def test_delete_resume_locked_tag_returns_409_envelope(store_client: TestClient) -> None:
+def test_delete_resume_locked_tag_returns_409_envelope(
+    store_client: TestClient,
+) -> None:
     # MASTER tag is locked regardless of usedIn.
     resp = store_client.delete(f"/api/v1/resumes/{store.RESUME_ID_MASTER}")
     assert resp.status_code == 409

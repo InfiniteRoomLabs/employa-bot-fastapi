@@ -27,7 +27,7 @@ from fastapi.testclient import TestClient
 from sqlmodel import Session
 
 from app.api import deps
-from app.core import security
+from app.core import security, throttle
 from app.core.config import settings
 from app.core.db import engine, init_db
 from app.main import app
@@ -63,9 +63,7 @@ def seed_domain() -> SeededUsers:
                     email=settings.EMAIL_TEST_USER, password=random_lower_string()
                 ),
             )
-        intruder = crud.get_user_by_email(
-            session=session, email="intruder@example.com"
-        )
+        intruder = crud.get_user_by_email(session=session, email="intruder@example.com")
         if intruder is None:
             intruder = crud.create_user(
                 session=session,
@@ -101,7 +99,13 @@ def db() -> Generator[Session]:
 
 @pytest.fixture()
 def client(db: Session) -> Generator[TestClient]:
-    """App client whose requests share the test's rollback session."""
+    """App client whose requests share the test's rollback session.
+
+    The login throttle is dropped per test so suites doing real logins never
+    inherit another test's window (the throttle itself is tested explicitly
+    in tests/api/routes/test_auth_conventions.py).
+    """
+    throttle.reset()
     app.dependency_overrides[deps.get_db] = lambda: db
     try:
         with TestClient(app) as c:
@@ -112,7 +116,9 @@ def client(db: Session) -> Generator[TestClient]:
 
 def _bearer_for(user: User) -> dict[str, str]:
     token = security.create_access_token(
-        user.id, expires_delta=timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+        user.id,
+        expires_delta=timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES),
+        session_version=user.session_version,
     )
     return {"Authorization": f"Bearer {token}"}
 
@@ -137,9 +143,7 @@ def db_client(
 
 
 @pytest.fixture()
-def intruder_client(
-    client: TestClient, seed_domain: SeededUsers
-) -> TestClient:
+def intruder_client(client: TestClient, seed_domain: SeededUsers) -> TestClient:
     """A SECOND authenticated identity, for tenancy assertions."""
     client.headers.update(_bearer_for(seed_domain.intruder))
     return client

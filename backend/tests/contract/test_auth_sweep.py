@@ -34,9 +34,7 @@ def _fill_params(path: str) -> str:
     out = []
     for segment in path.split("/"):
         if segment.startswith("{") and segment.endswith("}"):
-            out.append(
-                "probe@example.com" if "email" in segment else str(uuid.uuid4())
-            )
+            out.append("probe@example.com" if "email" in segment else str(uuid.uuid4()))
         else:
             out.append(segment)
     return "/".join(out)
@@ -75,8 +73,7 @@ def test_every_route_401s_without_a_token_via_one_envelope(
         probe_path = _fill_params(path)
         response = unauthenticated_client.request(method, probe_path)
         assert response.status_code == 401, (
-            f"{method} {path}: expected 401 without a token,"
-            f" got {response.status_code}"
+            f"{method} {path}: expected 401 without a token, got {response.status_code}"
         )
         # Byte-identical envelope modulo the (request-specific) path.
         assert response.json() == {

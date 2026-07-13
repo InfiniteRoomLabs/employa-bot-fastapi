@@ -82,7 +82,9 @@ def test_create_contact_persists_and_returns_201(store_client: TestClient) -> No
     assert store_client.get(f"/api/v1/contacts/{body['id']}").status_code == 200
 
 
-def test_update_contact_replaces_fields_and_bumps_updated(store_client: TestClient) -> None:
+def test_update_contact_replaces_fields_and_bumps_updated(
+    store_client: TestClient,
+) -> None:
     before = store_client.get(f"/api/v1/contacts/{CONTACT_ID}").json()
     resp = store_client.patch(
         f"/api/v1/contacts/{CONTACT_ID}", json=_contact_draft(name="Sarah C. Chen")
@@ -100,7 +102,9 @@ def test_update_contact_unknown_id_404(store_client: TestClient) -> None:
     assert resp.json()["kind"] == "not_found"
 
 
-def test_delete_contact_soft_deletes_and_excludes_from_list(store_client: TestClient) -> None:
+def test_delete_contact_soft_deletes_and_excludes_from_list(
+    store_client: TestClient,
+) -> None:
     resp = store_client.delete(f"/api/v1/contacts/{CONTACT_ID}")
     assert resp.status_code == 204
 
@@ -290,7 +294,9 @@ def test_update_answer_unknown_id_404(store_client: TestClient) -> None:
     assert resp.status_code == 404
 
 
-def test_delete_answer_soft_deletes_and_excludes_from_list(store_client: TestClient) -> None:
+def test_delete_answer_soft_deletes_and_excludes_from_list(
+    store_client: TestClient,
+) -> None:
     resp = store_client.delete(f"/api/v1/answers/{ANSWER_ID}")
     assert resp.status_code == 204
     listing = store_client.get("/api/v1/answers").json()
@@ -346,7 +352,9 @@ def test_update_project_unknown_id_404(store_client: TestClient) -> None:
     assert resp.status_code == 404
 
 
-def test_delete_project_soft_deletes_and_excludes_from_list(store_client: TestClient) -> None:
+def test_delete_project_soft_deletes_and_excludes_from_list(
+    store_client: TestClient,
+) -> None:
     resp = store_client.delete(f"/api/v1/projects/{PROJECT_ID}")
     assert resp.status_code == 204
     listing = store_client.get("/api/v1/projects").json()
@@ -380,7 +388,9 @@ def test_trash_is_empty_before_any_delete(store_client: TestClient) -> None:
     assert resp.json() == []
 
 
-def test_trash_lists_soft_deleted_across_kinds_newest_first(store_client: TestClient) -> None:
+def test_trash_lists_soft_deleted_across_kinds_newest_first(
+    store_client: TestClient,
+) -> None:
     store_client.delete(f"/api/v1/contacts/{CONTACT_ID}")
     store_client.delete(f"/api/v1/projects/{PROJECT_ID}")
 
@@ -400,7 +410,9 @@ def test_restore_library_item_clears_deleted_at_and_round_trips(
     store_client: TestClient,
 ) -> None:
     store_client.delete(f"/api/v1/contacts/{CONTACT_ID}")
-    assert CONTACT_ID not in {c["id"] for c in store_client.get("/api/v1/contacts").json()}
+    assert CONTACT_ID not in {
+        c["id"] for c in store_client.get("/api/v1/contacts").json()
+    }
 
     resp = store_client.post(f"/api/v1/library/contact/{CONTACT_ID}/restore")
     assert resp.status_code == 204
@@ -433,7 +445,8 @@ def test_purge_library_item_is_permanent(store_client: TestClient) -> None:
     assert store_client.get(f"/api/v1/contacts/{CONTACT_ID}").status_code == 404
     # ...and restore now 404s (nothing left to restore).
     assert (
-        store_client.post(f"/api/v1/library/contact/{CONTACT_ID}/restore").status_code == 404
+        store_client.post(f"/api/v1/library/contact/{CONTACT_ID}/restore").status_code
+        == 404
     )
 
 
@@ -470,7 +483,9 @@ def test_get_deletion_impact_project_excludes_soft_deleted_dependents(
     )
     store_client.delete(f"/api/v1/accomplishments/{tooling_accomplishment_id}")
 
-    resp = store_client.get(f"/api/v1/library/project/{PROJECT_ID_TOOLING}/deletion-impact")
+    resp = store_client.get(
+        f"/api/v1/library/project/{PROJECT_ID_TOOLING}/deletion-impact"
+    )
     assert resp.status_code == 200
     body = resp.json()
     assert body["total"] == 0

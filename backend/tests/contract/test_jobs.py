@@ -58,7 +58,9 @@ def test_get_jobs_inbox_defaults_to_canonical(store_client: TestClient) -> None:
 
 
 def test_get_jobs_inbox_filters_by_search_id(store_client: TestClient) -> None:
-    resp = store_client.get("/api/v1/jobs/inbox", params={"searchId": SEARCH_ID_BACKEND})
+    resp = store_client.get(
+        "/api/v1/jobs/inbox", params={"searchId": SEARCH_ID_BACKEND}
+    )
     assert resp.status_code == 200
     body = resp.json()
     companies = {item["company"] for item in body}

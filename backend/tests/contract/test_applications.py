@@ -78,7 +78,8 @@ def test_get_applications_unknown_search_falls_back_to_platform(
     store_client: TestClient,
 ) -> None:
     assert (
-        len(store_client.get(f"{B}/applications", params={"searchId": UNKNOWN}).json()) == 14
+        len(store_client.get(f"{B}/applications", params={"searchId": UNKNOWN}).json())
+        == 14
     )
 
 
@@ -280,7 +281,8 @@ def test_undo_unknown_token_404(store_client: TestClient) -> None:
 
 def test_mark_won_unknown_app_404(store_client: TestClient) -> None:
     assert (
-        store_client.post(f"{B}/applications/{UNKNOWN}/mark-won", json={}).status_code == 404
+        store_client.post(f"{B}/applications/{UNKNOWN}/mark-won", json={}).status_code
+        == 404
     )
 
 
@@ -302,7 +304,9 @@ def test_reactivate_clears_outcome_and_resurrects(store_client: TestClient) -> N
 
 
 def test_reactivate_unknown_404(store_client: TestClient) -> None:
-    assert store_client.post(f"{B}/applications/{UNKNOWN}/reactivate").status_code == 404
+    assert (
+        store_client.post(f"{B}/applications/{UNKNOWN}/reactivate").status_code == 404
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -334,7 +338,8 @@ def test_dismiss_post_applied_withdraws_and_archives(store_client: TestClient) -
 
 def test_dismiss_unknown_404(store_client: TestClient) -> None:
     assert (
-        store_client.post(f"{B}/applications/{UNKNOWN}/dismiss", json={}).status_code == 404
+        store_client.post(f"{B}/applications/{UNKNOWN}/dismiss", json={}).status_code
+        == 404
     )
 
 

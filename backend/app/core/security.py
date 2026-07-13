@@ -1,5 +1,6 @@
 from datetime import UTC, datetime, timedelta
 from typing import Any
+from uuid import uuid4
 
 import jwt
 from pwdlib import PasswordHash
@@ -18,12 +19,39 @@ password_hash = PasswordHash(
 
 ALGORITHM = "HS256"
 
+# Bound into every token and enforced at decode (plan v3 Auth conventions).
+TOKEN_ISSUER = "employa-bot"
+TOKEN_AUDIENCE = "employa-bot-api"
 
-def create_access_token(subject: str | Any, expires_delta: timedelta) -> str:
-    expire = datetime.now(UTC) + expires_delta
-    to_encode = {"exp": expire, "sub": str(subject)}
+
+def create_access_token(
+    subject: str | Any, expires_delta: timedelta, session_version: int = 0
+) -> str:
+    now = datetime.now(UTC)
+    to_encode = {
+        "exp": now + expires_delta,
+        "sub": str(subject),
+        "iss": TOKEN_ISSUER,
+        "aud": TOKEN_AUDIENCE,
+        "iat": now,
+        "nbf": now,
+        "jti": str(uuid4()),
+        "sv": session_version,
+    }
     encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
+
+
+def decode_access_token(token: str) -> dict[str, Any]:
+    """Decode + validate signature, exp/nbf, issuer, and audience."""
+    return jwt.decode(
+        token,
+        settings.SECRET_KEY,
+        algorithms=[ALGORITHM],
+        audience=TOKEN_AUDIENCE,
+        issuer=TOKEN_ISSUER,
+        options={"require": ["exp", "sub", "iss", "aud", "iat", "nbf", "jti"]},
+    )
 
 
 def verify_password(

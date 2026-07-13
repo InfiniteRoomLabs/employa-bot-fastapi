@@ -30,9 +30,18 @@ class Settings(BaseSettings):
         extra="ignore",
     )
     API_V1_STR: str = "/api/v1"
-    SECRET_KEY: str = secrets.token_urlsafe(32)
-    # 60 minutes * 24 hours * 8 days = 8 days
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 8
+    # Fail-closed outside local (plan v3 Auth): an unset SECRET_KEY raises in
+    # _enforce_non_default_secrets; only local generates a throwaway default.
+    SECRET_KEY: str = ""
+    # 60 minutes (queue rev 1 recorded default; dropped from the template's
+    # 8 days -- localStorage retention is paired with the CSP).
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
+    # Login throttle windows (per minute; defaults pinned in
+    # docs/sprints/sprint-01-spec.md PIN-7). Overridable via env like any
+    # other setting.
+    LOGIN_THROTTLE_ACCOUNT_PER_MINUTE: int = 5
+    LOGIN_THROTTLE_IP_PER_MINUTE: int = 10
+    LOGIN_THROTTLE_GLOBAL_PER_MINUTE: int = 100
     FRONTEND_HOST: str = "http://localhost:5173"
     ENVIRONMENT: Literal["local", "staging", "production"] = "local"
 
@@ -111,6 +120,13 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def _enforce_non_default_secrets(self) -> Self:
+        if not self.SECRET_KEY:
+            if self.ENVIRONMENT == "local":
+                self.SECRET_KEY = secrets.token_urlsafe(32)
+            else:
+                raise ValueError(
+                    "SECRET_KEY must be explicitly set outside ENVIRONMENT=local"
+                )
         self._check_default_secret("SECRET_KEY", self.SECRET_KEY)
         self._check_default_secret("POSTGRES_PASSWORD", self.POSTGRES_PASSWORD)
         self._check_default_secret(

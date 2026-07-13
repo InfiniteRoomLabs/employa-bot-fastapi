@@ -111,10 +111,10 @@ def test_runtime_role_exists_with_dml_but_no_alembic_version_access(
 def append_only_probe(scratch_engine: Engine) -> Generator[Engine]:
     """A probe table with the append-only machinery applied, dropped after."""
     with scratch_engine.begin() as conn:
+        conn.execute(text("CREATE TABLE _ao_probe (id serial PRIMARY KEY, note text)"))
         conn.execute(
-            text("CREATE TABLE _ao_probe (id serial PRIMARY KEY, note text)")
+            text("GRANT SELECT, INSERT, UPDATE, DELETE ON _ao_probe TO app_runtime")
         )
-        conn.execute(text("GRANT SELECT, INSERT, UPDATE, DELETE ON _ao_probe TO app_runtime"))
         conn.execute(text("GRANT USAGE ON SEQUENCE _ao_probe_id_seq TO app_runtime"))
         conn.execute(text("SELECT enforce_append_only('_ao_probe')"))
         conn.execute(text("INSERT INTO _ao_probe (note) VALUES ('seed')"))

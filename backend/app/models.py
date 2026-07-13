@@ -62,6 +62,8 @@ class UpdatePassword(SQLModel):
 class User(UserBase, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     hashed_password: str
+    # Bumping invalidates every outstanding token for this user (JWT sv claim).
+    session_version: int = Field(default=0, nullable=False)
     created_at: datetime | None = Field(
         default_factory=get_datetime_utc,
         sa_type=DateTime(timezone=True),  # type: ignore
@@ -90,9 +92,10 @@ class Token(SQLModel):
     token_type: str = "bearer"
 
 
-# Contents of JWT token
+# Contents of JWT token (claim set: plan v3 Auth conventions)
 class TokenPayload(SQLModel):
     sub: str | None = None
+    sv: int = 0
 
 
 class NewPassword(SQLModel):

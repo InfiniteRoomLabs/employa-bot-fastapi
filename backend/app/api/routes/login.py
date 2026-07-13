@@ -1,13 +1,14 @@
 from datetime import timedelta
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from fastapi.security import OAuth2PasswordRequestForm
 
 from app import crud
 from app.api.deps import CurrentUser, SessionDep, get_current_active_superuser
-from app.core import security
+from app.api.errors import RateLimitedError
+from app.core import security, throttle
 from app.core.config import settings
 from app.models import Message, NewPassword, Token, UserPublic, UserUpdate
 from app.utils import (
@@ -22,22 +23,30 @@ router = APIRouter(tags=["login"])
 
 @router.post("/login/access-token")
 def login_access_token(
-    session: SessionDep, form_data: Annotated[OAuth2PasswordRequestForm, Depends()]
+    request: Request,
+    session: SessionDep,
+    form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
 ) -> Token:
     """
     OAuth2 compatible token login, get an access token for future requests
     """
+    # Throttle BEFORE password verification (plan v3 Auth: the throttle is the
+    # DoS guard in front of argon2), per-account + per-IP + global.
+    client_ip = request.client.host if request.client else "unknown"
+    if not throttle.login_attempt_allowed(account=form_data.username, ip=client_ip):
+        raise RateLimitedError("Too many login attempts; try again shortly")
     user = crud.authenticate(
         session=session, email=form_data.username, password=form_data.password
     )
-    if not user:
+    # One message for unknown-user / bad-password / inactive (no enumeration).
+    if not user or not user.is_active:
         raise HTTPException(status_code=400, detail="Incorrect email or password")
-    elif not user.is_active:
-        raise HTTPException(status_code=400, detail="Inactive user")
     access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     return Token(
         access_token=security.create_access_token(
-            user.id, expires_delta=access_token_expires
+            user.id,
+            expires_delta=access_token_expires,
+            session_version=user.session_version,
         )
     )
 

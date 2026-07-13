@@ -65,7 +65,9 @@ def test_patch_agent_merges_state_and_preserves_other_fields(
     assert body["costUsd"] == 0.08
 
     # live-only patch leaves state alone.
-    resp2 = store_client.patch(f"/api/v1/agents/{store.AGENT_ID_STALE}", json={"live": False})
+    resp2 = store_client.patch(
+        f"/api/v1/agents/{store.AGENT_ID_STALE}", json={"live": False}
+    )
     assert resp2.status_code == 200
     body2 = resp2.json()
     assert body2["live"] is False
@@ -97,7 +99,9 @@ def test_get_agent_permissions_unknown_id_returns_empty_list(
     assert resp.json() == []
 
 
-def test_get_agent_trust_tier_returns_current_and_ladder(store_client: TestClient) -> None:
+def test_get_agent_trust_tier_returns_current_and_ladder(
+    store_client: TestClient,
+) -> None:
     resp = store_client.get(f"/api/v1/agents/{store.AGENT_ID_COACH}/trust-tier")
     assert resp.status_code == 200
     body = resp.json()
@@ -201,7 +205,9 @@ def test_reject_agent_action_unknown_id_404(store_client: TestClient) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_patch_agent_trust_tier_always_returns_granted(store_client: TestClient) -> None:
+def test_patch_agent_trust_tier_always_returns_granted(
+    store_client: TestClient,
+) -> None:
     resp = store_client.patch(
         f"/api/v1/agents/{store.AGENT_ID_STALE}/trust-tier",
         json={"targetTier": "autonomous"},

@@ -85,7 +85,9 @@ def test_create_projection_defaults_and_persists(store_client: TestClient) -> No
     assert body["body"] == "Projection including 2 career-history items."
 
     # Persisted: shows up in both getResumes and getProjections.
-    assert resp.json()["id"] in {r["id"] for r in store_client.get("/api/v1/resumes").json()}
+    assert resp.json()["id"] in {
+        r["id"] for r in store_client.get("/api/v1/resumes").json()
+    }
     assert resp.json()["id"] in {
         r["id"] for r in store_client.get("/api/v1/projections").json()
     }

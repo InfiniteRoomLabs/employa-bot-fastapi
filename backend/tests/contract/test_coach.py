@@ -44,7 +44,9 @@ def test_get_coach_thread_stripe_bundle_has_messages_and_context(
     assert body["context"][0]["label"] == "Application"
 
 
-def test_get_coach_thread_other_thread_has_empty_messages(store_client: TestClient) -> None:
+def test_get_coach_thread_other_thread_has_empty_messages(
+    store_client: TestClient,
+) -> None:
     resp = store_client.get(f"/api/v1/coach/threads/{store.THREAD_ID_LINEAR}")
     assert resp.status_code == 200
     body = resp.json()
@@ -53,7 +55,9 @@ def test_get_coach_thread_other_thread_has_empty_messages(store_client: TestClie
     assert any(card["label"] == "Interview type" for card in body["context"])
 
 
-def test_get_coach_thread_unknown_id_returns_404_envelope(store_client: TestClient) -> None:
+def test_get_coach_thread_unknown_id_returns_404_envelope(
+    store_client: TestClient,
+) -> None:
     resp = store_client.get(f"/api/v1/coach/threads/{UNKNOWN_ID}")
     assert resp.status_code == 404
     body = resp.json()
@@ -66,7 +70,9 @@ def test_get_coach_thread_unknown_id_returns_404_envelope(store_client: TestClie
 # ---------------------------------------------------------------------------
 
 
-def test_propose_coach_edit_returns_canned_pending_proposal(store_client: TestClient) -> None:
+def test_propose_coach_edit_returns_canned_pending_proposal(
+    store_client: TestClient,
+) -> None:
     resp = store_client.post(
         "/api/v1/coach/proposals",
         json={"scope": "résumé", "label": "this resume"},
@@ -104,7 +110,9 @@ def test_save_coach_proposal_returns_attributed_timeline_event(
         "diff": [{"field": "Experience bullet", "before": "before", "after": "after"}],
         "status": "pending",
     }
-    resp = store_client.post(f"/api/v1/coach/proposals/{proposal_id}/accept", json=proposal)
+    resp = store_client.post(
+        f"/api/v1/coach/proposals/{proposal_id}/accept", json=proposal
+    )
     assert resp.status_code == 200
     body = resp.json()
     assert body["who"] == "Coach"

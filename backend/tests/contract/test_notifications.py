@@ -24,7 +24,9 @@ def test_get_notifications_lists_seeded_six(store_client: TestClient) -> None:
     assert "icon" not in body[0]
 
 
-def test_mark_notification_read_flips_unread_and_persists(store_client: TestClient) -> None:
+def test_mark_notification_read_flips_unread_and_persists(
+    store_client: TestClient,
+) -> None:
     resp = store_client.post(f"/api/v1/notifications/{NOTIFICATION_ID_REPLY}/read")
     assert resp.status_code == 200
     body = resp.json()

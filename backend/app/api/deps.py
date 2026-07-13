@@ -1,7 +1,6 @@
 from collections.abc import Generator
 from typing import Annotated
 
-import jwt
 from fastapi import Depends, HTTPException
 from fastapi.security import OAuth2PasswordBearer
 from jwt.exceptions import InvalidTokenError
@@ -42,17 +41,16 @@ def get_current_user(session: SessionDep, token: TokenDep) -> User:
     DB-free.
     """
     user: User | None = None
+    token_data = TokenPayload()
     if token:
         try:
-            payload = jwt.decode(
-                token, settings.SECRET_KEY, algorithms=[security.ALGORITHM]
-            )
+            payload = security.decode_access_token(token)
             token_data = TokenPayload(**payload)
         except InvalidTokenError, ValidationError:
             user = None
         else:
             user = session.get(User, token_data.sub)
-    if user is None or not user.is_active:
+    if user is None or not user.is_active or user.session_version != token_data.sv:
         raise UnauthorizedError("Could not validate credentials")
     return user
 
