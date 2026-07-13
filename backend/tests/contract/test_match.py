@@ -15,9 +15,9 @@ RESUME_ID = "11111111-1111-4111-8111-111111111111"
 
 
 def test_get_match_report_echoes_query_ids_onto_canonical_fixture(
-    client: TestClient,
+    store_client: TestClient,
 ) -> None:
-    resp = client.get(
+    resp = store_client.get(
         "/api/v1/match-report",
         params={"resumeId": RESUME_ID, "jobId": JOB_ID_STRIPE},
     )
@@ -31,8 +31,8 @@ def test_get_match_report_echoes_query_ids_onto_canonical_fixture(
     assert len(body["strengths"]) == 4
 
 
-def test_preview_deep_match_score_cost_arithmetic(client: TestClient) -> None:
-    resp = client.post(
+def test_preview_deep_match_score_cost_arithmetic(store_client: TestClient) -> None:
+    resp = store_client.post(
         f"/api/v1/jobs/{JOB_ID_STRIPE}/preview-deep-score",
         json={"resumeIds": [RESUME_ID]},
     )
@@ -46,8 +46,8 @@ def test_preview_deep_match_score_cost_arithmetic(client: TestClient) -> None:
     assert body["overCap"] is False
 
 
-def test_preview_deep_match_score_unknown_job_404(client: TestClient) -> None:
-    resp = client.post(
+def test_preview_deep_match_score_unknown_job_404(store_client: TestClient) -> None:
+    resp = store_client.post(
         f"/api/v1/jobs/{UNKNOWN_ID}/preview-deep-score",
         json={"resumeIds": [RESUME_ID]},
     )
@@ -55,8 +55,8 @@ def test_preview_deep_match_score_unknown_job_404(client: TestClient) -> None:
     assert resp.json()["kind"] == "not_found"
 
 
-def test_run_deep_match_score_returns_synthetic_ai_run(client: TestClient) -> None:
-    resp = client.post(
+def test_run_deep_match_score_returns_synthetic_ai_run(store_client: TestClient) -> None:
+    resp = store_client.post(
         f"/api/v1/jobs/{JOB_ID_STRIPE}/deep-score",
         json={"resumeId": RESUME_ID},
     )
@@ -80,10 +80,10 @@ def test_run_deep_match_score_returns_synthetic_ai_run(client: TestClient) -> No
 
 
 def test_run_deep_match_score_cap_reached_returns_402_envelope(
-    client: TestClient,
+    store_client: TestClient,
 ) -> None:
     store.month_spend_usd = 19.99  # headroom (0.01) < unit cost (0.14)
-    resp = client.post(
+    resp = store_client.post(
         f"/api/v1/jobs/{JOB_ID_STRIPE}/deep-score",
         json={"resumeId": RESUME_ID},
     )
@@ -95,8 +95,8 @@ def test_run_deep_match_score_cap_reached_returns_402_envelope(
     assert store.month_spend_usd == 19.99
 
 
-def test_run_deep_match_score_unknown_job_404(client: TestClient) -> None:
-    resp = client.post(
+def test_run_deep_match_score_unknown_job_404(store_client: TestClient) -> None:
+    resp = store_client.post(
         f"/api/v1/jobs/{UNKNOWN_ID}/deep-score",
         json={"resumeId": RESUME_ID},
     )

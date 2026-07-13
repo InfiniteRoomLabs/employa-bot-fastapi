@@ -20,8 +20,8 @@ from tests.contract.helpers import UNKNOWN_ID
 # ---------------------------------------------------------------------------
 
 
-def test_get_coach_threads_lists_seeded_five(client: TestClient) -> None:
-    resp = client.get("/api/v1/coach/threads")
+def test_get_coach_threads_lists_seeded_five(store_client: TestClient) -> None:
+    resp = store_client.get("/api/v1/coach/threads")
     assert resp.status_code == 200
     body = resp.json()
     assert len(body) == 5
@@ -30,9 +30,9 @@ def test_get_coach_threads_lists_seeded_five(client: TestClient) -> None:
 
 
 def test_get_coach_thread_stripe_bundle_has_messages_and_context(
-    client: TestClient,
+    store_client: TestClient,
 ) -> None:
-    resp = client.get(f"/api/v1/coach/threads/{store.THREAD_ID_STRIPE}")
+    resp = store_client.get(f"/api/v1/coach/threads/{store.THREAD_ID_STRIPE}")
     assert resp.status_code == 200
     body = resp.json()
     assert body["thread"]["title"] == "Stripe follow-up"
@@ -44,8 +44,8 @@ def test_get_coach_thread_stripe_bundle_has_messages_and_context(
     assert body["context"][0]["label"] == "Application"
 
 
-def test_get_coach_thread_other_thread_has_empty_messages(client: TestClient) -> None:
-    resp = client.get(f"/api/v1/coach/threads/{store.THREAD_ID_LINEAR}")
+def test_get_coach_thread_other_thread_has_empty_messages(store_client: TestClient) -> None:
+    resp = store_client.get(f"/api/v1/coach/threads/{store.THREAD_ID_LINEAR}")
     assert resp.status_code == 200
     body = resp.json()
     assert body["messages"] == []
@@ -53,8 +53,8 @@ def test_get_coach_thread_other_thread_has_empty_messages(client: TestClient) ->
     assert any(card["label"] == "Interview type" for card in body["context"])
 
 
-def test_get_coach_thread_unknown_id_returns_404_envelope(client: TestClient) -> None:
-    resp = client.get(f"/api/v1/coach/threads/{UNKNOWN_ID}")
+def test_get_coach_thread_unknown_id_returns_404_envelope(store_client: TestClient) -> None:
+    resp = store_client.get(f"/api/v1/coach/threads/{UNKNOWN_ID}")
     assert resp.status_code == 404
     body = resp.json()
     assert body["kind"] == "not_found"
@@ -66,8 +66,8 @@ def test_get_coach_thread_unknown_id_returns_404_envelope(client: TestClient) ->
 # ---------------------------------------------------------------------------
 
 
-def test_propose_coach_edit_returns_canned_pending_proposal(client: TestClient) -> None:
-    resp = client.post(
+def test_propose_coach_edit_returns_canned_pending_proposal(store_client: TestClient) -> None:
+    resp = store_client.post(
         "/api/v1/coach/proposals",
         json={"scope": "résumé", "label": "this resume"},
     )
@@ -79,9 +79,9 @@ def test_propose_coach_edit_returns_canned_pending_proposal(client: TestClient) 
 
 
 def test_propose_coach_edit_falls_back_to_resume_fixture_for_unmapped_scope(
-    client: TestClient,
+    store_client: TestClient,
 ) -> None:
-    resp = client.post(
+    resp = store_client.post(
         "/api/v1/coach/proposals",
         json={"scope": "general", "label": "general strategy"},
     )
@@ -91,7 +91,7 @@ def test_propose_coach_edit_falls_back_to_resume_fixture_for_unmapped_scope(
 
 
 def test_save_coach_proposal_returns_attributed_timeline_event(
-    client: TestClient,
+    store_client: TestClient,
 ) -> None:
     # Path id is UUID-shaped per the contract's shared `id` parameter (the
     # proposal's own `id` field is a plain string set by proposeCoachEdit to
@@ -104,7 +104,7 @@ def test_save_coach_proposal_returns_attributed_timeline_event(
         "diff": [{"field": "Experience bullet", "before": "before", "after": "after"}],
         "status": "pending",
     }
-    resp = client.post(f"/api/v1/coach/proposals/{proposal_id}/accept", json=proposal)
+    resp = store_client.post(f"/api/v1/coach/proposals/{proposal_id}/accept", json=proposal)
     assert resp.status_code == 200
     body = resp.json()
     assert body["who"] == "Coach"

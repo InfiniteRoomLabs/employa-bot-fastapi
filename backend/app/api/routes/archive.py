@@ -8,12 +8,13 @@ the mock exactly: ``won`` -> outcome WON; ``passed`` -> outcome in
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
 
 from app import store
+from app.api.deps import get_current_user
 from app.schemas import ApplicationView, Outcome
 
-router = APIRouter(tags=["archive"])
+router = APIRouter(dependencies=[Depends(get_current_user)], tags=["archive"])
 
 _PASSED_OUTCOMES: frozenset[Outcome] = frozenset({Outcome.rejected, Outcome.withdrawn})
 

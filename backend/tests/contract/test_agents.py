@@ -20,8 +20,8 @@ from tests.contract.helpers import UNKNOWN_ID
 # ---------------------------------------------------------------------------
 
 
-def test_get_agents_lists_seeded_three(client: TestClient) -> None:
-    resp = client.get("/api/v1/agents")
+def test_get_agents_lists_seeded_three(store_client: TestClient) -> None:
+    resp = store_client.get("/api/v1/agents")
     assert resp.status_code == 200
     body = resp.json()
     assert len(body) == 3
@@ -29,8 +29,8 @@ def test_get_agents_lists_seeded_three(client: TestClient) -> None:
     assert str(store.AGENT_ID_STALE) in ids
 
 
-def test_get_agent_returns_wire_shape(client: TestClient) -> None:
-    resp = client.get(f"/api/v1/agents/{store.AGENT_ID_STALE}")
+def test_get_agent_returns_wire_shape(store_client: TestClient) -> None:
+    resp = store_client.get(f"/api/v1/agents/{store.AGENT_ID_STALE}")
     assert resp.status_code == 200
     body = resp.json()
     assert body["name"] == "Stale-detector"
@@ -43,8 +43,8 @@ def test_get_agent_returns_wire_shape(client: TestClient) -> None:
     assert "stateLabel" not in body
 
 
-def test_get_agent_unknown_id_returns_404_envelope(client: TestClient) -> None:
-    resp = client.get(f"/api/v1/agents/{UNKNOWN_ID}")
+def test_get_agent_unknown_id_returns_404_envelope(store_client: TestClient) -> None:
+    resp = store_client.get(f"/api/v1/agents/{UNKNOWN_ID}")
     assert resp.status_code == 404
     body = resp.json()
     assert body["kind"] == "not_found"
@@ -52,9 +52,9 @@ def test_get_agent_unknown_id_returns_404_envelope(client: TestClient) -> None:
 
 
 def test_patch_agent_merges_state_and_preserves_other_fields(
-    client: TestClient,
+    store_client: TestClient,
 ) -> None:
-    resp = client.patch(
+    resp = store_client.patch(
         f"/api/v1/agents/{store.AGENT_ID_STALE}", json={"state": "paused"}
     )
     assert resp.status_code == 200
@@ -65,21 +65,21 @@ def test_patch_agent_merges_state_and_preserves_other_fields(
     assert body["costUsd"] == 0.08
 
     # live-only patch leaves state alone.
-    resp2 = client.patch(f"/api/v1/agents/{store.AGENT_ID_STALE}", json={"live": False})
+    resp2 = store_client.patch(f"/api/v1/agents/{store.AGENT_ID_STALE}", json={"live": False})
     assert resp2.status_code == 200
     body2 = resp2.json()
     assert body2["live"] is False
     assert body2["state"] == "paused"
 
 
-def test_patch_agent_unknown_id_404(client: TestClient) -> None:
-    resp = client.patch(f"/api/v1/agents/{UNKNOWN_ID}", json={"live": True})
+def test_patch_agent_unknown_id_404(store_client: TestClient) -> None:
+    resp = store_client.patch(f"/api/v1/agents/{UNKNOWN_ID}", json={"live": True})
     assert resp.status_code == 404
     assert resp.json()["kind"] == "not_found"
 
 
-def test_get_agent_permissions_enriches_required_tier(client: TestClient) -> None:
-    resp = client.get(f"/api/v1/agents/{store.AGENT_ID_GHOST}/permissions")
+def test_get_agent_permissions_enriches_required_tier(store_client: TestClient) -> None:
+    resp = store_client.get(f"/api/v1/agents/{store.AGENT_ID_GHOST}/permissions")
     assert resp.status_code == 200
     body = resp.json()
     by_permission = {p["permission"]: p for p in body}
@@ -90,15 +90,15 @@ def test_get_agent_permissions_enriches_required_tier(client: TestClient) -> Non
 
 
 def test_get_agent_permissions_unknown_id_returns_empty_list(
-    client: TestClient,
+    store_client: TestClient,
 ) -> None:
-    resp = client.get(f"/api/v1/agents/{UNKNOWN_ID}/permissions")
+    resp = store_client.get(f"/api/v1/agents/{UNKNOWN_ID}/permissions")
     assert resp.status_code == 200
     assert resp.json() == []
 
 
-def test_get_agent_trust_tier_returns_current_and_ladder(client: TestClient) -> None:
-    resp = client.get(f"/api/v1/agents/{store.AGENT_ID_COACH}/trust-tier")
+def test_get_agent_trust_tier_returns_current_and_ladder(store_client: TestClient) -> None:
+    resp = store_client.get(f"/api/v1/agents/{store.AGENT_ID_COACH}/trust-tier")
     assert resp.status_code == 200
     body = resp.json()
     assert body["agentId"] == str(store.AGENT_ID_COACH)
@@ -111,20 +111,20 @@ def test_get_agent_trust_tier_returns_current_and_ladder(client: TestClient) -> 
     ]
 
 
-def test_get_agent_trust_tier_unknown_id_404(client: TestClient) -> None:
-    resp = client.get(f"/api/v1/agents/{UNKNOWN_ID}/trust-tier")
+def test_get_agent_trust_tier_unknown_id_404(store_client: TestClient) -> None:
+    resp = store_client.get(f"/api/v1/agents/{UNKNOWN_ID}/trust-tier")
     assert resp.status_code == 404
     assert resp.json()["kind"] == "not_found"
 
 
-def test_get_agent_log_no_filter_returns_all_six(client: TestClient) -> None:
-    resp = client.get("/api/v1/agents/log")
+def test_get_agent_log_no_filter_returns_all_six(store_client: TestClient) -> None:
+    resp = store_client.get("/api/v1/agents/log")
     assert resp.status_code == 200
     assert len(resp.json()) == 6
 
 
-def test_get_agent_log_filters_by_agent_id(client: TestClient) -> None:
-    resp = client.get(
+def test_get_agent_log_filters_by_agent_id(store_client: TestClient) -> None:
+    resp = store_client.get(
         "/api/v1/agents/log", params={"agentId": str(store.AGENT_ID_GHOST)}
     )
     assert resp.status_code == 200
@@ -133,8 +133,8 @@ def test_get_agent_log_filters_by_agent_id(client: TestClient) -> None:
     assert all(entry["agentId"] == str(store.AGENT_ID_GHOST) for entry in body)
 
 
-def test_get_agent_log_filters_by_kind(client: TestClient) -> None:
-    resp = client.get("/api/v1/agents/log", params={"kind": "await"})
+def test_get_agent_log_filters_by_kind(store_client: TestClient) -> None:
+    resp = store_client.get("/api/v1/agents/log", params={"kind": "await"})
     assert resp.status_code == 200
     body = resp.json()
     assert len(body) == 1
@@ -142,8 +142,8 @@ def test_get_agent_log_filters_by_kind(client: TestClient) -> None:
     assert body[0]["message"] == "Drafted follow-up for Stripe — awaiting your send"
 
 
-def test_get_agent_log_filters_combine(client: TestClient) -> None:
-    resp = client.get(
+def test_get_agent_log_filters_combine(store_client: TestClient) -> None:
+    resp = store_client.get(
         "/api/v1/agents/log",
         params={"agentId": str(store.AGENT_ID_STALE), "kind": "auto"},
     )
@@ -160,8 +160,8 @@ def test_get_agent_log_filters_combine(client: TestClient) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_get_review_queue_derives_await_entries_only(client: TestClient) -> None:
-    resp = client.get("/api/v1/agents/review-queue")
+def test_get_review_queue_derives_await_entries_only(store_client: TestClient) -> None:
+    resp = store_client.get("/api/v1/agents/review-queue")
     assert resp.status_code == 200
     body = resp.json()
     assert len(body) == 1
@@ -171,28 +171,28 @@ def test_get_review_queue_derives_await_entries_only(client: TestClient) -> None
     uuid.UUID(body[0]["id"])
 
 
-def test_approve_agent_action_no_op_success(client: TestClient) -> None:
-    queue = client.get("/api/v1/agents/review-queue").json()
+def test_approve_agent_action_no_op_success(store_client: TestClient) -> None:
+    queue = store_client.get("/api/v1/agents/review-queue").json()
     item_id = queue[0]["id"]
-    resp = client.post(f"/api/v1/agents/review-queue/{item_id}/approve")
+    resp = store_client.post(f"/api/v1/agents/review-queue/{item_id}/approve")
     assert resp.status_code == 204
 
 
-def test_approve_agent_action_unknown_id_404(client: TestClient) -> None:
-    resp = client.post(f"/api/v1/agents/review-queue/{UNKNOWN_ID}/approve")
+def test_approve_agent_action_unknown_id_404(store_client: TestClient) -> None:
+    resp = store_client.post(f"/api/v1/agents/review-queue/{UNKNOWN_ID}/approve")
     assert resp.status_code == 404
     assert resp.json()["kind"] == "not_found"
 
 
-def test_reject_agent_action_no_op_success(client: TestClient) -> None:
-    queue = client.get("/api/v1/agents/review-queue").json()
+def test_reject_agent_action_no_op_success(store_client: TestClient) -> None:
+    queue = store_client.get("/api/v1/agents/review-queue").json()
     item_id = queue[0]["id"]
-    resp = client.post(f"/api/v1/agents/review-queue/{item_id}/reject")
+    resp = store_client.post(f"/api/v1/agents/review-queue/{item_id}/reject")
     assert resp.status_code == 204
 
 
-def test_reject_agent_action_unknown_id_404(client: TestClient) -> None:
-    resp = client.post(f"/api/v1/agents/review-queue/{UNKNOWN_ID}/reject")
+def test_reject_agent_action_unknown_id_404(store_client: TestClient) -> None:
+    resp = store_client.post(f"/api/v1/agents/review-queue/{UNKNOWN_ID}/reject")
     assert resp.status_code == 404
 
 
@@ -201,8 +201,8 @@ def test_reject_agent_action_unknown_id_404(client: TestClient) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_patch_agent_trust_tier_always_returns_granted(client: TestClient) -> None:
-    resp = client.patch(
+def test_patch_agent_trust_tier_always_returns_granted(store_client: TestClient) -> None:
+    resp = store_client.patch(
         f"/api/v1/agents/{store.AGENT_ID_STALE}/trust-tier",
         json={"targetTier": "autonomous"},
     )
@@ -213,12 +213,12 @@ def test_patch_agent_trust_tier_always_returns_granted(client: TestClient) -> No
     assert body["agentId"] == str(store.AGENT_ID_STALE)
 
     # Persisted: a subsequent trust-tier GET reflects the change.
-    again = client.get(f"/api/v1/agents/{store.AGENT_ID_STALE}/trust-tier").json()
+    again = store_client.get(f"/api/v1/agents/{store.AGENT_ID_STALE}/trust-tier").json()
     assert again["currentTier"] == "autonomous"
 
 
-def test_patch_agent_trust_tier_unknown_id_404(client: TestClient) -> None:
-    resp = client.patch(
+def test_patch_agent_trust_tier_unknown_id_404(store_client: TestClient) -> None:
+    resp = store_client.patch(
         f"/api/v1/agents/{UNKNOWN_ID}/trust-tier",
         json={"targetTier": "observe"},
     )

@@ -11,14 +11,14 @@ from fastapi.testclient import TestClient
 from tests.contract.helpers import B
 
 
-def test_archive_buckets(client: TestClient) -> None:
-    assert len(client.get(f"{B}/archive", params={"kind": "won"}).json()) == 1
-    assert len(client.get(f"{B}/archive", params={"kind": "passed"}).json()) == 14
+def test_archive_buckets(store_client: TestClient) -> None:
+    assert len(store_client.get(f"{B}/archive", params={"kind": "won"}).json()) == 1
+    assert len(store_client.get(f"{B}/archive", params={"kind": "passed"}).json()) == 14
 
 
-def test_archive_counts_seeded(client: TestClient) -> None:
-    assert client.get(f"{B}/archive/counts").json() == {"won": 1, "passed": 14}
+def test_archive_counts_seeded(store_client: TestClient) -> None:
+    assert store_client.get(f"{B}/archive/counts").json() == {"won": 1, "passed": 14}
 
 
-def test_archive_kind_required(client: TestClient) -> None:
-    assert client.get(f"{B}/archive").status_code == 422
+def test_archive_kind_required(store_client: TestClient) -> None:
+    assert store_client.get(f"{B}/archive").status_code == 422

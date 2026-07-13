@@ -49,13 +49,14 @@ from __future__ import annotations
 from typing import Annotated
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Body
+from fastapi import APIRouter, Body, Depends
 
 from app import store
+from app.api.deps import get_current_user
 from app.api.errors import NotFoundError
 from app.schemas import CreateSearchInput, Search, SearchCriteria, State
 
-router = APIRouter(tags=["searches"])
+router = APIRouter(dependencies=[Depends(get_current_user)], tags=["searches"])
 
 
 @router.get("/searches", operation_id="getSearches", response_model=list[Search])

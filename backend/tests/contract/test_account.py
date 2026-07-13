@@ -14,8 +14,8 @@ from fastapi.testclient import TestClient
 # ---------------------------------------------------------------------------
 
 
-def test_get_current_user_returns_remy_persona(client: TestClient) -> None:
-    resp = client.get("/api/v1/user")
+def test_get_current_user_returns_remy_persona(store_client: TestClient) -> None:
+    resp = store_client.get("/api/v1/user")
     assert resp.status_code == 200
     body = resp.json()
     assert body["name"] == "Wes Gilleland"
@@ -32,16 +32,16 @@ def test_get_current_user_returns_remy_persona(client: TestClient) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_request_data_export_returns_202_with_signed_url(client: TestClient) -> None:
-    resp = client.post("/api/v1/account/data-export")
+def test_request_data_export_returns_202_with_signed_url(store_client: TestClient) -> None:
+    resp = store_client.post("/api/v1/account/data-export")
     assert resp.status_code == 202
     body = resp.json()
     assert body["url"].startswith("https://export.employa.app/download/")
     assert "requestedAt" in body
 
 
-def test_delete_account_returns_202_with_grace_period(client: TestClient) -> None:
-    resp = client.post("/api/v1/account/delete")
+def test_delete_account_returns_202_with_grace_period(store_client: TestClient) -> None:
+    resp = store_client.post("/api/v1/account/delete")
     assert resp.status_code == 202
     body = resp.json()
     assert set(body) == {"gracePeriodEndsAt"}

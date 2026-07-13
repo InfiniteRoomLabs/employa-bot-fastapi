@@ -23,14 +23,14 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from pydantic import AnyUrl, AwareDatetime, BaseModel
 
-from app import store
+from app.api.deps import CurrentUser, get_current_user
 from app.schemas import DataExportRequest, User
 
-user_router = APIRouter(tags=["user"])
-account_router = APIRouter(tags=["account"])
+user_router = APIRouter(dependencies=[Depends(get_current_user)], tags=["user"])
+account_router = APIRouter(dependencies=[Depends(get_current_user)], tags=["account"])
 
 
 class AccountDeletionResult(BaseModel):
@@ -40,9 +40,24 @@ class AccountDeletionResult(BaseModel):
 
 
 @user_router.get("/user", operation_id="getCurrentUser", response_model=User)
-def get_current_user() -> User:
-    """Current user / persona (getCurrentUser). REMY, seeded verbatim."""
-    return store.current_user
+def get_current_user_op(current_user: CurrentUser) -> User:
+    """Current user / persona (getCurrentUser) -- the FIRST implemented op.
+
+    Served from the DATABASE user resolved by the auth dependency, mapped to
+    the wire ``User`` (``name <- full_name``, the rest 1:1). Profile fields a
+    row may lack (e.g. FIRST_SUPERUSER) fall back to empty/zero -- the wire
+    schema requires every field.
+    """
+    return User(
+        name=current_user.full_name or "",
+        email=current_user.email,
+        initials=current_user.initials or "",
+        city=current_user.city or "",
+        current=current_user.current or "",
+        years=current_user.years or 0,
+        comp_floor=current_user.comp_floor or 0,
+        target_titles=current_user.target_titles,
+    )
 
 
 @account_router.post(

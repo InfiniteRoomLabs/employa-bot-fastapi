@@ -13,8 +13,8 @@ NOTIFICATION_ID_REPLY = "2f3044aa-2e5d-42ba-bff0-3f1e1ad36af0"
 NOTIFICATION_ID_MATCH_SCORED = "dacf6597-779a-489b-a4be-66d01da1842b"
 
 
-def test_get_notifications_lists_seeded_six(client: TestClient) -> None:
-    resp = client.get("/api/v1/notifications")
+def test_get_notifications_lists_seeded_six(store_client: TestClient) -> None:
+    resp = store_client.get("/api/v1/notifications")
     assert resp.status_code == 200
     body = resp.json()
     assert len(body) == 6
@@ -24,8 +24,8 @@ def test_get_notifications_lists_seeded_six(client: TestClient) -> None:
     assert "icon" not in body[0]
 
 
-def test_mark_notification_read_flips_unread_and_persists(client: TestClient) -> None:
-    resp = client.post(f"/api/v1/notifications/{NOTIFICATION_ID_REPLY}/read")
+def test_mark_notification_read_flips_unread_and_persists(store_client: TestClient) -> None:
+    resp = store_client.post(f"/api/v1/notifications/{NOTIFICATION_ID_REPLY}/read")
     assert resp.status_code == 200
     body = resp.json()
     assert body["id"] == NOTIFICATION_ID_REPLY
@@ -34,15 +34,15 @@ def test_mark_notification_read_flips_unread_and_persists(client: TestClient) ->
     assert body["title"] == "Recruiter reply - Vercel"
 
     # Persists until reset -- round-trip via a fresh GET.
-    again = client.get("/api/v1/notifications").json()
+    again = store_client.get("/api/v1/notifications").json()
     reply = next(n for n in again if n["id"] == NOTIFICATION_ID_REPLY)
     assert reply["unread"] is False
 
 
 def test_mark_notification_read_unknown_id_returns_404_envelope(
-    client: TestClient,
+    store_client: TestClient,
 ) -> None:
-    resp = client.post(f"/api/v1/notifications/{UNKNOWN_ID}/read")
+    resp = store_client.post(f"/api/v1/notifications/{UNKNOWN_ID}/read")
     assert resp.status_code == 404
     body = resp.json()
     assert body["kind"] == "not_found"
@@ -51,9 +51,9 @@ def test_mark_notification_read_unknown_id_returns_404_envelope(
 
 
 def test_mark_all_notifications_read_returns_full_collection(
-    client: TestClient,
+    store_client: TestClient,
 ) -> None:
-    resp = client.post("/api/v1/notifications/mark-all-read")
+    resp = store_client.post("/api/v1/notifications/mark-all-read")
     assert resp.status_code == 200
     body = resp.json()
     assert len(body) == 6
@@ -61,7 +61,7 @@ def test_mark_all_notifications_read_returns_full_collection(
 
     # Persists: a previously-read-already notification (unread was already
     # False/absent) and a previously-unread one are both read now.
-    again = client.get("/api/v1/notifications").json()
+    again = store_client.get("/api/v1/notifications").json()
     assert all(n["unread"] is False for n in again)
     scored = next(n for n in again if n["id"] == NOTIFICATION_ID_MATCH_SCORED)
     assert scored["unread"] is False

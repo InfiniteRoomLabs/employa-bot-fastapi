@@ -30,10 +30,11 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from uuid import UUID
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 
 from app import store
+from app.api.deps import get_current_user
 from app.api.errors import CapReachedError, NotFoundError
 from app.schemas import (
     AiRunEnvelope,
@@ -45,7 +46,7 @@ from app.schemas import (
 )
 from app.schemas import Kind2 as DeepMatchKind
 
-router = APIRouter(tags=["match"])
+router = APIRouter(dependencies=[Depends(get_current_user)], tags=["match"])
 
 
 class PreviewDeepScoreBody(BaseModel):

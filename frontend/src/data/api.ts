@@ -165,14 +165,11 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
     } catch {
       body = null
     }
-    // 401: no token sent at all (FastAPI's OAuth2PasswordBearer default).
-    // 403 + this exact detail: token present but invalid/expired
-    // (app.api.deps.get_current_user). Other 403s (e.g. "not enough
-    // privileges") mean the user IS authenticated, just not authorized --
-    // those must NOT clear the token or redirect.
-    const isAuthFailure =
-      res.status === 401 ||
-      (res.status === 403 && body?.detail === "Could not validate credentials")
+    // 401: missing/invalid/expired/inactive/unknown -- the backend normalizes
+    // every credential failure into one 401 envelope (app.api.deps). 403
+    // means authenticated-but-not-authorized (e.g. "not enough privileges")
+    // and must NOT clear the token or redirect.
+    const isAuthFailure = res.status === 401
     if (isAuthFailure) {
       clearToken()
       if (window.location.pathname !== "/login") {

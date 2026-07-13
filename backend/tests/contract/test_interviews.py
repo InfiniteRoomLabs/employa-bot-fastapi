@@ -14,23 +14,23 @@ from tests.contract.helpers import MODAL, STRIPE, B
 from tests.contract.helpers import UNKNOWN_ID as UNKNOWN
 
 
-def test_get_interview_rounds(client: TestClient) -> None:
-    resp = client.get(f"{B}/applications/{STRIPE}/interviews")
+def test_get_interview_rounds(store_client: TestClient) -> None:
+    resp = store_client.get(f"{B}/applications/{STRIPE}/interviews")
     assert resp.status_code == 200
     assert len(resp.json()) == 2
     assert {r["type"] for r in resp.json()} == {"recruiter-screen", "technical"}
 
 
-def test_get_interview_rounds_empty(client: TestClient) -> None:
+def test_get_interview_rounds_empty(store_client: TestClient) -> None:
     # MODAL has no seeded rounds -> empty list, not a 404.
-    resp = client.get(f"{B}/applications/{MODAL}/interviews")
+    resp = store_client.get(f"{B}/applications/{MODAL}/interviews")
     assert resp.status_code == 200
     assert resp.json() == []
 
 
-def test_patch_interview_round_allowlisted_field(client: TestClient) -> None:
-    round_id = client.get(f"{B}/applications/{STRIPE}/interviews").json()[0]["id"]
-    resp = client.patch(
+def test_patch_interview_round_allowlisted_field(store_client: TestClient) -> None:
+    round_id = store_client.get(f"{B}/applications/{STRIPE}/interviews").json()[0]["id"]
+    resp = store_client.patch(
         f"{B}/applications/{STRIPE}/interviews/{round_id}",
         json={"status": "cancelled"},
     )
@@ -38,9 +38,9 @@ def test_patch_interview_round_allowlisted_field(client: TestClient) -> None:
     assert resp.json()["status"] == "cancelled"
 
 
-def test_patch_interview_round_rejects_unknown_field(client: TestClient) -> None:
-    round_id = client.get(f"{B}/applications/{STRIPE}/interviews").json()[0]["id"]
-    resp = client.patch(
+def test_patch_interview_round_rejects_unknown_field(store_client: TestClient) -> None:
+    round_id = store_client.get(f"{B}/applications/{STRIPE}/interviews").json()[0]["id"]
+    resp = store_client.patch(
         f"{B}/applications/{STRIPE}/interviews/{round_id}",
         json={"appId": UNKNOWN, "note": "not allowed"},
     )
@@ -48,8 +48,8 @@ def test_patch_interview_round_rejects_unknown_field(client: TestClient) -> None
     assert resp.json()["kind"] == "validation_error"
 
 
-def test_patch_interview_round_unknown_404(client: TestClient) -> None:
-    resp = client.patch(
+def test_patch_interview_round_unknown_404(store_client: TestClient) -> None:
+    resp = store_client.patch(
         f"{B}/applications/{STRIPE}/interviews/{UNKNOWN}", json={"status": "completed"}
     )
     assert resp.status_code == 404

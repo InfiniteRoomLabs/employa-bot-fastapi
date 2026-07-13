@@ -8,12 +8,13 @@ resources -- there is no id-addressed mutation in scope for them here.
 
 from __future__ import annotations
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
 from app import store
+from app.api.deps import get_current_user
 from app.schemas import Settings, UsageAggregate
 
-router = APIRouter(tags=["settings"])
+router = APIRouter(dependencies=[Depends(get_current_user)], tags=["settings"])
 
 
 @router.get("/settings", operation_id="getSettings", response_model=Settings)

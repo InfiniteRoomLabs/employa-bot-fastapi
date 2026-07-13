@@ -28,10 +28,11 @@ from __future__ import annotations
 from datetime import timedelta
 from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 
-from fastapi import APIRouter, Body, Query
+from fastapi import APIRouter, Body, Depends, Query
 from pydantic import BaseModel
 
 from app import store
+from app.api.deps import get_current_user
 from app.api.errors import (
     ConflictError,
     InvalidTransitionError,
@@ -70,7 +71,7 @@ from app.schemas import (
     TransitionSource,
 )
 
-router = APIRouter(tags=["applications"])
+router = APIRouter(dependencies=[Depends(get_current_user)], tags=["applications"])
 
 UNDO_WINDOW_SECONDS = 300
 

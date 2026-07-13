@@ -12,10 +12,11 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import UUID
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel, ConfigDict
 
 from app import store
+from app.api.deps import get_current_user
 from app.api.errors import NotFoundError
 from app.schemas import (
     InterviewFormat,
@@ -24,7 +25,7 @@ from app.schemas import (
     InterviewType,
 )
 
-router = APIRouter(tags=["interviews"])
+router = APIRouter(dependencies=[Depends(get_current_user)], tags=["interviews"])
 
 
 class InterviewPatchBody(BaseModel):

@@ -9,8 +9,8 @@ from __future__ import annotations
 from fastapi.testclient import TestClient
 
 
-def test_get_settings_shape_sanity(client: TestClient) -> None:
-    resp = client.get("/api/v1/settings")
+def test_get_settings_shape_sanity(store_client: TestClient) -> None:
+    resp = store_client.get("/api/v1/settings")
     assert resp.status_code == 200
     body = resp.json()
 
@@ -36,8 +36,8 @@ def test_get_settings_shape_sanity(client: TestClient) -> None:
     assert len(body["extensionTokens"][0]["id"]) == 36
 
 
-def test_get_usage_aggregate_numeric_shape(client: TestClient) -> None:
-    resp = client.get("/api/v1/usage-aggregate")
+def test_get_usage_aggregate_numeric_shape(store_client: TestClient) -> None:
+    resp = store_client.get("/api/v1/usage-aggregate")
     assert resp.status_code == 200
     body = resp.json()
     assert body["monthSpendUsd"] == 3.42
