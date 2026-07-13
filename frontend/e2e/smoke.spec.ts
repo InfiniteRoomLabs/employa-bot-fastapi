@@ -121,11 +121,16 @@ test.describe("smoke: every route renders", () => {
       const resolved = await resolvePath(route)
       const consoleErrors: string[] = []
       page.on("console", (msg) => {
-        // ERR_NETWORK_CHANGED is local interface-flap noise (docker/VPN),
-        // not an application error -- filter it, keep everything else.
+        // ERR_NETWORK_CHANGED is local interface-flap noise (docker/VPN).
+        // "Fix any of the following:" is @axe-core/react's dev-only a11y
+        // logging (main.tsx, DEV builds) -- a deferred quality gate (plan v3
+        // deferred register), not an application error; on slow CI runners
+        // its 1000ms debounce lands before the test ends and flaked the
+        // suite. Filter both, keep everything else.
         if (
           msg.type() === "error" &&
-          !msg.text().includes("ERR_NETWORK_CHANGED")
+          !msg.text().includes("ERR_NETWORK_CHANGED") &&
+          !msg.text().includes("Fix any of the following")
         ) {
           consoleErrors.push(msg.text())
         }

@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Playwright CI: `Dockerfile.playwright` image (v1.58.2) had drifted behind the locked `@playwright/test` (1.61.1), so CI browsers were missing; image bumped to v1.61.1-noble and the container install is now `--frozen-lockfile` so future drift fails the build, not the run.
 - The e2e smoke suite logs in once per run via a Playwright `globalSetup` (per-worker logins tripped the new per-IP login throttle) and sends the bearer token on its fixture-id fetches (mock routes now require auth).
+- The smoke suite's console-error assertion filters `@axe-core/react`'s dev-only a11y logging -- on slow CI runners its debounced output landed before test end and flaked the suite (the a11y findings themselves are recorded as debt; the accessibility gate is deferred per plan v3).
 
 - Sprint-treadmill operating process activated for Release 0.1: `docs/plans/` committed (the v3 implementation plan + its four adversarial reviews, the hoyle-re goal-loop investigation, and `sprint-treadmill-process.md` -- the process spec, itself Codex-reviewed to SOUND-WITH-FIXES with a 14-finding ledger). Operating artifacts created: `docs/plans/loop-research/approved-queue.md` (Wes-only queue, rev 1: 5 sprints + terminal audit + pre-approved repair phase), `GOAL.md` (Sprint 01 work contract: Phase 0 gates + Phase A foundation + v3 auth conventions), `docs/progress.md` (resumable state scaffold). Sprint 01 is an attended dry run; nothing executes until `/goal` is invoked.
 

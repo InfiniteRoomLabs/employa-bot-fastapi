@@ -104,7 +104,8 @@ Q2 debt: DEBT-1 (single-process throttle), DEBT-2 (vite dev CSP), DEBT-3 (UNDO_W
 | D2-4 | Codex D2 | MED | Throttle order (before password verification) asserted but not proven | fixed | test spies on crud.authenticate: zero invocations on the throttled request (commit df9e268), green |
 | SWEEP-1 | Haiku finder + lead re-run + QA seat | -- | Mechanical sweep, ZERO findings: `grep -L "dependencies=[Depends(get_current_user)]" app/api/routes/*.py` -> only login/users/utils/__init__ (per-route auth hand-verified by the QA seat); all four 403 literals in app/ are PRIVILEGE-class (superuser rules), none CREDENTIAL; `_STATUS_TO_KIND` contains no 403 | recorded (zero-finding sweep) | grep outputs above; Haiku finder's original report was lost in transit -- checks re-run by the lead, independently corroborated by panel-qa |
 | D2-verdict | Codex D2 | -- | Pre-merge audit final verdict after two reply rounds: all four findings CLOSED | SOUND for merge to master | thread 019f5d81-c7b3-7da0-bc69-1356d671a3ca |
-| INT-1 | lead (S7 ship, CI at merge SHA) | MED | Playwright CI red at 0b83cd2: Dockerfile.playwright image v1.58.2 vs bun.lock @playwright/test 1.61.1 (browsers missing in image); PRE-EXISTING latent mismatch, first playwright run since 2026-07-04 | fixed | image bumped to v1.61.1-noble + frozen install (ship commit); verification = playwright run at the transition SHA, URL recorded under sprint-02 preflight when it lands |
+| INT-1 | lead (S7 ship, CI at merge SHA) | MED | Playwright CI red at 0b83cd2: Dockerfile.playwright image v1.58.2 vs bun.lock @playwright/test 1.61.1 (browsers missing in image); PRE-EXISTING latent mismatch, first playwright run since 2026-07-04 | fixed | image bumped to v1.61.1-noble + frozen install (ship commit 4260831); browsers launched at the transition-SHA run 29289701259, which then surfaced INT-2 |
+| INT-2 | lead (S7 ship, CI at transition SHA) | LOW | Playwright CI still red at 4260831: @axe-core/react's dev-only a11y logging ("Fix any of the following") lands inside the smoke console-error assertion on slow CI runners (1000ms debounce race); PRE-EXISTING flake -- axe + the assertion both predate the sprint | fixed | smoke console filter excludes the axe dev-aid output (a deferred gate per plan v3's register, not an app error); local 35/35; CI verification at the fix SHA recorded below when it lands. Underlying a11y findings ledgered as DEBT-4. |
 
 ## Open-debt ledger
 
@@ -113,6 +114,7 @@ Q2 debt: DEBT-1 (single-process throttle), DEBT-2 (vite dev CSP), DEBT-3 (UNDO_W
 | DEBT-1 | Login throttle is in-memory, single-process only (app/core/throttle.py docstring) | low | AC-08 | backend | no | when multi-worker deploy exists (post-0.1) |
 | DEBT-2 | Vite dev mode runs without the meta CSP (react-refresh inline preamble; recorded queue default). Production builds and the API header are covered. | low | AC-08 | frontend | no | real deploy target (post-0.1) |
 | DEBT-3 | UNDO_WINDOW_SECONDS=300 hardcoded in the MOCK applications route; becomes a Settings value when sprint-04 replaces that code with the real DB implementation | low | -- | backend | no | sprint-04 |
+| DEBT-4 | Axe dev-check reports real a11y violations on /agents and /dashboard ("element has focusable descendants", "content not contained by landmarks") -- logged, filtered from the smoke gate; the accessibility gate itself is deferred per plan v3's register | low | -- | frontend | no | post-0.1 (v3 deferred register) |
 
 ## Parked tangents
 
