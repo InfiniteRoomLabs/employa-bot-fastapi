@@ -39,39 +39,18 @@ const SKIP_GROUPS = new Set(["Onboarding & auth", "Dev"])
 // seeded FIRST_SUPERUSER and inject the token via addInitScript.
 // ---------------------------------------------------------------------------
 
-const API_ROOT = process.env.VITE_API_URL ?? "http://localhost:8000"
+import { API_ROOT, fetchAccessToken } from "./auth"
 
-function envVal(key: string): string {
-  const fromProcess = process.env[key]
-  if (fromProcess) {
-    return fromProcess
-  }
-  const specDir = dirname(fileURLToPath(import.meta.url))
-  const env = readFileSync(resolve(specDir, "../../.env"), "utf-8")
-  const line = env.split("\n").find((l) => l.startsWith(`${key}=`))
-  if (!line) {
-    throw new Error(`${key} not set and not found in ../.env`)
-  }
-  return line.slice(key.length + 1).trim()
-}
-
+// global-setup.ts logs in ONCE per run (the login throttle makes per-worker
+// logins trip the per-IP window); workers read the token from env. The
+// fallback fetch only fires when a spec runs without global setup.
 let tokenPromise: Promise<string> | undefined
 function getAccessToken(): Promise<string> {
-  tokenPromise ??= (async () => {
-    const res = await fetch(`${API_ROOT}/api/v1/login/access-token`, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        username: envVal("FIRST_SUPERUSER"),
-        password: envVal("FIRST_SUPERUSER_PASSWORD"),
-      }).toString(),
-    })
-    if (!res.ok) {
-      throw new Error(`smoke-suite login failed: ${res.status}`)
-    }
-    const body = (await res.json()) as { access_token: string }
-    return body.access_token
-  })()
+  const fromSetup = process.env.SMOKE_ACCESS_TOKEN
+  if (fromSetup) {
+    return Promise.resolve(fromSetup)
+  }
+  tokenPromise ??= fetchAccessToken()
   return tokenPromise
 }
 
@@ -92,11 +71,13 @@ test.beforeEach(async ({ page }) => {
 let fixtureIdsPromise: Promise<{ app: string; agent: string }> | undefined
 function getFixtureIds(): Promise<{ app: string; agent: string }> {
   fixtureIdsPromise ??= (async () => {
+    // Every mock route requires a bearer token since the P5 auth boundary.
+    const headers = { Authorization: `Bearer ${await getAccessToken()}` }
     const [apps, agents] = await Promise.all([
-      fetch(`${API_ROOT}/api/v1/applications`).then(
+      fetch(`${API_ROOT}/api/v1/applications`, { headers }).then(
         (r) => r.json() as Promise<{ id: string }[]>,
       ),
-      fetch(`${API_ROOT}/api/v1/agents`).then(
+      fetch(`${API_ROOT}/api/v1/agents`, { headers }).then(
         (r) => r.json() as Promise<{ id: string }[]>,
       ),
     ])
