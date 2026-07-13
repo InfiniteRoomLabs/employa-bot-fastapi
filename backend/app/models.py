@@ -62,6 +62,8 @@ class UpdatePassword(SQLModel):
 class User(UserBase, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     hashed_password: str
+    # Bumping invalidates every outstanding token for this user (JWT sv claim).
+    session_version: int = Field(default=0, nullable=False)
     created_at: datetime | None = Field(
         default_factory=get_datetime_utc,
         sa_type=DateTime(timezone=True),  # type: ignore
@@ -90,9 +92,12 @@ class Token(SQLModel):
     token_type: str = "bearer"
 
 
-# Contents of JWT token
+# Contents of JWT token (claim set: plan v3 Auth conventions). ``sub`` is
+# UUID-typed so a signed-but-garbage subject fails pydantic validation and
+# lands in the uniform 401 instead of a DataError 500 (panel COR-3).
 class TokenPayload(SQLModel):
-    sub: str | None = None
+    sub: uuid.UUID | None = None
+    sv: int = 0
 
 
 class NewPassword(SQLModel):

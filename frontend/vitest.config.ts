@@ -25,7 +25,9 @@ const dirname =
 const playwrightProvider = playwright({}) as unknown as any
 
 export default mergeConfig(
-  viteConfig,
+  // vite.config.ts exports a config FUNCTION (it reads VITE_API_URL for the
+  // build-time CSP plugin); resolve it for merging.
+  viteConfig({ mode: "test", command: "serve" }),
   defineConfig({
     test: {
       // The jsdom unit project and the chromium storybook project run

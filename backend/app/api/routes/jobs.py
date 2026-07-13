@@ -16,13 +16,14 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
 
 from app import store
+from app.api.deps import get_current_user
 from app.api.errors import NotFoundError
 from app.schemas import Job, JobInboxItem
 
-router = APIRouter(tags=["jobs"])
+router = APIRouter(dependencies=[Depends(get_current_user)], tags=["jobs"])
 
 
 @router.get("/jobs", operation_id="getJobs", response_model=list[Job])

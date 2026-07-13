@@ -1,7 +1,7 @@
 import { defineConfig } from "@hey-api/openapi-ts"
 
 export default defineConfig({
-  input: "./openapi.json",
+  input: "../mvp-api.yaml",
   output: "./src/client",
 
   plugins: [

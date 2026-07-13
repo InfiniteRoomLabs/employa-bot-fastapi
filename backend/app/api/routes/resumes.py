@@ -13,14 +13,15 @@ from __future__ import annotations
 
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
 from app import store
+from app.api.deps import get_current_user
 from app.api.errors import ConflictError, NotFoundError
 from app.schemas import Resume, ResumeTag
 
-router = APIRouter(tags=["resumes"])
+router = APIRouter(dependencies=[Depends(get_current_user)], tags=["resumes"])
 
 # Tags a resume must NOT have (plus usedIn > 0) to be deletable (deleteResume).
 LOCKED_TAGS = frozenset({ResumeTag.TAILORED, ResumeTag.MASTER, ResumeTag.DEFAULT})

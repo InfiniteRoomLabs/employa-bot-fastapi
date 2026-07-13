@@ -12,8 +12,8 @@ PLATFORM_ID = "7c0b1f3a-2d4e-4a8c-9b21-1f8c5e3a0d12"
 UNKNOWN_ID = "00000000-0000-4000-8000-000000000000"
 
 
-def test_get_searches_lists_seeded_three(client: TestClient) -> None:
-    resp = client.get("/api/v1/searches")
+def test_get_searches_lists_seeded_three(store_client: TestClient) -> None:
+    resp = store_client.get("/api/v1/searches")
     assert resp.status_code == 200
     body = resp.json()
     assert len(body) == 3
@@ -21,8 +21,8 @@ def test_get_searches_lists_seeded_three(client: TestClient) -> None:
     assert PLATFORM_ID in ids
 
 
-def test_get_search_returns_wire_shape(client: TestClient) -> None:
-    resp = client.get(f"/api/v1/searches/{PLATFORM_ID}")
+def test_get_search_returns_wire_shape(store_client: TestClient) -> None:
+    resp = store_client.get(f"/api/v1/searches/{PLATFORM_ID}")
     assert resp.status_code == 200
     body = resp.json()
     assert body["id"] == PLATFORM_ID
@@ -38,8 +38,8 @@ def test_get_search_returns_wire_shape(client: TestClient) -> None:
     assert "eyebrow" not in body
 
 
-def test_get_search_unknown_id_returns_404_envelope(client: TestClient) -> None:
-    resp = client.get(f"/api/v1/searches/{UNKNOWN_ID}")
+def test_get_search_unknown_id_returns_404_envelope(store_client: TestClient) -> None:
+    resp = store_client.get(f"/api/v1/searches/{UNKNOWN_ID}")
     assert resp.status_code == 404
     body = resp.json()
     # Exact Error envelope: {kind, path, message}.
@@ -50,16 +50,16 @@ def test_get_search_unknown_id_returns_404_envelope(client: TestClient) -> None:
 
 
 def test_get_search_malformed_uuid_returns_validation_envelope(
-    client: TestClient,
+    store_client: TestClient,
 ) -> None:
-    resp = client.get("/api/v1/searches/not-a-uuid")
+    resp = store_client.get("/api/v1/searches/not-a-uuid")
     assert resp.status_code == 422
     body = resp.json()
     assert body["kind"] == "validation_error"
     assert body["path"] == "/api/v1/searches/not-a-uuid"
 
 
-def test_create_search_defaults_and_persists(client: TestClient) -> None:
+def test_create_search_defaults_and_persists(store_client: TestClient) -> None:
     payload = {
         "name": "New search",
         "criteria": {
@@ -72,7 +72,7 @@ def test_create_search_defaults_and_persists(client: TestClient) -> None:
             "baseCeilingUsd": 260000,
         },
     }
-    resp = client.post("/api/v1/searches", json=payload)
+    resp = store_client.post("/api/v1/searches", json=payload)
     assert resp.status_code == 201
     body = resp.json()
     assert body["name"] == "New search"
@@ -86,12 +86,12 @@ def test_create_search_defaults_and_persists(client: TestClient) -> None:
 
     # Persisted: it now shows up in the list and is fetchable by its new id.
     new_id = body["id"]
-    listing = client.get("/api/v1/searches").json()
+    listing = store_client.get("/api/v1/searches").json()
     assert len(listing) == 4
-    assert client.get(f"/api/v1/searches/{new_id}").status_code == 200
+    assert store_client.get(f"/api/v1/searches/{new_id}").status_code == 200
 
 
-def test_update_search_criteria_merges_in_place(client: TestClient) -> None:
+def test_update_search_criteria_merges_in_place(store_client: TestClient) -> None:
     new_criteria = {
         "titlesInclude": ["Principal Engineer"],
         "titlesExclude": [],
@@ -101,7 +101,7 @@ def test_update_search_criteria_merges_in_place(client: TestClient) -> None:
         "baseFloorUsd": 250000,
         "baseCeilingUsd": 350000,
     }
-    resp = client.patch(
+    resp = store_client.patch(
         f"/api/v1/searches/{PLATFORM_ID}", json={"criteria": new_criteria}
     )
     assert resp.status_code == 200
@@ -115,12 +115,12 @@ def test_update_search_criteria_merges_in_place(client: TestClient) -> None:
     assert body["jobsInInbox"] == 42
 
     # Round-trip: a subsequent GET reflects the update.
-    again = client.get(f"/api/v1/searches/{PLATFORM_ID}").json()
+    again = store_client.get(f"/api/v1/searches/{PLATFORM_ID}").json()
     assert again["criteria"]["remotePolicy"] == "hybrid-ok"
 
 
-def test_update_search_criteria_unknown_id_404(client: TestClient) -> None:
-    resp = client.patch(
+def test_update_search_criteria_unknown_id_404(store_client: TestClient) -> None:
+    resp = store_client.patch(
         f"/api/v1/searches/{UNKNOWN_ID}",
         json={
             "criteria": {

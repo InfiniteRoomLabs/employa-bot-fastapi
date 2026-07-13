@@ -10,13 +10,14 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
 from app import store
+from app.api.deps import get_current_user
 from app.api.errors import NotFoundError
 from app.schemas import Notification
 
-router = APIRouter(tags=["notifications"])
+router = APIRouter(dependencies=[Depends(get_current_user)], tags=["notifications"])
 
 
 @router.get(

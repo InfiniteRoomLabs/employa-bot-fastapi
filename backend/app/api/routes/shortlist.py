@@ -21,14 +21,15 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Query, Response
+from fastapi import APIRouter, Depends, Query, Response
 from pydantic import BaseModel
 
 from app import store
+from app.api.deps import get_current_user
 from app.api.errors import NotFoundError
 from app.schemas import SalaryPoint, SalaryRange, ShortlistEntry, Source
 
-router = APIRouter(tags=["shortlist"])
+router = APIRouter(dependencies=[Depends(get_current_user)], tags=["shortlist"])
 
 
 class AddToShortlistBody(BaseModel):

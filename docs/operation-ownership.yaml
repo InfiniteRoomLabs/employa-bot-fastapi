@@ -31,7 +31,7 @@ operations:
   # ---------------------------------------------------------- Slice 1: Foundation
   getCurrentUser:
     slice: 1
-    status: planned
+    status: implemented
     ai: false
     consumer: useCurrentUser / app shell + persona binding
     tests: [contract-fidelity]
