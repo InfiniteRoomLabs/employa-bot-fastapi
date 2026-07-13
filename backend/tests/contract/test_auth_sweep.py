@@ -64,11 +64,16 @@ def _walk_routes(routes: list[object], prefix: str = "") -> list[tuple[str, APIR
             )
         else:
             # Mounts / sub-apps under /api/v1 would evade the sweep entirely.
-            # The one sanctioned plain Route is the OpenAPI document itself.
-            path = str(getattr(route, "path", ""))
-            assert not path.startswith("/api/v1") or path == "/api/v1/openapi.json", (
+            # Judge the SERVED location (prefix + local path -- Codex D2-2
+            # re-audit: a Mount nested inside the API router has a local path
+            # without the /api/v1 prefix). The one sanctioned plain Route is
+            # the OpenAPI document itself.
+            served = prefix + str(getattr(route, "path", ""))
+            assert (
+                not served.startswith("/api/v1") or served == "/api/v1/openapi.json"
+            ), (
                 f"non-APIRoute {type(route).__name__} served under /api/v1:"
-                f" {path} -- extend the sweep before adding mounts"
+                f" {served} -- extend the sweep before adding mounts"
             )
     return out
 
