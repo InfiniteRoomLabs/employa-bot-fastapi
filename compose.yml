@@ -58,6 +58,9 @@ services:
     env_file:
       - .env
     environment:
+      # Seed the demo (REMY persona) user in prestart -- app/scripts/seed.py.
+      # Default on for the local dev stack; override via .env.
+      - SEED_DEMO_DATA=${SEED_DEMO_DATA:-true}
       - DOMAIN=${DOMAIN}
       - FRONTEND_HOST=${FRONTEND_HOST?Variable not set}
       - ENVIRONMENT=${ENVIRONMENT}

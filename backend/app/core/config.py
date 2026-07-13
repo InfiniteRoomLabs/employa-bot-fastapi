@@ -93,6 +93,11 @@ class Settings(BaseSettings):
     FIRST_SUPERUSER: EmailStr
     FIRST_SUPERUSER_PASSWORD: str
 
+    # Demo data seeding (app/scripts/seed.py), gated behind SEED_DEMO_DATA
+    # in prestart.sh -- see backend/README.md and docs/sprints/sprint-01-spec.md.
+    SEED_DEMO_EMAIL: EmailStr = "wes.gilleland@gmail.com"
+    SEED_DEMO_PASSWORD: str = "employa-demo-1"
+
     def _check_default_secret(self, var_name: str, value: str | None) -> None:
         if value == "changethis":
             message = (
