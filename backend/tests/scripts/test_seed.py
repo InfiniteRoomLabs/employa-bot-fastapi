@@ -79,6 +79,39 @@ def test_seed_demo_user_twice_is_idempotent() -> None:
 
 
 @pytest.mark.usefixtures("clean_demo_slate")
+def test_seed_reset_leaves_other_users_untouched() -> None:
+    """P6 verifier finding: a widened delete scope must not survive review."""
+    bystander_email = "bystander-probe@example.com"
+    with Session(engine) as session:
+        session.execute(
+            delete(User).where(User.email == bystander_email)  # type: ignore[arg-type]
+        )
+        bystander = User(
+            email=bystander_email,
+            hashed_password="untouched-hash",
+            full_name="By Stander",
+        )
+        session.add(bystander)
+        session.commit()
+
+    try:
+        with Session(engine) as session:
+            seed_demo_user(session, reset=True)
+        with Session(engine) as session:
+            survivor = session.exec(
+                select(User).where(User.email == bystander_email)
+            ).one()
+            assert survivor.hashed_password == "untouched-hash"
+            assert survivor.full_name == "By Stander"
+    finally:
+        with Session(engine) as session:
+            session.execute(
+                delete(User).where(User.email == bystander_email)  # type: ignore[arg-type]
+            )
+            session.commit()
+
+
+@pytest.mark.usefixtures("clean_demo_slate")
 def test_seed_reset_recreates_login_capable_user() -> None:
     assert main([]) == 0
     first = _get_demo_users()

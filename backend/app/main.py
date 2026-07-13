@@ -38,7 +38,7 @@ if settings.all_cors_origins:
 CONTENT_SECURITY_POLICY = (
     "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
     "img-src 'self' data:; font-src 'self'; "
-    "connect-src 'self' http://localhost:8000; frame-ancestors 'none'; "
+    f"connect-src 'self' {settings.API_PUBLIC_ORIGIN}; frame-ancestors 'none'; "
     "base-uri 'self'; form-action 'self'"
 )
 _CSP_EXEMPT_PREFIXES = ("/docs", "/redoc")

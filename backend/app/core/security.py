@@ -19,10 +19,6 @@ password_hash = PasswordHash(
 
 ALGORITHM = "HS256"
 
-# Bound into every token and enforced at decode (plan v3 Auth conventions).
-TOKEN_ISSUER = "employa-bot"
-TOKEN_AUDIENCE = "employa-bot-api"
-
 
 def create_access_token(
     subject: str | Any, expires_delta: timedelta, session_version: int = 0
@@ -31,8 +27,8 @@ def create_access_token(
     to_encode = {
         "exp": now + expires_delta,
         "sub": str(subject),
-        "iss": TOKEN_ISSUER,
-        "aud": TOKEN_AUDIENCE,
+        "iss": settings.JWT_ISSUER,
+        "aud": settings.JWT_AUDIENCE,
         "iat": now,
         "nbf": now,
         "jti": str(uuid4()),
@@ -48,8 +44,8 @@ def decode_access_token(token: str) -> dict[str, Any]:
         token,
         settings.SECRET_KEY,
         algorithms=[ALGORITHM],
-        audience=TOKEN_AUDIENCE,
-        issuer=TOKEN_ISSUER,
+        audience=settings.JWT_AUDIENCE,
+        issuer=settings.JWT_ISSUER,
         options={"require": ["exp", "sub", "iss", "aud", "iat", "nbf", "jti"]},
     )
 

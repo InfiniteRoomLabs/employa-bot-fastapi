@@ -42,6 +42,11 @@ class Settings(BaseSettings):
     LOGIN_THROTTLE_ACCOUNT_PER_MINUTE: int = 5
     LOGIN_THROTTLE_IP_PER_MINUTE: int = 10
     LOGIN_THROTTLE_GLOBAL_PER_MINUTE: int = 100
+    # JWT token identity (iss/aud claims, validated at decode).
+    JWT_ISSUER: str = "employa-bot"
+    JWT_AUDIENCE: str = "employa-bot-api"
+    # The API's public origin, used in the CSP connect-src directive.
+    API_PUBLIC_ORIGIN: str = "http://localhost:8000"
     FRONTEND_HOST: str = "http://localhost:5173"
     ENVIRONMENT: Literal["local", "staging", "production"] = "local"
 

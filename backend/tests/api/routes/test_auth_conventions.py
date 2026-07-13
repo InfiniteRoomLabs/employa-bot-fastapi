@@ -117,8 +117,8 @@ def test_token_carries_the_full_claim_set() -> None:
         "some-subject", expires_delta=timedelta(minutes=5), session_version=3
     )
     claims = security.decode_access_token(token)
-    assert claims["iss"] == security.TOKEN_ISSUER
-    assert claims["aud"] == security.TOKEN_AUDIENCE
+    assert claims["iss"] == settings.JWT_ISSUER
+    assert claims["aud"] == settings.JWT_AUDIENCE
     assert claims["sub"] == "some-subject"
     assert claims["sv"] == 3
     assert {"exp", "iat", "nbf", "jti"} <= set(claims)
