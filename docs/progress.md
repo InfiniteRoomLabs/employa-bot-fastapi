@@ -7,7 +7,8 @@ PLAN (v3) says what we are building; this file says where we are. Update at ever
 - Phase / run: sprint-01-gates-and-foundation / sprint-01-run-1 (status: running, guard on 2026-07-13)
 - Active branch: master (sprint branch `sprint-01-foundation` not yet created)
 - Last verified checkpoint: run manifest committed (this commit)
-- Exact next action: Sprint 01 entry step 0 (verify /goal Stop-hook blocks one early stop), then Codex D1, then S2 investigation.
+- Exact next action: Codex D1 dispatch + S2 investigation, then S3 spec, then branch sprint-01-foundation.
+- Entry step 0 evidence (2026-07-13): one deliberate early stop attempted after the manifest commit; the /goal Stop hook BLOCKED it, returning an audit that correctly judged all 10 manifest conjuncts unsatisfied. Hook verified working; sprint remains attended per queue row.
 - Resume preflight 2026-07-13: tree carried pre-run dirt only (Wes's `.idea/*.iml` modifications + untracked `AGENTS.md`, both predating activation commit 9d3a784; not sprint work, left untouched). No prior manifest, run never started -> NOT abandoned-dirty; direct start. Queue copy in GOAL.md diffed against approved-queue.md rev 1: identical.
 
 ## Run manifests
@@ -44,6 +45,15 @@ PLAN (v3) says what we are building; this file says where we are. Update at ever
 | ID | Reviewer | Sev | Finding | Disposition | Closure evidence |
 |---|---|---|---|---|---|
 | (process design review 2026-07-13: 14 Codex findings on the process spec itself, all fixed -- see the appendix in sprint-treadmill-process.md) | | | | | |
+| D1-1 | Codex D1 (thread 019f5d1a-ee9e-79d3-8f2b-e8ee4f1db58d) | HIGH | Manifest never requires the shipped commit to be reachable from master | open -> PIN-1 (spec) | pending: evidence bound to master merge SHA at S7 |
+| D1-2 | Codex D1 | HIGH | Green CI job conclusions do not prove the gates enforce anything | open -> PIN-2 | pending: negative evidence per gate |
+| D1-3 | Codex D1 | HIGH | 401 sweep evidence proves neither route completeness nor one code path | open -> PIN-3 | pending: programmatic route-universe sweep test |
+| D1-4 | Codex D1 | HIGH | getCurrentUser evidence cannot discriminate DB-backed from a test double | open -> PIN-4 | pending: fidelity test with no dependency overrides |
+| D1-5 | Codex D1 | HIGH | Expired-token envelope uniformity omitted from the frozen conjunct | open -> PIN-5 | pending: expired joins the byte-identical set |
+| D1-6 | Codex D1 | MED | Seed evidence can pass with seed --reset broken or unused | open -> PIN-6 | pending: evidence invokes seed --reset explicitly, demo-user login |
+| D1-7 | Codex D1 | MED | P7 predicate subjective (CSP directives, global cap, CORS narrowing unpinned) | open -> PIN-7 | pending: values pinned in sprint-01-spec.md |
+| D1-8 | Codex D1 | MED | compose down -v / seed --reset under-classified as ordinary verification | open -> PIN-8 | pending: local-project guard + seed env refusal |
+| D1-9 | Codex D1 | MED | Green full suite does not prove the rollback fixture is actually in effect | open -> PIN-9 | pending: fixture self-test |
 
 ## Open-debt ledger
 
