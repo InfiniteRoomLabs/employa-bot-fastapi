@@ -1,8 +1,9 @@
 """401 sweep (AC-03, spec PIN-3) -- DB-free, real auth dependency.
 
-The route universe is derived PROGRAMMATICALLY from ``app.routes`` (never a
-hand-maintained list, per Codex D1-3), minus a small named exempt set that
-must work unauthenticated. Every other route, hit without a token, must
+The route universe is derived PROGRAMMATICALLY from the runtime route tree
+(never a hand-maintained list, per Codex D1-3; never the OpenAPI document,
+per Codex D2-2 -- schema-hidden routes are still served), minus a small named
+exempt set that must work unauthenticated. Every other route, hit without a token, must
 return the contract 401 envelope -- and every envelope body must be
 byte-identical modulo ``path``, which is what "single normalized code path"
 looks like from the wire.
@@ -17,6 +18,7 @@ from __future__ import annotations
 
 import uuid
 
+from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 
 from app.main import app
@@ -42,22 +44,57 @@ def _fill_params(path: str) -> str:
     return "/".join(out)
 
 
-def _route_universe() -> list[tuple[str, str]]:
-    """Every served (path, METHOD) under /api/v1, from the runtime OpenAPI.
+def _walk_routes(routes: list[object], prefix: str = "") -> list[tuple[str, APIRoute]]:
+    """Flatten the RUNTIME route tree (Codex D2-2: the universe must come from
+    what is SERVED, not from the OpenAPI document -- an include_in_schema=False
+    route is served but invisible to openapi()). Recent FastAPI defers
+    include_router behind lazy ``_IncludedRouter`` nodes; recurse through them,
+    accumulating prefixes."""
+    out: list[tuple[str, APIRoute]] = []
+    for route in routes:
+        if isinstance(route, APIRoute):
+            out.append((prefix + route.path, route))
+        elif type(route).__name__ == "_IncludedRouter":
+            inner_prefix = getattr(route.include_context, "prefix", "") or ""  # type: ignore[attr-defined]
+            out.extend(
+                _walk_routes(
+                    route.original_router.routes,  # type: ignore[attr-defined]
+                    prefix + inner_prefix,
+                )
+            )
+        else:
+            # Mounts / sub-apps under /api/v1 would evade the sweep entirely.
+            # The one sanctioned plain Route is the OpenAPI document itself.
+            path = str(getattr(route, "path", ""))
+            assert not path.startswith("/api/v1") or path == "/api/v1/openapi.json", (
+                f"non-APIRoute {type(route).__name__} served under /api/v1:"
+                f" {path} -- extend the sweep before adding mounts"
+            )
+    return out
 
-    ``app.openapi()`` is the app's own enumeration of its route table (recent
-    FastAPI defers ``include_router`` behind a lazy ``_IncludedRouter``, so
-    ``app.routes`` is no longer directly walkable before startup).
-    """
+
+def _route_universe() -> list[tuple[str, str]]:
+    """Every served (path, METHOD) under /api/v1, from the runtime route tree."""
     universe = []
+    for path, route in _walk_routes(list(app.routes)):
+        if not path.startswith("/api/v1"):
+            continue
+        for method in sorted((route.methods or set()) - {"HEAD", "OPTIONS"}):
+            universe.append((path, method))
+    return sorted(universe)
+
+
+def test_route_tree_covers_the_openapi_document() -> None:
+    """Cross-check: everything OpenAPI advertises is in the swept universe
+    (the reverse -- schema-hidden routes -- is exactly what the tree adds)."""
+    universe = set(_route_universe())
     for path, operations in app.openapi()["paths"].items():
         if not path.startswith("/api/v1"):
             continue
         for method in operations:
             if method.upper() in {"HEAD", "OPTIONS", "PARAMETERS"}:
                 continue
-            universe.append((path, method.upper()))
-    return sorted(universe)
+            assert (path, method.upper()) in universe
 
 
 def test_route_universe_is_nontrivial() -> None:

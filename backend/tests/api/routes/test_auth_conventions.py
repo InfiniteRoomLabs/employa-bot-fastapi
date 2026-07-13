@@ -63,16 +63,31 @@ def test_account_throttle_429s_after_5_per_minute(client: TestClient) -> None:
 
 
 def test_throttle_fires_before_password_verification(
-    client: TestClient, db: Session
+    client: TestClient, db: Session, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A CORRECT password on the 6th attempt still 429s: the throttle is
-    checked before credentials are ever evaluated."""
+    """Order-discriminating (Codex D2-4): once the window is exhausted,
+    ``crud.authenticate`` is NEVER invoked -- a 429 alone could also come
+    from a throttle checked after verification."""
+    from app import crud
+
     password = "correct-horse-battery"
     user = _make_user(db, password)
     for _ in range(settings.LOGIN_THROTTLE_ACCOUNT_PER_MINUTE):
         _attempt(client, user.email)
+
+    calls: list[str] = []
+    real_authenticate = crud.authenticate
+
+    def spy(**kwargs: Any) -> User | None:
+        calls.append(kwargs["email"])
+        return real_authenticate(**kwargs)
+
+    # login.py does `from app import crud` and calls crud.authenticate at
+    # request time, so patching the shared module object intercepts it.
+    monkeypatch.setattr(crud, "authenticate", spy)
     r = _attempt(client, user.email, password)
     assert r.status_code == 429
+    assert calls == [], "password verification ran on a throttled request"
 
 
 def test_ip_throttle_429s_after_10_per_minute(client: TestClient) -> None:
