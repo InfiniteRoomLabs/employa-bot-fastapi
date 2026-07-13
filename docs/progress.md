@@ -5,9 +5,9 @@ PLAN (v3) says what we are building; this file says where we are. Update at ever
 ## Current state
 
 - Phase / run: sprint-01-gates-and-foundation / sprint-01-run-1 (status: running, guard on 2026-07-13)
-- Active branch: master (sprint branch `sprint-01-foundation` not yet created)
-- Last verified checkpoint: run manifest committed (this commit)
-- Exact next action: S6 close-out -- collect panel seats (QA/correctness/simplification), Sonnet sweep-verifier over the Haiku finder output, Codex D2 pre-merge audit; then S7 ship + self-advance.
+- Active branch: sprint-01-foundation (all packets + review fixes committed)
+- Last verified checkpoint: D2 fixes committed (df9e268), ledger closed pending D2 re-audit
+- Exact next action: Codex D2 re-audit reply round, then S7 ship (merge to master, re-run gates at the merge SHA, completed-sprint entry + retro + cost line, self-advance to sprint-02).
 - Packet log: P1 b4470a1 (contract-first generation). P2 298832b (CI gates + app_runtime/append-only migration, 11 tests, PIN-2 negative evidence). P4 e6c48ad (split, verifier PASS). P3 98f70e5 (rollback world + PIN-9 self-test). P6 e0ce64b (seed + prestart gate, verifier PASS w/ 1 fixed finding). P5 79fad89 (auth boundary, ONE commit: single 401 raise site, router-level CurrentUser, DB getCurrentUser, OpenAPI-derived sweep). P7 d0b7cdb (throttle/claims/lifetime/fail-closed/CORS/CSP). Rework f569173 (PO review W-1 + P6-V-1). e2e fix 6ea0891 (one login per run; bearer on fixture fetches).
 - S5 evidence (2026-07-13, branch sprint-01-foundation): backend 292 passed; lint (mypy strict + ty + ruff) clean over app and tests; frontend vitest 323 passed, tsc + biome clean, build green; compose boot from CLEAN VOLUMES green (docker compose down -v && up -d --build --wait backend prestart db); `docker compose exec backend python -m app.scripts.seed --reset` exit 0; demo login via curl returned an access token (PIN-6 satisfied: explicit seed --reset, demo user, not FIRST_SUPERUSER); playwright smoke 35/35.
 - Trap change: the old session-teardown delete-all-users is GONE -- the P3 rollback world never deletes; bootstrap rows (FIRST_SUPERUSER, test user, intruder) persist like prestart state.
@@ -49,15 +49,15 @@ PLAN (v3) says what we are building; this file says where we are. Update at ever
 | ID | Reviewer | Sev | Finding | Disposition | Closure evidence |
 |---|---|---|---|---|---|
 | (process design review 2026-07-13: 14 Codex findings on the process spec itself, all fixed -- see the appendix in sprint-treadmill-process.md) | | | | | |
-| D1-1 | Codex D1 (thread 019f5d1a-ee9e-79d3-8f2b-e8ee4f1db58d) | HIGH | Manifest never requires the shipped commit to be reachable from master | open -> PIN-1 (spec) | pending: evidence bound to master merge SHA at S7 |
-| D1-2 | Codex D1 | HIGH | Green CI job conclusions do not prove the gates enforce anything | open -> PIN-2 | pending: negative evidence per gate |
-| D1-3 | Codex D1 | HIGH | 401 sweep evidence proves neither route completeness nor one code path | open -> PIN-3 | pending: programmatic route-universe sweep test |
-| D1-4 | Codex D1 | HIGH | getCurrentUser evidence cannot discriminate DB-backed from a test double | open -> PIN-4 | pending: fidelity test with no dependency overrides |
-| D1-5 | Codex D1 | HIGH | Expired-token envelope uniformity omitted from the frozen conjunct | open -> PIN-5 | pending: expired joins the byte-identical set |
-| D1-6 | Codex D1 | MED | Seed evidence can pass with seed --reset broken or unused | open -> PIN-6 | pending: evidence invokes seed --reset explicitly, demo-user login |
-| D1-7 | Codex D1 | MED | P7 predicate subjective (CSP directives, global cap, CORS narrowing unpinned) | open -> PIN-7 | pending: values pinned in sprint-01-spec.md |
-| D1-8 | Codex D1 | MED | compose down -v / seed --reset under-classified as ordinary verification | open -> PIN-8 | pending: local-project guard + seed env refusal |
-| D1-9 | Codex D1 | MED | Green full suite does not prove the rollback fixture is actually in effect | open -> PIN-9 | pending: fixture self-test |
+| D1-1 | Codex D1 (thread 019f5d1a-ee9e-79d3-8f2b-e8ee4f1db58d) | HIGH | Manifest never requires the shipped commit to be reachable from master | open, closes at S7 by construction | S7 re-runs the gate suite at the MASTER merge SHA and records it below before the ledger conjunct is declared; this row flips to fixed in the ship commit |
+| D1-2 | Codex D1 | HIGH | Green CI job conclusions do not prove the gates enforce anything | fixed | negative evidence recorded in commit 298832b message: dirty client -> git diff --exit-code exits 1; second alembic head -> test_single_head FAILED; renamed manifest op -> manifest tests FAILED |
+| D1-3 | Codex D1 | HIGH | 401 sweep evidence proves neither route completeness nor one code path | fixed | sweep derives universe from the runtime route tree (test_auth_sweep.py, commits 79fad89 + df9e268); single raise site enforced by test_single_raise_site_in_deps; suite green |
+| D1-4 | Codex D1 | HIGH | getCurrentUser evidence cannot discriminate DB-backed from a test double | fixed | test_get_current_user_contract_fidelity_no_overrides: plain TestClient, asserts app.dependency_overrides empty, real committed row round-trip (commit 79fad89), green |
+| D1-5 | Codex D1 | HIGH | Expired-token envelope uniformity omitted from the frozen conjunct | fixed | test_401_envelope_uniform_across_all_failure_modes byte-compares invalid/expired/unknown/inactive/malformed/non-uuid-sub bodies (commits 79fad89, c85214f), green |
+| D1-6 | Codex D1 | MED | Seed evidence can pass with seed --reset broken or unused | fixed | discriminating transcript in S5 evidence below: existing demo row id d01bf05a... -> seed --reset -> new id fb60444d... (delete+recreate proven), login 200 |
+| D1-7 | Codex D1 | MED | P7 predicate subjective (CSP directives, global cap, CORS narrowing unpinned) | fixed | exact values pinned in sprint-01-spec.md PIN-7 and carried in Settings (LOGIN_THROTTLE_*, JWT_*, API_PUBLIC_ORIGIN) + CONTENT_SECURITY_POLICY; per-convention tests green (commit d0b7cdb) |
+| D1-8 | Codex D1 | MED | compose down -v / seed --reset under-classified as ordinary verification | fixed | seed.py refuses ENVIRONMENT != local without --force and refuses the default password even with it; evidence runs confirmed against the employa-bot-fastapi local compose project only |
+| D1-9 | Codex D1 | MED | Green full suite does not prove the rollback fixture is actually in effect | fixed | tests/test_db_world.py asserts a committed write is invisible to other connections AND absent after teardown (commit 98f70e5), green in every suite run |
 | SEC-1 | background security review (via p4-verifier) | MED | SEED_DEMO_PASSWORD hardcoded default | fixed | seed.py refuses the default password outside local even with --force (commit e0ce64b) |
 | P6-V-1 | p6-verifier (Sonnet) | LOW-MED | No test proves seed --reset leaves other users untouched | fixed | test_seed_reset_leaves_other_users_untouched green (commit f569173) |
 | P6-V-2 | p6-verifier (Sonnet) | INFO | Demo seed persists Wes's real email (carried verbatim from store.py, already public in the repo) as a login-capable DB row when SEED_DEMO_DATA=true | informational, no action | pre-existing value, PO-owned persona choice; flag stays visible here |
@@ -67,6 +67,10 @@ PLAN (v3) says what we are building; this file says where we are. Update at ever
 | COR-2 | panel-correctness | LOW | JWT require list omitted `sv` | fixed | security.py require list includes sv (commit c85214f); suite green |
 | COR-3 | panel-correctness | LOW | Signed token with non-UUID sub -> DataError 500 instead of the uniform 401 | fixed | TokenPayload.sub is UUID-typed; `non-uuid-sub` case added to the byte-identical uniformity test, green (commit c85214f) |
 | SIM-1 | panel-simplification (Sonnet seat) | MED | `_reset_store` autouse-by-directory fixture violates the v3 Test-isolation rule | fixed | reset moved into store_client/unauthenticated_client bodies; `grep -rn "autouse=" backend/tests/ --include="*.py"` returns 0 hits (commit c85214f; remaining grep matches for the bare word are docstrings); contract suite green |
+| D2-1 | Codex D2 (thread 019f5d81-c7b3-7da0-bc69-1356d671a3ca) | HIGH | Ledger completion row false: D1 rows sat at open->PIN with pending evidence | fixed | every D1 row above now carries a terminal disposition with concrete evidence, except D1-1 which structurally closes in the S7 ship commit (see its row) |
+| D2-2 | Codex D2 | HIGH | Sweep universe from OpenAPI, not the served route tree; schema-hidden routes evade | fixed | _walk_routes recurses the runtime route tree incl. lazy _IncludedRouter, mount guard + OpenAPI-coverage cross-check added (commit df9e268); suite green |
+| D2-3 | Codex D2 | MED | AC-07 evidence did not discriminate seed --reset from prestart's seeding | fixed | id-change transcript: existing row d01bf05a... deleted and recreated as fb60444d... by the explicit reset, login 200 (S5 evidence) |
+| D2-4 | Codex D2 | MED | Throttle order (before password verification) asserted but not proven | fixed | test spies on crud.authenticate: zero invocations on the throttled request (commit df9e268), green |
 
 ## Open-debt ledger
 
