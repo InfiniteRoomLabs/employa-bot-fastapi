@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Sprint 01 run manifest recorded in `docs/progress.md` at S1 guard-on (run sprint-01-run-1 against GOAL.md/queue at 9d3a784): the completion audit for this run judges against the committed manifest, not later GOAL.md edits.
+
 - Sprint-treadmill operating process activated for Release 0.1: `docs/plans/` committed (the v3 implementation plan + its four adversarial reviews, the hoyle-re goal-loop investigation, and `sprint-treadmill-process.md` -- the process spec, itself Codex-reviewed to SOUND-WITH-FIXES with a 14-finding ledger). Operating artifacts created: `docs/plans/loop-research/approved-queue.md` (Wes-only queue, rev 1: 5 sprints + terminal audit + pre-approved repair phase), `GOAL.md` (Sprint 01 work contract: Phase 0 gates + Phase A foundation + v3 auth conventions), `docs/progress.md` (resumable state scaffold). Sprint 01 is an attended dry run; nothing executes until `/goal` is invoked.
 
 ### Fixed
