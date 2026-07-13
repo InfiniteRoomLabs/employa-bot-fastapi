@@ -4,10 +4,10 @@ PLAN (v3) says what we are building; this file says where we are. Update at ever
 
 ## Current state
 
-- Phase / run: sprint-02-jobs-manual-capture / sprint-02-run-1 (status: ready, NOT started)
-- Active branch: master (sprint branch `sprint-02-jobs` not yet created)
-- Last verified checkpoint: sprint-01 shipped and self-advanced (this commit)
-- Exact next action: SYNCHRONOUS S0 read-back with Wes (sprint-02 is ADVISORY and its Goal block is a fresh draft), then Codex D1 on the block, then resume preflight + `/goal Complete the snapshotted current run in @GOAL.md` + run manifest.
+- Phase / run: sprint-02-jobs-manual-capture / sprint-02-run-1 (status: running, guard on)
+- Active branch: sprint-02-jobs
+- Last verified checkpoint: run manifest committed (this commit); D1 fired, verdict UNSOUND (14 findings, dispositions pending in sprint-02-spec.md)
+- Exact next action: write docs/sprints/sprint-02-spec.md (S3: AC matrix, PINs, charters, D1 dispositions), codex-reply the dispositions, then S4 implementation per the spec packet order.
 - Packet log: P1 b4470a1 (contract-first generation). P2 298832b (CI gates + app_runtime/append-only migration, 11 tests, PIN-2 negative evidence). P4 e6c48ad (split, verifier PASS). P3 98f70e5 (rollback world + PIN-9 self-test). P6 e0ce64b (seed + prestart gate, verifier PASS w/ 1 fixed finding). P5 79fad89 (auth boundary, ONE commit: single 401 raise site, router-level CurrentUser, DB getCurrentUser, OpenAPI-derived sweep). P7 d0b7cdb (throttle/claims/lifetime/fail-closed/CORS/CSP). Rework f569173 (PO review W-1 + P6-V-1). e2e fix 6ea0891 (one login per run; bearer on fixture fetches).
 - S5 evidence (2026-07-13, branch sprint-01-foundation): backend 292 passed (293 after the D2 fixes); lint (mypy strict + ty + ruff) clean over app and tests; frontend vitest 323 passed, tsc + biome clean, build green; compose boot from CLEAN VOLUMES green (docker compose down -v && up -d --build --wait backend prestart db); playwright smoke 35/35.
 - AC-07 discriminating transcript (Codex D2-3; run 2026-07-13 against the local employa-bot-fastapi compose project, commands verbatim):
@@ -23,6 +23,22 @@ PLAN (v3) says what we are building; this file says where we are. Update at ever
 ## Run manifests
 
 (One entry per S1 guard-on: run_id, GOAL.md commit SHA, approved-queue.md commit SHA, Done-when conjuncts verbatim. The completion audit judges against the manifest, not against later edits.)
+
+### sprint-02-run-1 (guard on 2026-07-13)
+
+- run_id: sprint-02-run-1
+- GOAL.md commit SHA as invoked: 4260831bb432bc1fb50357d6892c24cd559dc077 (self-advance ship commit; repo HEAD at invocation 895b096)
+- approved-queue.md commit SHA: 9d3a784dc830ae3bf2653d7b6a7c5eb2f9670d27 (Wes-authored, queue_revision 1)
+- S0 record: Wes invoked `/goal Complete the snapshotted current run in @GOAL.md` directly against this ADVISORY block. The operator runbook line in GOAL.md (which he shipped and re-read at invocation) places the synchronous S0 read-back before that invocation; his invocation is recorded as the go decision. Retro proposals PR-1/PR-2/PR-3 ratified at their stated default dispositions (adopt; all three were already reflected in the GOAL.md Proven patterns he advanced). Queue copy diffed against approved-queue.md rev 1 at invocation: identical. Entry criteria: sprint-01 shipped (merge 0b83cd2), master CI fully green at 954bd00 (recorded 895b096). No prior sprint-02 work: fresh run, preflight clean (only pre-existing `.idea/*.iml` dirt).
+- Codex D1 fired pre-work (MUST trigger: fresh block + exemplar hard blocker), thread 019f5da8-4c83-7f03-8c0c-7eae419b51eb, verdict UNSOUND, 14 findings -> ledgered as S02-D1-1..14; dispositions in docs/sprints/sprint-02-spec.md and the review ledger below. Blocking findings close before implementation.
+- Done-when conjuncts, verbatim from GOAL.md at that SHA:
+  1. the `job` table exists via a migration satisfying every binding convention (composite uniqueness, tenant user_id, FORCE row-level security under a runtime role that is not the owner, timestamptz, NUMERIC money, named JSONB CHECKs, the partial-unique dedup index) with migration tests green under app_runtime
+  2. the jobs contract operations are served from the database with their manifest entries flipped to implemented and contract fidelity green
+  3. the ownership-matrix tenancy tests pass (intruder_client cross-tenant reads/writes all fail as tenant-indistinguishable 404s)
+  4. a job created in the browser persists and lists after a reload against the compose stack
+  5. frontend/e2e/core-journey.spec.ts exists, is required in CI, and covers login -> create job -> job lists, green from a fresh seed
+  6. the review ledger has no finding outside a terminal disposition
+  7. GOAL.md is retargeted to sprint-03-shortlist and committed
 
 ### sprint-01-run-1 (guard on 2026-07-13)
 
