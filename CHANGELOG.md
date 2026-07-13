@@ -9,7 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Sprint 01 shipped (Phase 0 gates + Phase A foundation + v3 auth conventions, merge 0b83cd2): contract-first client/schema generation from `mvp-api.yaml` with a `generated-diff` CI gate; `migration-gates` and `manifest-validation` CI jobs (coverage gate relaxed to advisory); the `app_runtime` role + `enforce_append_only(regclass)` machinery with behavioral tests under `SET LOCAL ROLE`; one DB test world (outer-transaction rollback, explicit `db`/`client`/`db_client`/`intruder_client`/`seed_domain` fixtures, zero autouse); contract tests split per route module; the auth boundary (every mock route requires a bearer token; ONE normalized 401 envelope across missing/invalid/expired/unknown/inactive/garbage-sub; `getCurrentUser` served from the DB as the first implemented op); demo seed (`python -m app.scripts.seed [--reset]`, prestart-gated by `SEED_DEMO_DATA`); and the v3 auth conventions (login throttling before password verification, JWT `iss/aud/iat/nbf/jti/sv` claims with session-version invalidation, 60-minute tokens, fail-closed `SECRET_KEY` outside local, credential-free narrowed CORS, CSP header + build-time meta tag). Full evidence + review ledger: `docs/progress.md`.
 - Sprint 01 run manifest recorded in `docs/progress.md` at S1 guard-on (run sprint-01-run-1 against GOAL.md/queue at 9d3a784): the completion audit for this run judges against the committed manifest, not later GOAL.md edits.
+
+### Fixed
+
+- Playwright CI: `Dockerfile.playwright` image (v1.58.2) had drifted behind the locked `@playwright/test` (1.61.1), so CI browsers were missing; image bumped to v1.61.1-noble and the container install is now `--frozen-lockfile` so future drift fails the build, not the run.
+- The e2e smoke suite logs in once per run via a Playwright `globalSetup` (per-worker logins tripped the new per-IP login throttle) and sends the bearer token on its fixture-id fetches (mock routes now require auth).
 
 - Sprint-treadmill operating process activated for Release 0.1: `docs/plans/` committed (the v3 implementation plan + its four adversarial reviews, the hoyle-re goal-loop investigation, and `sprint-treadmill-process.md` -- the process spec, itself Codex-reviewed to SOUND-WITH-FIXES with a 14-finding ledger). Operating artifacts created: `docs/plans/loop-research/approved-queue.md` (Wes-only queue, rev 1: 5 sprints + terminal audit + pre-approved repair phase), `GOAL.md` (Sprint 01 work contract: Phase 0 gates + Phase A foundation + v3 auth conventions), `docs/progress.md` (resumable state scaffold). Sprint 01 is an attended dry run; nothing executes until `/goal` is invoked.
 

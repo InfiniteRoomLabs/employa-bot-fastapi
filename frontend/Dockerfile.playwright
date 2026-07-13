@@ -1,4 +1,7 @@
-FROM mcr.microsoft.com/playwright:v1.58.2-noble
+# The image tag MUST match the @playwright/test version in bun.lock -- the
+# browsers are baked into the image, and a newer package expects browser
+# builds the older image lacks (this failed master CI on 2026-07-13).
+FROM mcr.microsoft.com/playwright:v1.61.1-noble
 
 WORKDIR /app
 
@@ -14,7 +17,8 @@ COPY frontend/package.json /app/frontend/
 
 WORKDIR /app/frontend
 
-RUN bun install
+# Frozen: the lockfile decides versions; drift fails the build, not the run.
+RUN bun install --frozen-lockfile
 
 COPY ./frontend /app/frontend
 

@@ -4,10 +4,10 @@ PLAN (v3) says what we are building; this file says where we are. Update at ever
 
 ## Current state
 
-- Phase / run: sprint-01-gates-and-foundation / sprint-01-run-1 (status: running, guard on 2026-07-13)
-- Active branch: sprint-01-foundation (all packets + review fixes committed)
-- Last verified checkpoint: D2 fixes committed (df9e268), ledger closed pending D2 re-audit
-- Exact next action: Codex D2 re-audit reply round, then S7 ship (merge to master, re-run gates at the merge SHA, completed-sprint entry + retro + cost line, self-advance to sprint-02).
+- Phase / run: sprint-02-jobs-manual-capture / sprint-02-run-1 (status: ready, NOT started)
+- Active branch: master (sprint branch `sprint-02-jobs` not yet created)
+- Last verified checkpoint: sprint-01 shipped and self-advanced (this commit)
+- Exact next action: SYNCHRONOUS S0 read-back with Wes (sprint-02 is ADVISORY and its Goal block is a fresh draft), then Codex D1 on the block, then resume preflight + `/goal Complete the snapshotted current run in @GOAL.md` + run manifest.
 - Packet log: P1 b4470a1 (contract-first generation). P2 298832b (CI gates + app_runtime/append-only migration, 11 tests, PIN-2 negative evidence). P4 e6c48ad (split, verifier PASS). P3 98f70e5 (rollback world + PIN-9 self-test). P6 e0ce64b (seed + prestart gate, verifier PASS w/ 1 fixed finding). P5 79fad89 (auth boundary, ONE commit: single 401 raise site, router-level CurrentUser, DB getCurrentUser, OpenAPI-derived sweep). P7 d0b7cdb (throttle/claims/lifetime/fail-closed/CORS/CSP). Rework f569173 (PO review W-1 + P6-V-1). e2e fix 6ea0891 (one login per run; bearer on fixture fetches).
 - S5 evidence (2026-07-13, branch sprint-01-foundation): backend 292 passed (293 after the D2 fixes); lint (mypy strict + ty + ruff) clean over app and tests; frontend vitest 323 passed, tsc + biome clean, build green; compose boot from CLEAN VOLUMES green (docker compose down -v && up -d --build --wait backend prestart db); playwright smoke 35/35.
 - AC-07 discriminating transcript (Codex D2-3; run 2026-07-13 against the local employa-bot-fastapi compose project, commands verbatim):
@@ -45,7 +45,33 @@ PLAN (v3) says what we are building; this file says where we are. Update at ever
 
 (One entry per shipped sprint: outcomes with evidence, AC covered, review results, deviations, cost line. This section absorbs the CHANGELOG role for sprint work.)
 
-- none yet
+### sprint-01-gates-and-foundation (run sprint-01-run-1, shipped 2026-07-13, merge 0b83cd2)
+
+Outcomes vs the 10 manifest conjuncts (AC-01..10, docs/sprints/sprint-01-spec.md):
+
+1. AC-01 generate-client from mvp-api.yaml: commit b4470a1; generated-diff CI job green in Test Backend run 29289255710 at merge SHA 0b83cd2; local `bash scripts/generate-client.sh && git diff --exit-code frontend/src/client backend/app/schemas.py` clean at 0b83cd2.
+2. AC-02 migration + manifest CI jobs: migration-gates and manifest-validation jobs green in the same run 29289255710 (https://github.com/InfiniteRoomLabs/employa-bot-fastapi/actions/runs/29289255710); 11 migration tests incl. append-only under SET LOCAL ROLE app_runtime.
+3. AC-03 401 boundary: runtime-route-tree sweep (test_auth_sweep.py) green -- 106 routes, 5 named exemptions, uniform envelope; commits 79fad89/df9e268/7c35970.
+4. AC-04 401 uniformity: byte-identical bodies across invalid/expired/unknown/inactive/malformed/non-uuid-sub (test_auth_boundary.py).
+5. AC-05 getCurrentUser implemented: DB-backed via CurrentUser, manifest flipped, no-override fidelity test green.
+6. AC-06 split + rollback world: per-subsystem contract files (verifier PASS, 121 defs preserved); PIN-9 self-test proves the outer-transaction rollback; full suite 293 green at 0b83cd2.
+7. AC-07 seed from fresh stack: clean-volume boot + discriminating id-change transcript (above) + demo login 200.
+8. AC-08 P7 conventions: throttle (order-proof spy test), JWT iss/aud/iat/nbf/jti/sv (sv required + validated), 60-min lifetime, fail-closed SECRET_KEY, credential-free narrowed CORS, CSP header + build-time meta; all tests green.
+9. AC-09 ledger: all findings at terminal dispositions (D1-1 flipped fixed below).
+10. AC-10 retarget: this commit rewrites GOAL.md to sprint-02-jobs-manual-capture.
+
+Review results: panel = QA PASS (zero findings), correctness 1 HIGH disproved-with-evidence + 2 LOW fixed, simplification 1 MED fixed; sweeps zero findings; Codex D1 9 findings (all closed), D2 4 findings (all closed, final verdict SOUND); PO live review W-1 fixed; P4/P6 verifiers PASS (1 LOW-MED fixed).
+
+Deviations worth knowing: SEED_DEMO_DATA wired via compose.yml not .env (commit guard); CSP meta injected at build time by a vite plugin (dev-mode react-refresh limitation, DEBT-2); e2e suite reworked to one-login-per-run (the throttle broke per-worker logins); Playwright CI image/lockfile version mismatch found at ship (pre-existing, INT-1) and fixed in this commit.
+
+Cost line: 1 attended session; fan-out = 2 Sonnet implementers + 3 verifiers/finders (2 Sonnet, 1 Haiku) + 3 panel seats (2 Sonnet, 1 Opus); Codex = 4 calls (D1 x1, D2 x1 + 2 reply rounds). Implementer/verifier pair hypothesis: supported -- both pairs shipped clean with 1 real finding caught (P6-V-1) at a fraction of inline wall-clock.
+
+Retro (2 questions):
+Q1 proposals (inert until ratified at the next S0, expire after 2 plannings):
+  - PR-1: add to Proven patterns -- always `uv run` for python tooling; bare python3 is 3.12 and produced a false HIGH finding (default: adopt; already reflected in the new GOAL.md patterns).
+  - PR-2: fanned finder/verifier agents must WRITE reports to a file, not only message them (one Haiku report was lost in transit and had to be re-run) (default: adopt; reflected in patterns).
+  - PR-3: keep the Sonnet implementer/verifier pair for fanned packets; evidence above (default: adopt).
+Q2 debt: DEBT-1 (single-process throttle), DEBT-2 (vite dev CSP), DEBT-3 (UNDO_WINDOW_SECONDS -> Settings when sprint-04 rebuilds applications); all non-blocking, ledgered above.
 
 ## Review ledger
 
@@ -54,7 +80,7 @@ PLAN (v3) says what we are building; this file says where we are. Update at ever
 | ID | Reviewer | Sev | Finding | Disposition | Closure evidence |
 |---|---|---|---|---|---|
 | (process design review 2026-07-13: 14 Codex findings on the process spec itself, all fixed -- see the appendix in sprint-treadmill-process.md) | | | | | |
-| D1-1 | Codex D1 (thread 019f5d1a-ee9e-79d3-8f2b-e8ee4f1db58d) | HIGH | Manifest never requires the shipped commit to be reachable from master | open, closes at S7 by construction | S7 re-runs the gate suite at the MASTER merge SHA and records it below before the ledger conjunct is declared; this row flips to fixed in the ship commit |
+| D1-1 | Codex D1 (thread 019f5d1a-ee9e-79d3-8f2b-e8ee4f1db58d) | HIGH | Manifest never requires the shipped commit to be reachable from master | fixed | evidence re-run at MASTER merge SHA 0b83cd2: backend 293 passed, lint clean, frontend build + 323 tests green, generated-diff clean locally; CI at that SHA: Test Backend run 29289255710 success (generated-diff, migration-gates, manifest-validation jobs), Test Docker Compose 29289255799 success, Zizmor success |
 | D1-2 | Codex D1 | HIGH | Green CI job conclusions do not prove the gates enforce anything | fixed | negative evidence recorded in commit 298832b message: dirty client -> git diff --exit-code exits 1; second alembic head -> test_single_head FAILED; renamed manifest op -> manifest tests FAILED |
 | D1-3 | Codex D1 | HIGH | 401 sweep evidence proves neither route completeness nor one code path | fixed | sweep derives universe from the runtime route tree (test_auth_sweep.py, commits 79fad89 + df9e268); single raise site enforced by test_single_raise_site_in_deps; suite green |
 | D1-4 | Codex D1 | HIGH | getCurrentUser evidence cannot discriminate DB-backed from a test double | fixed | test_get_current_user_contract_fidelity_no_overrides: plain TestClient, asserts app.dependency_overrides empty, real committed row round-trip (commit 79fad89), green |
@@ -78,6 +104,7 @@ PLAN (v3) says what we are building; this file says where we are. Update at ever
 | D2-4 | Codex D2 | MED | Throttle order (before password verification) asserted but not proven | fixed | test spies on crud.authenticate: zero invocations on the throttled request (commit df9e268), green |
 | SWEEP-1 | Haiku finder + lead re-run + QA seat | -- | Mechanical sweep, ZERO findings: `grep -L "dependencies=[Depends(get_current_user)]" app/api/routes/*.py` -> only login/users/utils/__init__ (per-route auth hand-verified by the QA seat); all four 403 literals in app/ are PRIVILEGE-class (superuser rules), none CREDENTIAL; `_STATUS_TO_KIND` contains no 403 | recorded (zero-finding sweep) | grep outputs above; Haiku finder's original report was lost in transit -- checks re-run by the lead, independently corroborated by panel-qa |
 | D2-verdict | Codex D2 | -- | Pre-merge audit final verdict after two reply rounds: all four findings CLOSED | SOUND for merge to master | thread 019f5d81-c7b3-7da0-bc69-1356d671a3ca |
+| INT-1 | lead (S7 ship, CI at merge SHA) | MED | Playwright CI red at 0b83cd2: Dockerfile.playwright image v1.58.2 vs bun.lock @playwright/test 1.61.1 (browsers missing in image); PRE-EXISTING latent mismatch, first playwright run since 2026-07-04 | fixed | image bumped to v1.61.1-noble + frozen install (ship commit); verification = playwright run at the transition SHA, URL recorded under sprint-02 preflight when it lands |
 
 ## Open-debt ledger
 
