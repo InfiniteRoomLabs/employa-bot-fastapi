@@ -1,9 +1,11 @@
 import uuid
 from datetime import UTC, datetime
+from typing import Any
 
 from pydantic import EmailStr
-from sqlalchemy import DateTime, String
-from sqlalchemy.dialects.postgresql import ARRAY
+from sqlalchemy import CheckConstraint, DateTime, String, UniqueConstraint
+from sqlalchemy import text as sa_text
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlmodel import Field, SQLModel
 
 
@@ -67,6 +69,131 @@ class User(UserBase, table=True):
     created_at: datetime | None = Field(
         default_factory=get_datetime_utc,
         sa_type=DateTime(timezone=True),  # type: ignore
+    )
+
+
+class Job(SQLModel, table=True):
+    """A captured posting (ADR-006 canonical collection) -- the first tenant
+    table, and the exemplar for plan v3's binding Design conventions.
+
+    Every convention decision is pinned in ``docs/sprints/sprint-02-spec.md``
+    (PIN-2..PIN-7): tenant ``user_id`` + composite ``UNIQUE(user_id, id)`` as
+    the composite-FK anchor for child tables, FORCE row-level security under
+    the ``app_runtime`` role (policy lives in the migration), ``timestamptz``
+    timestamps, named JSONB CHECKs for the opaque wire sub-objects, an
+    explicit ``schema_version``, and the partial-unique dedup index on
+    ``(user_id, source_url)`` reserved for captureJob. ``source_url`` is
+    normalized out of the ``source`` document because the dedup constraint
+    needs a column. Wire mapping (schemas.Job <-> this row) lives in
+    ``app/job_mapper.py``.
+
+    Named-CHECK bodies are wrapped in ``(...) IS TRUE`` because a bare CHECK
+    treats NULL as satisfied -- a missing JSONB key yields NULL, which would
+    otherwise slip through.
+    """
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "id", name="uq_job_user_id_id"),
+        CheckConstraint(
+            "(jsonb_typeof(location) = 'object'"
+            " AND jsonb_typeof(location->'raw') = 'string'"
+            " AND (NOT location ? 'locality'"
+            "      OR jsonb_typeof(location->'locality') IN ('string', 'null'))"
+            " AND (NOT location ? 'region'"
+            "      OR jsonb_typeof(location->'region') IN ('string', 'null'))"
+            " AND (NOT location ? 'country'"
+            "      OR jsonb_typeof(location->'country') IN ('string', 'null'))"
+            ") IS TRUE",
+            name="ck_job_location_shape",
+        ),
+        CheckConstraint(
+            "(jsonb_typeof(employment) = 'object'"
+            " AND employment->>'classification' IN ('w2', 'contract', '1099')"
+            " AND employment->>'cadence' IN ('hourly', 'salary')"
+            " AND employment->>'commitment' IN ('full-time', 'part-time')"
+            ") IS TRUE",
+            name="ck_job_employment_shape",
+        ),
+        CheckConstraint(
+            "compensation IS NULL OR ("
+            "jsonb_typeof(compensation) = 'object'"
+            " AND jsonb_typeof(compensation->'extra') = 'array'"
+            " AND (jsonb_typeof(compensation->'value') = 'number'"
+            "      OR (jsonb_typeof(compensation->'min') = 'number'"
+            "          AND jsonb_typeof(compensation->'max') = 'number'))"
+            ") IS TRUE",
+            name="ck_job_compensation_shape",
+        ),
+        CheckConstraint(
+            "(jsonb_typeof(source) = 'object'"
+            " AND jsonb_typeof(source->'board') = 'string'"
+            " AND source->>'channel' IN"
+            "     ('url', 'jd-text', 'extension', 'email-forward')"
+            " AND jsonb_typeof(source->'capturedAt') = 'string'"
+            ") IS TRUE",
+            name="ck_job_source_shape",
+        ),
+        CheckConstraint(
+            '"match" IS NULL OR ('
+            "jsonb_typeof(\"match\") = 'object'"
+            " AND jsonb_typeof(\"match\"->'score') = 'number'"
+            ") IS TRUE",
+            name="ck_job_match_shape",
+        ),
+        CheckConstraint(
+            "tags IS NULL OR jsonb_typeof(tags) = 'array' IS TRUE",
+            name="ck_job_tags_array",
+        ),
+        CheckConstraint(
+            "requirements IS NULL OR jsonb_typeof(requirements) = 'array' IS TRUE",
+            name="ck_job_requirements_array",
+        ),
+        CheckConstraint(
+            "work_mode IN ('remote', 'hybrid', 'onsite')",
+            name="ck_job_work_mode",
+        ),
+        CheckConstraint("schema_version >= 1", name="ck_job_schema_version"),
+    )
+
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    user_id: uuid.UUID = Field(foreign_key="user.id", nullable=False, index=True)
+    company: str
+    title: str
+    location: dict[str, Any] = Field(sa_type=JSONB)
+    work_mode: str
+    employment: dict[str, Any] = Field(sa_type=JSONB)
+    compensation: dict[str, Any] | None = Field(
+        default=None,
+        # none_as_null: an absent document is SQL NULL, never jsonb 'null'
+        # (psycopg would otherwise send Jsonb(None) and trip the named CHECK).
+        sa_type=JSONB(none_as_null=True),  # type: ignore
+    )
+    seniority: str | None = None
+    source: dict[str, Any] = Field(sa_type=JSONB)
+    source_url: str | None = Field(default=None)
+    is_new: bool | None = None
+    posted: datetime = Field(sa_type=DateTime(timezone=True))  # type: ignore
+    summary: str | None = None
+    tags: list[str] | None = Field(
+        default=None,
+        sa_type=JSONB(none_as_null=True),  # type: ignore
+    )
+    requirements: list[str] | None = Field(
+        default=None,
+        sa_type=JSONB(none_as_null=True),  # type: ignore
+    )
+    description: str | None = None
+    match: dict[str, Any] | None = Field(
+        default=None,
+        sa_type=JSONB(none_as_null=True),  # type: ignore
+    )
+    schema_version: int = Field(
+        default=1, nullable=False, sa_column_kwargs={"server_default": "1"}
+    )
+    created_at: datetime = Field(
+        default_factory=get_datetime_utc,
+        sa_type=DateTime(timezone=True),  # type: ignore
+        sa_column_kwargs={"server_default": sa_text("now()")},
     )
 
 

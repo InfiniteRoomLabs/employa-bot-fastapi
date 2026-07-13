@@ -67,21 +67,24 @@ operations:
 
   getJobs:
     slice: 2
-    status: planned
+    status: implemented  # sprint-02: DB-backed (tests/api/routes/test_jobs.py)
     ai: false
-    consumer: getJobs / job detail lookups (ADR-006 canonical collection)
+    consumer: useJobs / jobs screen default view (ADR-006 canonical collection)
     tests: [contract-fidelity]
 
   getJobsInbox:
+    # Stays mock-served through Release 0.1 (sprint-02 PIN-2): the inbox is
+    # the search-feed projection keyed by mock search ids; persisting it
+    # would make DB rows depend on mock searches (abandonment-safety rule).
     slice: 2
     status: planned
     ai: false
-    consumer: useJobsInbox / jobs inbox screen
+    consumer: useJobsInbox / jobs inbox screen (search-scoped views)
     tests: [contract-fidelity]
 
   getJob:
     slice: 2
-    status: planned
+    status: implemented  # sprint-02: DB-backed (tests/api/routes/test_jobs.py)
     ai: false
     consumer: getJob / job detail screen
     tests: [contract-fidelity, ownership-404]

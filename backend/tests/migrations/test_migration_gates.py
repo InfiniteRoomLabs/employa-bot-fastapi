@@ -15,67 +15,25 @@ import os
 import subprocess
 import sys
 from collections.abc import Generator
-from pathlib import Path
 
 import pytest
-from alembic.config import Config
 from alembic.script import ScriptDirectory
-from sqlalchemy import Engine, create_engine, text
+from sqlalchemy import Engine, text
 from sqlalchemy.exc import DBAPIError
 
-from app.core.config import settings
-
-BACKEND_DIR = Path(__file__).resolve().parents[2]
-SCRATCH_DB = "employa_migration_test"
-
-
-def _alembic_config() -> Config:
-    cfg = Config(str(BACKEND_DIR / "alembic.ini"))
-    cfg.set_main_option("script_location", str(BACKEND_DIR / "app" / "alembic"))
-    return cfg
+from tests.migrations.conftest import (
+    BACKEND_DIR,
+    SCRATCH_DB,
+)
+from tests.migrations.conftest import (
+    alembic_config as _alembic_config,
+)
 
 
 def test_single_head() -> None:
     """Exactly one alembic head; multiple heads fail CI (v3 Migrations)."""
     heads = ScriptDirectory.from_config(_alembic_config()).get_heads()
     assert len(heads) == 1, f"expected a single alembic head, found {heads}"
-
-
-def _server_url(database: str) -> str:
-    return (
-        f"postgresql+psycopg://{settings.POSTGRES_USER}:{settings.POSTGRES_PASSWORD}"
-        f"@{settings.POSTGRES_SERVER}:{settings.POSTGRES_PORT}/{database}"
-    )
-
-
-@pytest.fixture(scope="module")
-def scratch_engine() -> Generator[Engine]:
-    """Empty scratch database upgraded to head by the real alembic command."""
-    admin = create_engine(
-        _server_url(settings.POSTGRES_DB or settings.POSTGRES_USER),
-        isolation_level="AUTOCOMMIT",
-    )
-    with admin.connect() as conn:
-        conn.execute(text(f"DROP DATABASE IF EXISTS {SCRATCH_DB} WITH (FORCE)"))
-        conn.execute(text(f"CREATE DATABASE {SCRATCH_DB}"))
-
-    result = subprocess.run(
-        [sys.executable, "-m", "alembic", "upgrade", "head"],
-        cwd=BACKEND_DIR,
-        env={**os.environ, "POSTGRES_DB": SCRATCH_DB},
-        capture_output=True,
-        text=True,
-    )
-    assert result.returncode == 0, (
-        f"empty-upgrade failed:\n{result.stdout}\n{result.stderr}"
-    )
-
-    engine = create_engine(_server_url(SCRATCH_DB))
-    yield engine
-    engine.dispose()
-    with admin.connect() as conn:
-        conn.execute(text(f"DROP DATABASE IF EXISTS {SCRATCH_DB} WITH (FORCE)"))
-    admin.dispose()
 
 
 def test_empty_upgrade_reaches_single_head(scratch_engine: Engine) -> None:
@@ -170,8 +128,13 @@ def test_append_only_trigger_blocks_even_the_owner(
         conn.rollback()
 
 
+@pytest.mark.usefixtures("scratch_engine")
 def test_downgrade_refused_forward_fix_only() -> None:
-    """The new revision's downgrade raises (v3 forward-fix policy)."""
+    """The new revision's downgrade raises (v3 forward-fix policy).
+
+    Pulls ``scratch_engine`` so the scratch database is guaranteed alive
+    (the fixture is session-scoped in conftest since sprint-02).
+    """
     result = subprocess.run(
         [sys.executable, "-m", "alembic", "downgrade", "-1"],
         cwd=BACKEND_DIR,

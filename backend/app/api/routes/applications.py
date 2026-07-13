@@ -32,7 +32,7 @@ from fastapi import APIRouter, Body, Depends, Query
 from pydantic import BaseModel
 
 from app import store
-from app.api.deps import get_current_user
+from app.api.deps import CurrentUser, TenantSession, get_current_user
 from app.api.errors import (
     ConflictError,
     InvalidTransitionError,
@@ -40,6 +40,7 @@ from app.api.errors import (
     UndoWindowExpiredError,
     ValidationTaggedError,
 )
+from app.job_mapper import wire_job_to_row
 from app.schemas import (
     Actor,
     Application,
@@ -209,7 +210,11 @@ def _ensure_default_search() -> UUID:
     response_model=ApplicationView,
     status_code=201,
 )
-def create_application(body: CreateApplicationInput) -> ApplicationView:
+def create_application(
+    body: CreateApplicationInput,
+    session: TenantSession,
+    current_user: CurrentUser,
+) -> ApplicationView:
     """Create an application (createApplication, ORI-014).
 
     Normalized (ADR-006): mints a Job posting into ``store.jobs`` as a side
@@ -238,6 +243,12 @@ def create_application(body: CreateApplicationInput) -> ApplicationView:
         match=JobMatch(score=body.match, strengths=[], gaps=[]),
     )
     store.jobs[job_id] = job
+    # Sprint-02 (PIN-1): manual capture persists the canonical job row. The
+    # store copy above stays for the mock joins (application_view etc.);
+    # the DB row is what getJobs/getJob serve. One commit, at the end of the
+    # tenant transaction (see get_tenant_session).
+    session.add(wire_job_to_row(job, user_id=current_user.id))
+    session.commit()
     new_app = Application(
         id=uuid4(),
         jobId=job_id,

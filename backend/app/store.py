@@ -2016,6 +2016,17 @@ def _seed_jobs() -> dict[UUID, Job]:
     }
 
 
+def demo_job_seeds() -> dict[UUID, Job]:
+    """Fresh copies of the demo job fixtures.
+
+    Public accessor for the seed script and tests (sprint-02): the DB demo
+    seed persists exactly these postings under the demo user, with the SAME
+    fixed UUIDs the inbox items link to, so inbox -> /jobs/{id} navigation
+    resolves against the DB-backed getJob.
+    """
+    return _seed_jobs()
+
+
 # Live store. Never reassigned -- mutated in place. Routes read/write ``store.jobs``.
 jobs: dict[UUID, Job] = _seed_jobs()
 

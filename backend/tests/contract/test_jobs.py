@@ -1,51 +1,16 @@
-"""Behavior tests for the jobs resource. No database.
+"""Behavior tests for the MOCK-SERVED jobs surface. No database.
 
-Covers: list/get happy paths, searchId filtering (jobs inbox), and the 404
-envelope on unknown UUIDs.
+Since sprint-02 only ``getJobsInbox`` is mock-served here (PIN-2,
+docs/sprints/sprint-02-spec.md); the DB-backed ``getJobs``/``getJob``
+coverage (fidelity, tenancy, provenance) lives in
+``tests/api/routes/test_jobs.py``.
 """
 
 from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
-from tests.contract.helpers import JOB_ID_STRIPE, SEARCH_ID_BACKEND, UNKNOWN_ID
-
-JOB_ID_FLYIO = "e0b2f7d4-3a5c-4fb6-ad49-4b8caf6eb073"
-
-
-def test_get_jobs_lists_seeded_seven(store_client: TestClient) -> None:
-    resp = store_client.get("/api/v1/jobs")
-    assert resp.status_code == 200
-    body = resp.json()
-    assert len(body) == 7
-    ids = {j["id"] for j in body}
-    assert JOB_ID_STRIPE in ids
-
-
-def test_get_job_returns_wire_shape(store_client: TestClient) -> None:
-    resp = store_client.get(f"/api/v1/jobs/{JOB_ID_STRIPE}")
-    assert resp.status_code == 200
-    body = resp.json()
-    assert body["company"] == "Stripe"
-    assert body["compensation"] == {"min": 255000, "max": 305000, "extra": []}
-    assert body["match"]["score"] == 92
-
-
-def test_get_job_partial_capture_omits_match(store_client: TestClient) -> None:
-    resp = store_client.get(f"/api/v1/jobs/{JOB_ID_FLYIO}")
-    assert resp.status_code == 200
-    body = resp.json()
-    assert body["match"] is None
-    assert "summary" not in body or body["summary"] is None
-
-
-def test_get_job_unknown_id_returns_404_envelope(store_client: TestClient) -> None:
-    resp = store_client.get(f"/api/v1/jobs/{UNKNOWN_ID}")
-    assert resp.status_code == 404
-    body = resp.json()
-    assert body["kind"] == "not_found"
-    assert body["path"] == f"/api/v1/jobs/{UNKNOWN_ID}"
-    assert set(body) <= {"kind", "path", "message"}
+from tests.contract.helpers import SEARCH_ID_BACKEND, UNKNOWN_ID
 
 
 def test_get_jobs_inbox_defaults_to_canonical(store_client: TestClient) -> None:

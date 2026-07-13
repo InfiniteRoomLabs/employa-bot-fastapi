@@ -386,7 +386,11 @@ def test_timeline_unknown_404(store_client: TestClient) -> None:
 
 
 def test_create_application_mints_job(store_client: TestClient) -> None:
-    jobs_before = len(store_client.get(f"{B}/jobs").json())
+    from uuid import UUID
+
+    from app import store
+
+    jobs_before = len(store.jobs)
     resp = store_client.post(
         f"{B}/applications",
         json={
@@ -403,9 +407,12 @@ def test_create_application_mints_job(store_client: TestClient) -> None:
     assert body["company"] == "Acme"
     assert body["stage"] == "drafting"
     assert body["searchId"] is not None  # auto-assigned via ensure-default-search
-    # the posting was minted into the job store and resolves via getJob.
-    assert len(store_client.get(f"{B}/jobs").json()) == jobs_before + 1
-    assert store_client.get(f"{B}/jobs/{body['jobId']}").status_code == 200
+    # The posting was minted into the STORE copy (the mock joins' source).
+    # Since sprint-02 getJobs/getJob are DB-backed, so the served-collection
+    # half of this claim lives in tests/api/routes/test_jobs.py
+    # (test_create_application_mints_job_for_caller_only).
+    assert len(store.jobs) == jobs_before + 1
+    assert UUID(body["jobId"]) in store.jobs
 
 
 def test_create_application_honors_explicit_search(store_client: TestClient) -> None:
