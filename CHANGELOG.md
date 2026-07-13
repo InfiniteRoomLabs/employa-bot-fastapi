@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Sprint-treadmill operating process activated for Release 0.1: `docs/plans/` committed (the v3 implementation plan + its four adversarial reviews, the hoyle-re goal-loop investigation, and `sprint-treadmill-process.md` -- the process spec, itself Codex-reviewed to SOUND-WITH-FIXES with a 14-finding ledger). Operating artifacts created: `docs/plans/loop-research/approved-queue.md` (Wes-only queue, rev 1: 5 sprints + terminal audit + pre-approved repair phase), `GOAL.md` (Sprint 01 work contract: Phase 0 gates + Phase A foundation + v3 auth conventions), `docs/progress.md` (resumable state scaffold). Sprint 01 is an attended dry run; nothing executes until `/goal` is invoked.
+
 ### Fixed
 
 - Seeded job fixture URLs in the scaffold store now construct `AnyUrl` explicitly instead of passing raw strings past a type-ignore.
