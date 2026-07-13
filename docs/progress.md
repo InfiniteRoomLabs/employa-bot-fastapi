@@ -76,6 +76,8 @@ PLAN (v3) says what we are building; this file says where we are. Update at ever
 | D2-2 | Codex D2 | HIGH | Sweep universe from OpenAPI, not the served route tree; schema-hidden routes evade | fixed | _walk_routes recurses the runtime route tree incl. lazy _IncludedRouter, mount guard + OpenAPI-coverage cross-check added (commit df9e268); suite green |
 | D2-3 | Codex D2 | MED | AC-07 evidence did not discriminate seed --reset from prestart's seeding | fixed | id-change transcript: existing row d01bf05a... deleted and recreated as fb60444d... by the explicit reset, login 200 (S5 evidence) |
 | D2-4 | Codex D2 | MED | Throttle order (before password verification) asserted but not proven | fixed | test spies on crud.authenticate: zero invocations on the throttled request (commit df9e268), green |
+| SWEEP-1 | Haiku finder + lead re-run + QA seat | -- | Mechanical sweep, ZERO findings: `grep -L "dependencies=[Depends(get_current_user)]" app/api/routes/*.py` -> only login/users/utils/__init__ (per-route auth hand-verified by the QA seat); all four 403 literals in app/ are PRIVILEGE-class (superuser rules), none CREDENTIAL; `_STATUS_TO_KIND` contains no 403 | recorded (zero-finding sweep) | grep outputs above; Haiku finder's original report was lost in transit -- checks re-run by the lead, independently corroborated by panel-qa |
+| D2-verdict | Codex D2 | -- | Pre-merge audit final verdict after two reply rounds: all four findings CLOSED | SOUND for merge to master | thread 019f5d81-c7b3-7da0-bc69-1356d671a3ca |
 
 ## Open-debt ledger
 
