@@ -60,6 +60,11 @@ def test_401_envelope_uniform_across_all_failure_modes(
             inactive.id, expires_delta=expires
         ),
         "malformed": "not-a-jwt-at-all",
+        # Signed but garbage subject: must be the uniform 401, never a
+        # DataError 500 (panel COR-3; TokenPayload.sub is UUID-typed).
+        "non-uuid-sub": security.create_access_token(
+            "not-a-uuid", expires_delta=expires
+        ),
     }
 
     bodies = {}

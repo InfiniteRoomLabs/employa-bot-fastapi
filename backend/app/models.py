@@ -92,9 +92,11 @@ class Token(SQLModel):
     token_type: str = "bearer"
 
 
-# Contents of JWT token (claim set: plan v3 Auth conventions)
+# Contents of JWT token (claim set: plan v3 Auth conventions). ``sub`` is
+# UUID-typed so a signed-but-garbage subject fails pydantic validation and
+# lands in the uniform 401 instead of a DataError 500 (panel COR-3).
 class TokenPayload(SQLModel):
-    sub: str | None = None
+    sub: uuid.UUID | None = None
     sv: int = 0
 
 

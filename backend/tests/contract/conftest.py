@@ -8,8 +8,8 @@ requested per-test -- not autouse magic; auth behavior itself is covered by
 the REAL dependency in ``test_auth_sweep.py`` (DB-free: the missing-token
 path never touches the database) and ``tests/api/routes/test_auth_boundary``.
 
-The store is reset before every test so tests stay isolated and
-order-independent.
+Each client fixture resets the store in its body, so tests stay isolated and
+order-independent without any autouse fixture.
 """
 
 from __future__ import annotations
@@ -49,16 +49,14 @@ STUB_USER = DbUser(
 )
 
 
-@pytest.fixture(autouse=True)
-def _reset_store() -> Generator[None]:
-    """Restore pristine fixture state before each contract test."""
-    store.reset()
-    yield
-
-
 @pytest.fixture
 def store_client() -> Generator[TestClient]:
-    """Authenticated client for the store-backed mock API (auth stubbed)."""
+    """Authenticated client for the store-backed mock API (auth stubbed).
+
+    Resets the in-memory store so tests stay isolated and order-independent
+    (in the fixture body, not autouse -- panel finding SIM-1).
+    """
+    store.reset()
     app.dependency_overrides[deps.get_current_user] = lambda: STUB_USER
     try:
         with TestClient(app) as c:
@@ -70,5 +68,6 @@ def store_client() -> Generator[TestClient]:
 @pytest.fixture
 def unauthenticated_client() -> Generator[TestClient]:
     """Raw client with NO overrides -- the real auth dependency runs."""
+    store.reset()
     with TestClient(app) as c:
         yield c

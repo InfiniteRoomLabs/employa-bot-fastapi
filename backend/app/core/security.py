@@ -46,7 +46,7 @@ def decode_access_token(token: str) -> dict[str, Any]:
         algorithms=[ALGORITHM],
         audience=settings.JWT_AUDIENCE,
         issuer=settings.JWT_ISSUER,
-        options={"require": ["exp", "sub", "iss", "aud", "iat", "nbf", "jti"]},
+        options={"require": ["exp", "sub", "iss", "aud", "iat", "nbf", "jti", "sv"]},
     )
 
 

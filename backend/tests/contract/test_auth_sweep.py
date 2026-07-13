@@ -7,8 +7,10 @@ return the contract 401 envelope -- and every envelope body must be
 byte-identical modulo ``path``, which is what "single normalized code path"
 looks like from the wire.
 
-This stays DB-free because the missing-token path in
-``deps.get_current_user`` raises before any database access.
+The 401 sweep itself stays DB-free because the missing-token path in
+``deps.get_current_user`` raises before any database access. The
+exempt-route check is the one exception: password-recovery/reset-password
+are DB-backed, so THAT test needs the database up (QA panel note).
 """
 
 from __future__ import annotations
