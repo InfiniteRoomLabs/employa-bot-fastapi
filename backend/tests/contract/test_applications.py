@@ -1,11 +1,12 @@
-"""Behavior tests for the applications / interviews / archive group (14 ops).
+"""Behavior tests for the applications resource (ADR-006 / D6..D19). No
+database.
 
-No database. Covers the transitionApplication core op exhaustively (every legal
-edge in the settled matrix accepted; a representative illegal edge per source
-stage rejected; version conflict; the applied/resumeId conditional and its
+Covers the transitionApplication core op exhaustively (every legal edge in
+the settled matrix accepted; a representative illegal edge per source stage
+rejected; version conflict; the applied/resumeId conditional and its
 snapshot side effect), plus the full lifecycle: mark-won + undo (incl. an
-expired window), dismiss dual-mode, reactivate, archive buckets/counts, the
-interview-round allowlist, timelines, and createApplication's Job mint.
+expired window), dismiss dual-mode, reactivate, the timeline, and
+createApplication's Job mint.
 """
 
 from __future__ import annotations
@@ -19,12 +20,10 @@ from fastapi.testclient import TestClient
 from app import store
 from app.api.routes.applications import LEGAL_TRANSITIONS
 from app.schemas import Stage
-
-B = "/api/v1"
+from tests.contract.helpers import MODAL, STRIPE, B
+from tests.contract.helpers import UNKNOWN_ID as UNKNOWN
 
 # Seeded well-known application ids (verbatim slugToUuid outputs).
-STRIPE = "6df605b9-9094-4344-8113-ac8b3248f03e"  # platform, applied
-MODAL = "24328093-6bbf-4801-8ff7-90337a46a7fa"  # platform, drafting
 VERCEL = "6a6918ec-3133-4cb3-8e36-d670323bfc73"  # platform, offer
 ARC_WON = "8568e175-05d4-443b-8b0c-2e7a9bec6c16"  # archive, won
 ARC_REJ = "85681ed3-7ad9-4514-8ae6-7f4b8e524091"  # archive, rejected
@@ -32,7 +31,6 @@ ARC_REJ = "85681ed3-7ad9-4514-8ae6-7f4b8e524091"  # archive, rejected
 SEARCH_ID_BACKEND = "b53a91e7-0f44-4d2b-8a05-6c1d2e9b4f30"
 SEARCH_ID_AI_INFRA = "ad9e6c14-5b80-4f17-a3d2-7e6f9c1b0a55"
 RESUME_ID = "c1a7e2b0-4d31-4f86-9a52-0b6d3e7f1c84"  # RESUME_ID_MASTER
-UNKNOWN = "00000000-0000-4000-8000-000000000000"
 
 
 def _put_app_at(stage: Stage, version: int = 1) -> str:
@@ -341,24 +339,6 @@ def test_dismiss_unknown_404(client: TestClient) -> None:
 
 
 # ---------------------------------------------------------------------------
-# archive (ORI-009)
-# ---------------------------------------------------------------------------
-
-
-def test_archive_buckets(client: TestClient) -> None:
-    assert len(client.get(f"{B}/archive", params={"kind": "won"}).json()) == 1
-    assert len(client.get(f"{B}/archive", params={"kind": "passed"}).json()) == 14
-
-
-def test_archive_counts_seeded(client: TestClient) -> None:
-    assert client.get(f"{B}/archive/counts").json() == {"won": 1, "passed": 14}
-
-
-def test_archive_kind_required(client: TestClient) -> None:
-    assert client.get(f"{B}/archive").status_code == 422
-
-
-# ---------------------------------------------------------------------------
 # timeline (TRK-118)
 # ---------------------------------------------------------------------------
 
@@ -393,52 +373,6 @@ def test_timeline_records_transition(client: TestClient) -> None:
 
 def test_timeline_unknown_404(client: TestClient) -> None:
     assert client.get(f"{B}/applications/{UNKNOWN}/timeline").status_code == 404
-
-
-# ---------------------------------------------------------------------------
-# interview rounds (TRK-117 / TRK-127)
-# ---------------------------------------------------------------------------
-
-
-def test_get_interview_rounds(client: TestClient) -> None:
-    resp = client.get(f"{B}/applications/{STRIPE}/interviews")
-    assert resp.status_code == 200
-    assert len(resp.json()) == 2
-    assert {r["type"] for r in resp.json()} == {"recruiter-screen", "technical"}
-
-
-def test_get_interview_rounds_empty(client: TestClient) -> None:
-    # MODAL has no seeded rounds -> empty list, not a 404.
-    resp = client.get(f"{B}/applications/{MODAL}/interviews")
-    assert resp.status_code == 200
-    assert resp.json() == []
-
-
-def test_patch_interview_round_allowlisted_field(client: TestClient) -> None:
-    round_id = client.get(f"{B}/applications/{STRIPE}/interviews").json()[0]["id"]
-    resp = client.patch(
-        f"{B}/applications/{STRIPE}/interviews/{round_id}",
-        json={"status": "cancelled"},
-    )
-    assert resp.status_code == 200
-    assert resp.json()["status"] == "cancelled"
-
-
-def test_patch_interview_round_rejects_unknown_field(client: TestClient) -> None:
-    round_id = client.get(f"{B}/applications/{STRIPE}/interviews").json()[0]["id"]
-    resp = client.patch(
-        f"{B}/applications/{STRIPE}/interviews/{round_id}",
-        json={"appId": UNKNOWN, "note": "not allowed"},
-    )
-    assert resp.status_code == 422
-    assert resp.json()["kind"] == "validation_error"
-
-
-def test_patch_interview_round_unknown_404(client: TestClient) -> None:
-    resp = client.patch(
-        f"{B}/applications/{STRIPE}/interviews/{UNKNOWN}", json={"status": "completed"}
-    )
-    assert resp.status_code == 404
 
 
 # ---------------------------------------------------------------------------
