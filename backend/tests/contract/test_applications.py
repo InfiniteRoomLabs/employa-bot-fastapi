@@ -7,12 +7,15 @@ fidelity/tenancy/provenance coverage lives in
 mock searchId view (BACKEND/AI_INFRA) is still mock-served and covered here
 (PIN-3 precedent from ``tests/contract/test_shortlist.py``).
 
-Everything else on this resource stays mock through 3b/3c and is covered
-here exhaustively: the transitionApplication core op (every legal edge in
-the settled matrix accepted; a representative illegal edge per source stage
-rejected; version conflict; the applied/resumeId conditional and its
-snapshot side effect), plus the full lifecycle: mark-won + undo (incl. an
-expired window), dismiss dual-mode, reactivate, and the timeline.
+Since sprint-04 3b, transitionApplication and getResumeSnapshot's DB-row path
+are ALSO DB-backed (PIN-6): the op is DB-only post-flip -- mock store
+fixtures are not transitionable -- so the legal/illegal matrix, the version-
+conflict guard, the applied/resumeId conditional, and the resulting snapshot
+now live in ``tests/api/routes/test_transitions.py``. What's left here is
+what STILL stays mock through 3c: mark-won + undo (incl. an expired window),
+dismiss dual-mode, reactivate, and the timeline -- plus getResumeSnapshot's
+STORE-fixture synthesis fallback (the route retains that seam for seeded
+mock applications).
 """
 
 from __future__ import annotations
@@ -20,12 +23,9 @@ from __future__ import annotations
 from datetime import timedelta
 from uuid import UUID
 
-import pytest
 from fastapi.testclient import TestClient
 
 from app import store
-from app.api.routes.applications import LEGAL_TRANSITIONS
-from app.schemas import Stage
 from tests.contract.helpers import MODAL, STRIPE, B
 from tests.contract.helpers import UNKNOWN_ID as UNKNOWN
 
@@ -36,18 +36,6 @@ ARC_REJ = "85681ed3-7ad9-4514-8ae6-7f4b8e524091"  # archive, rejected
 
 SEARCH_ID_BACKEND = "b53a91e7-0f44-4d2b-8a05-6c1d2e9b4f30"
 SEARCH_ID_AI_INFRA = "ad9e6c14-5b80-4f17-a3d2-7e6f9c1b0a55"
-RESUME_ID = "c1a7e2b0-4d31-4f86-9a52-0b6d3e7f1c84"  # RESUME_ID_MASTER
-
-
-def _put_app_at(stage: Stage, version: int = 1) -> str:
-    """Re-stage the seeded Stripe application in the store (it carries a
-    resolvable job + resume), returning its id -- a cheap way to place an
-    application at any source stage without minting a fresh graph."""
-    base = store.applications[UUID(STRIPE)]
-    store.applications[UUID(STRIPE)] = base.model_copy(
-        update={"stage": stage, "version": version}
-    )
-    return STRIPE
 
 
 # ---------------------------------------------------------------------------
@@ -75,108 +63,16 @@ def test_get_applications_filters_by_search_id(store_client: TestClient) -> None
 
 
 # ---------------------------------------------------------------------------
-# transitionApplication -- every legal edge accepted
+# transitionApplication (the legal/illegal matrix, version conflict, the
+# applied/resumeId conditional, and its snapshot side effect) is DB-only
+# since sprint-04 3b -- mock store fixtures like STRIPE are no longer
+# transitionable. That coverage lives entirely in
+# tests/api/routes/test_transitions.py now. What's left here is
+# getResumeSnapshot's STORE-fixture path: the route retains the mock
+# fallback (DEBT-5) for seeded fixtures a DB-only transitionApplication can
+# no longer produce, so its 409/200-synthesis/404 behavior on those fixtures
+# is still worth covering directly.
 # ---------------------------------------------------------------------------
-
-_LEGAL_PAIRS = [
-    (source, target)
-    for source, targets in LEGAL_TRANSITIONS.items()
-    for target in sorted(targets, key=lambda s: s.value)
-]
-
-
-@pytest.mark.parametrize(
-    ("source", "target"),
-    _LEGAL_PAIRS,
-    ids=[f"{s.value}->{t.value}" for s, t in _LEGAL_PAIRS],
-)
-def test_legal_transition_accepted(
-    store_client: TestClient, source: Stage, target: Stage
-) -> None:
-    _put_app_at(source)
-    payload: dict[str, object] = {"targetStage": target.value, "expectedVersion": 1}
-    if target == Stage.applied:
-        payload["resumeId"] = RESUME_ID
-    resp = store_client.post(f"{B}/applications/{STRIPE}/transitions", json=payload)
-    assert resp.status_code == 200, resp.text
-    body = resp.json()
-    assert body["application"]["stage"] == target.value
-    assert body["application"]["version"] == 2  # bumped on success
-    assert body["transition"]["fromStage"] == source.value
-    assert body["transition"]["toStage"] == target.value
-    assert body["transition"]["source"] == "user"
-
-
-# ---------------------------------------------------------------------------
-# transitionApplication -- a representative illegal edge per source stage
-# ---------------------------------------------------------------------------
-
-
-def _one_illegal_target(source: Stage) -> Stage:
-    allowed = LEGAL_TRANSITIONS[source]
-    for candidate in LEGAL_TRANSITIONS:
-        if candidate != source and candidate not in allowed:
-            return candidate
-    raise AssertionError("every stage has at least one illegal target")
-
-
-_ILLEGAL_PAIRS = [(s, _one_illegal_target(s)) for s in LEGAL_TRANSITIONS]
-
-
-@pytest.mark.parametrize(
-    ("source", "target"),
-    _ILLEGAL_PAIRS,
-    ids=[f"{s.value}->{t.value}" for s, t in _ILLEGAL_PAIRS],
-)
-def test_illegal_transition_rejected(
-    store_client: TestClient, source: Stage, target: Stage
-) -> None:
-    _put_app_at(source)
-    resp = store_client.post(
-        f"{B}/applications/{STRIPE}/transitions",
-        json={"targetStage": target.value, "expectedVersion": 1},
-    )
-    assert resp.status_code == 422, resp.text
-    assert resp.json()["kind"] == "invalid_transition"
-
-
-# ---------------------------------------------------------------------------
-# transitionApplication -- version guard + applied/resumeId + snapshot
-# ---------------------------------------------------------------------------
-
-
-def test_transition_version_conflict(store_client: TestClient) -> None:
-    _put_app_at(Stage.applied, version=1)
-    resp = store_client.post(
-        f"{B}/applications/{STRIPE}/transitions",
-        json={"targetStage": "screening", "expectedVersion": 99},
-    )
-    assert resp.status_code == 409
-    assert resp.json()["kind"] == "conflict"
-
-
-def test_applied_requires_resume_id(store_client: TestClient) -> None:
-    _put_app_at(Stage.drafting)
-    resp = store_client.post(
-        f"{B}/applications/{STRIPE}/transitions",
-        json={"targetStage": "applied", "expectedVersion": 1},
-    )
-    assert resp.status_code == 422
-    assert resp.json()["kind"] == "validation_error"
-
-
-def test_applied_captures_snapshot(store_client: TestClient) -> None:
-    _put_app_at(Stage.drafting)
-    resp = store_client.post(
-        f"{B}/applications/{STRIPE}/transitions",
-        json={"targetStage": "applied", "expectedVersion": 1, "resumeId": RESUME_ID},
-    )
-    assert resp.status_code == 200
-    assert resp.json()["application"]["submittedSnapshotId"] is not None
-    snap = store_client.get(f"{B}/applications/{STRIPE}/snapshot")
-    assert snap.status_code == 200
-    assert snap.json()["resumeId"] == RESUME_ID
-    assert snap.json()["applicationId"] == STRIPE
 
 
 def test_snapshot_conflict_before_applied(store_client: TestClient) -> None:
@@ -352,16 +248,11 @@ def test_timeline_synthetic_fallback(store_client: TestClient) -> None:
     assert resp.json()[0]["message"].startswith("Applied via")
 
 
-def test_timeline_records_transition(store_client: TestClient) -> None:
-    _put_app_at(Stage.applied)
-    before = len(store_client.get(f"{B}/applications/{STRIPE}/timeline").json())
-    store_client.post(
-        f"{B}/applications/{STRIPE}/transitions",
-        json={"targetStage": "screening", "expectedVersion": 1},
-    )
-    after = store_client.get(f"{B}/applications/{STRIPE}/timeline").json()
-    assert len(after) == before + 1
-    assert after[-1]["message"] == "Moved to screening"
+# test_timeline_records_transition (append-via-transition coverage) drove
+# its mutation through transitionApplication, now DB-only -- removed here;
+# the timeline's transition-derived coverage returns in 3c once
+# getApplicationTimeline itself flips to a stage_transition projection
+# (PIN-13).
 
 
 def test_timeline_unknown_404(store_client: TestClient) -> None:

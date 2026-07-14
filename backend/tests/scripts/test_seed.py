@@ -12,6 +12,7 @@ from collections.abc import Generator
 import pytest
 from sqlmodel import Session, delete, select
 
+from app import crud
 from app.core.config import settings
 from app.core.db import engine
 from app.core.security import verify_password
@@ -35,9 +36,9 @@ def _delete_demo_user() -> None:
             select(User).where(User.email == settings.SEED_DEMO_EMAIL)
         ).first()
         if demo is not None:
-            # job.user_id is ON DELETE CASCADE (SIM-2) -- deleting the user
-            # takes its jobs with it.
-            session.delete(demo)
+            # PIN-11: the teardown helper handles the append-only children a
+            # plain ORM delete cannot (job/shortlist still cascade as before).
+            crud.delete_user_with_history(session=session, user_id=demo.id)
         session.commit()
 
 

@@ -137,8 +137,13 @@ operations:
     tests: [contract-fidelity, ownership-404]
 
   transitionApplication:
+    # sprint-04 3b: DB-backed via the ONE stage-mutation function
+    # (application_stage_transition, migration 7a2c91d40e88, PIN-1) --
+    # guarded versioned UPDATE + append-only history + APPLIED snapshot/lock
+    # in one transaction (PIN-2); mock store fixtures are no longer
+    # transitionable.
     slice: 2
-    status: planned
+    status: implemented
     ai: false
     consumer: none (net-new) / application stage-tracker UI (adapter adds this fn)
     tests: [contract-fidelity, ownership-404, transition-matrix]
@@ -327,8 +332,13 @@ operations:
     tests: [contract-fidelity, ownership-404]
 
   getResumeSnapshot:
+    # sprint-04 3b: DB-backed. The real row (written by the stage-mutation
+    # function at the APPLIED transition, PIN-2) takes precedence over the
+    # mock's synthesis; the mock-store fallback seam (DEBT-5) still serves
+    # seeded fixtures through 3c, which removes it once the seed itself
+    # goes DB-side.
     slice: 3
-    status: planned
+    status: implemented
     ai: false
     consumer: getResumeSnapshot / application detail resume-snapshot tab (D10)
     tests: [contract-fidelity, ownership-404, snapshot-conflict]

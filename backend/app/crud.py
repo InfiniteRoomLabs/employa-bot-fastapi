@@ -1,5 +1,7 @@
+import uuid
 from typing import Any
 
+from sqlalchemy import text as sa_text
 from sqlmodel import Session, select
 
 from app.core.security import get_password_hash, verify_password
@@ -57,3 +59,21 @@ def authenticate(*, session: Session, email: str, password: str) -> User | None:
         session.commit()
         session.refresh(db_user)
     return db_user
+
+
+def delete_user_with_history(*, session: Session, user_id: uuid.UUID) -> None:
+    """Delete a user and every tenant row, including append-only histories.
+
+    The append-only triggers on stage_transition/resume_snapshot block DELETE
+    even for the owner, so a bare ORM ``session.delete(user)`` fails once a
+    tenant has history rows. ``delete_user_with_history`` (migration
+    7a2c91d40e88, spec PIN-11) disables those triggers around exactly one
+    cascading DELETE inside one transaction -- v3's documented owner boundary.
+    Caller commits.
+    """
+    session.connection().execute(
+        sa_text("SELECT delete_user_with_history(:uid)"), {"uid": str(user_id)}
+    )
+    # The identity map may still hold the deleted user/children; drop them so
+    # a later read within this session cannot resurrect stale state.
+    session.expire_all()

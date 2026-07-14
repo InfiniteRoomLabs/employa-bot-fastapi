@@ -68,7 +68,12 @@ from app.api.errors import (
     UndoWindowExpiredError,
     ValidationTaggedError,
 )
-from app.application_mapper import row_to_wire_view, wire_application_to_row
+from app.application_mapper import (
+    row_to_wire_snapshot,
+    row_to_wire_transition,
+    row_to_wire_view,
+    wire_application_to_row,
+)
 from app.job_mapper import wire_job_to_row
 from app.schemas import (
     Actor,
@@ -93,13 +98,13 @@ from app.schemas import (
     ResumeSnapshot,
     Search,
     Stage,
-    StageTransition,
     State,
     TimelineEvent,
     TransitionInput,
     TransitionResult,
     TransitionSource,
 )
+from app.stage_flow import call_stage_transition
 
 router = APIRouter(dependencies=[Depends(get_current_user)], tags=["applications"])
 
@@ -388,85 +393,93 @@ def create_application(
     operation_id="transitionApplication",
     response_model=TransitionResult,
 )
-def transition_application(id: UUID, body: TransitionInput) -> TransitionResult:
-    """Apply a stage transition, append-only (transitionApplication).
+def transition_application(
+    id: UUID,
+    body: TransitionInput,
+    session: TenantSession,
+    current_user: CurrentUser,
+) -> TransitionResult:
+    """Apply a stage transition via the ONE mutation function (PIN-1, 3b).
 
-    Order of checks: unknown id -> 404; version mismatch -> 409 ``conflict``;
-    illegal target per :data:`LEGAL_TRANSITIONS` -> 422 ``invalid_transition``;
-    ``applied`` without ``resumeId`` -> 422 ``validation_error``. On success a
-    transition to ``applied`` materializes the immutable ResumeSnapshot (D10);
-    every transition appends an immutable StageTransition, bumps the version,
-    and appends a timeline event.
+    Mock check order, applied on this route's own pre-read exactly like the
+    mock applied it on its dict read: unknown id -> 404; version mismatch ->
+    409 ``conflict``; illegal target per :data:`LEGAL_TRANSITIONS` -> 422
+    ``invalid_transition``; ``applied`` without ``resumeId`` -> 422
+    ``validation_error``; then (DB deviation, spec 3b design) a missing OR
+    foreign resumeId -> 404, tenant-indistinguishable. The function
+    re-enforces every predicate under the row lock -- the guarded versioned
+    UPDATE aborts on zero rows before any child write -- so a racing request
+    gets a typed error (mapped in ``app.stage_flow``), never partial state.
+    APPLIED materializes the snapshot + resume lock in the SAME transaction
+    (PIN-2). The op is DB-only post-flip: mock store fixtures are not
+    transitionable (they retire in 3c when the seed goes DB-side).
     """
-    app = store.applications.get(id)
-    if app is None:
+    app_row = session.exec(
+        select(models.Application)
+        .where(models.Application.id == id)
+        .where(models.Application.user_id == current_user.id)
+        .where(col(models.Application.removed_at).is_(None))
+    ).first()
+    if app_row is None:
         raise NotFoundError(f"applications/{id}")
-    if body.expectedVersion != app.version:
+    if body.expectedVersion != app_row.version:
         raise ConflictError(
             f"applications/{id}/transitions: expectedVersion "
-            f"{body.expectedVersion} != current {app.version}"
+            f"{body.expectedVersion} != current {app_row.version}"
         )
-    if body.targetStage not in LEGAL_TRANSITIONS.get(app.stage, frozenset()):
+    current_stage = Stage(app_row.stage)
+    if body.targetStage not in LEGAL_TRANSITIONS.get(current_stage, frozenset()):
         raise InvalidTransitionError(
-            f"applications/{id}: {app.stage.value} -> {body.targetStage.value} "
+            f"applications/{id}: {current_stage.value} -> {body.targetStage.value} "
             "is not a legal transition"
         )
     if body.targetStage == Stage.applied and body.resumeId is None:
         raise ValidationTaggedError(
             f"applications/{id}: resumeId is required when targetStage=applied"
         )
+    if body.targetStage == Stage.applied:
+        owned_resume = session.exec(
+            select(models.Resume)
+            .where(models.Resume.id == body.resumeId)
+            .where(models.Resume.user_id == current_user.id)
+        ).first()
+        if owned_resume is None:
+            raise NotFoundError(f"resumes/{body.resumeId}")
 
-    now = store.now()
-    updates: dict[str, object] = {
-        "stage": body.targetStage,
-        "version": app.version + 1,
-    }
-    if body.targetStage == Stage.applied and body.resumeId is not None:
-        resume = store.resumes.get(body.resumeId)
-        snapshot = ResumeSnapshot(
-            id=uuid4(),
-            applicationId=app.id,
-            resumeId=body.resumeId,
-            name=resume.name if resume else "Submitted resume",
-            body=(
-                resume.body
-                if resume and resume.body
-                else "Submitted resume -- locked at APPLIED."
-            ),
-            templateVersion="v1",
-            capturedAt=now,
-        )
-        store.resume_snapshots[app.id] = snapshot
-        updates["resumeId"] = body.resumeId
-        updates["submittedSnapshotId"] = str(snapshot.id)
-
-    updated = app.model_copy(update=updates)
-    store.applications[app.id] = updated
-
-    transition = StageTransition(
-        id=uuid4(),
-        applicationId=app.id,
-        fromStage=app.stage,
-        toStage=body.targetStage,
-        source=body.source or TransitionSource.user,
+    result = call_stage_transition(
+        session,
+        app_id=id,
+        target=body.targetStage.value,
+        allowed_from=[current_stage.value],
+        expected_version=body.expectedVersion,
+        source=(body.source or TransitionSource.user).value,
         reason=body.reason,
         reasons=body.reasons,
-        resumeId=body.resumeId if body.targetStage == Stage.applied else None,
-        createdAt=now,
+        resume_id=body.resumeId if body.targetStage == Stage.applied else None,
+        error_paths={
+            "EMP04": f"applications/{id}",
+            "EMP09": f"applications/{id}/transitions",
+            "EMP22": f"applications/{id}",
+        },
     )
-    store.transition_logs.setdefault(app.id, []).append(transition)
-    store.timelines.setdefault(app.id, []).append(
-        TimelineEvent(
-            id=uuid4(),
-            time=now,
-            who="You",
-            message=f"Moved to {body.targetStage.value}",
-            actor=Actor.you,
-        )
+    # The function wrote behind the ORM's back; drop stale identity-map state
+    # before the re-read, and build the ENTIRE wire response before commit
+    # (SET LOCAL role/GUC die at commit -- see get_tenant_session).
+    session.expire_all()
+    view_row = session.exec(
+        _joined_applications_query(current_user.id).where(models.Application.id == id)
+    ).one()
+    transition_row = session.exec(
+        select(models.StageTransition)
+        .where(models.StageTransition.id == UUID(result["transition_id"]))
+        .where(models.StageTransition.user_id == current_user.id)
+    ).one()
+    response = TransitionResult(
+        application=row_to_wire_view(*view_row),
+        transition=row_to_wire_transition(transition_row),
     )
-    return TransitionResult(
-        application=store.application_view(updated), transition=transition
-    )
+    session.commit()
+    return response
 
 
 # ---------------------------------------------------------------------------
@@ -479,15 +492,61 @@ def transition_application(id: UUID, body: TransitionInput) -> TransitionResult:
     operation_id="getResumeSnapshot",
     response_model=ResumeSnapshot,
 )
-def get_resume_snapshot(id: UUID) -> ResumeSnapshot:
-    """Immutable submitted-resume snapshot (getResumeSnapshot, D10).
+def get_resume_snapshot(
+    id: UUID, session: TenantSession, current_user: CurrentUser
+) -> ResumeSnapshot:
+    """Immutable submitted-resume snapshot (getResumeSnapshot, D10, DB 3b).
 
-    Mock parity: 404 on unknown id; 409 ``conflict`` before APPLIED (no
-    submitted copy exists until then). A real snapshot captured at the APPLIED
-    transition takes precedence; otherwise one is synthesized from the
-    application's selected resume (the seeded applied+ rows have no captured
-    snapshot, mirroring the mock's on-the-fly synthesis).
+    Mock parity: 404 on unknown id; 409 ``conflict`` before APPLIED. The
+    REAL snapshot row (written by the mutation function at the APPLIED
+    transition, PIN-2) takes precedence; a stage-past-drafting application
+    with no snapshot row (a runtime path that never legally crossed applied,
+    e.g. a future markWon straight from drafting) gets the mock's
+    deterministic read-only synthesis. Falls back to the mock store for
+    seeded fixtures (same 3a-internal DEBT-5 seam as getApplication,
+    removed in 3c).
     """
+    app_row = session.exec(
+        select(models.Application)
+        .where(models.Application.id == id)
+        .where(models.Application.user_id == current_user.id)
+        .where(col(models.Application.removed_at).is_(None))
+    ).first()
+    if app_row is not None:
+        if app_row.stage in (Stage.saved.value, Stage.drafting.value):
+            raise ConflictError(
+                f"applications/{id}/snapshot: no submitted copy exists until "
+                "the application reaches APPLIED."
+            )
+        snap_row = session.exec(
+            select(models.ResumeSnapshot)
+            .where(models.ResumeSnapshot.application_id == id)
+            .where(models.ResumeSnapshot.user_id == current_user.id)
+        ).first()
+        if snap_row is not None:
+            return row_to_wire_snapshot(snap_row)
+        resume_row = (
+            session.exec(
+                select(models.Resume)
+                .where(models.Resume.id == app_row.resume_id)
+                .where(models.Resume.user_id == current_user.id)
+            ).first()
+            if app_row.resume_id
+            else None
+        )
+        resume_id = app_row.resume_id or uuid5(NAMESPACE_URL, "mock:no-resume")
+        return ResumeSnapshot(
+            id=uuid5(NAMESPACE_URL, f"mock:snapshot:{id}"),
+            applicationId=id,
+            resumeId=resume_id,
+            name=resume_row.name if resume_row else "Submitted resume",
+            body=resume_row.body
+            if resume_row and resume_row.body
+            else "Submitted resume content -- locked at APPLIED.",
+            templateVersion="v1",
+            capturedAt=app_row.created_at,
+        )
+
     app = store.applications.get(id) or store.archive.get(id)
     if app is None:
         raise NotFoundError(f"applications/{id}/snapshot")
@@ -500,11 +559,11 @@ def get_resume_snapshot(id: UUID) -> ResumeSnapshot:
     if captured is not None:
         return captured
     resume = store.resumes.get(app.resumeId) if app.resumeId else None
-    resume_id = app.resumeId or uuid5(NAMESPACE_URL, "mock:no-resume")
+    fallback_resume_id = app.resumeId or uuid5(NAMESPACE_URL, "mock:no-resume")
     return ResumeSnapshot(
         id=uuid5(NAMESPACE_URL, f"mock:snapshot:{id}"),
         applicationId=id,
-        resumeId=resume_id,
+        resumeId=fallback_resume_id,
         name=resume.name if resume else "Submitted resume",
         body=resume.body
         if resume and resume.body

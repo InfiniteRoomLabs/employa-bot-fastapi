@@ -108,7 +108,9 @@ def seed_demo_user(session: Session, *, reset: bool = False) -> User:
     ).first()
 
     if reset and existing is not None:
-        session.delete(existing)
+        # PIN-11: histories are append-only even for the owner; the teardown
+        # helper disables the guards around one cascading DELETE.
+        crud.delete_user_with_history(session=session, user_id=existing.id)
         session.commit()
         existing = None
 

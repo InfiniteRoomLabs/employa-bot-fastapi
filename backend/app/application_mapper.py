@@ -26,6 +26,8 @@ from app.job_mapper import row_to_wire_job
 from app.models import Application as ApplicationRow
 from app.models import Job as JobRow
 from app.models import Resume as ResumeRow
+from app.models import ResumeSnapshot as ResumeSnapshotRow
+from app.models import StageTransition as StageTransitionRow
 from app.resume_mapper import row_to_wire_resume
 
 
@@ -110,3 +112,37 @@ def row_to_wire_view(
         source=job.source.board,
         resumeName=resume.name if resume else "No resume selected",
     )
+
+
+def row_to_wire_transition(row: StageTransitionRow) -> schemas.StageTransition:
+    """Validate a history row into the wire ``StageTransition`` shape.
+
+    ``seq`` and ``corrects_transition_id`` are row-only (the wire carries the
+    correction lineage via ``source=user_correction`` semantics, not an id).
+    """
+    payload: dict[str, Any] = {
+        "id": row.id,
+        "applicationId": row.application_id,
+        "fromStage": row.from_stage,
+        "toStage": row.to_stage,
+        "source": row.source,
+        "reason": row.reason,
+        "reasons": row.reasons,
+        "resumeId": row.resume_id,
+        "createdAt": row.created_at,
+    }
+    return schemas.StageTransition.model_validate(payload)
+
+
+def row_to_wire_snapshot(row: ResumeSnapshotRow) -> schemas.ResumeSnapshot:
+    """Validate a snapshot row into the wire ``ResumeSnapshot`` shape."""
+    payload: dict[str, Any] = {
+        "id": row.id,
+        "applicationId": row.application_id,
+        "resumeId": row.resume_id,
+        "name": row.name,
+        "body": row.body,
+        "templateVersion": row.template_version,
+        "capturedAt": row.captured_at,
+    }
+    return schemas.ResumeSnapshot.model_validate(payload)
