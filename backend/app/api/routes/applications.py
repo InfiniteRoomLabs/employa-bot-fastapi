@@ -1,9 +1,35 @@
 """Applications resource -- the post-commit lifecycle (ADR-006 / D6..D19).
 
-Follows the MOCK ROUTE PATTERN in ``routes/searches.py`` (read that file's header
-first): one router per resource, explicit ``operation_id`` verbatim from
-``mvp-api.yaml``, generated ``response_model``, store access via
-``app.store``, typed errors (never ``HTTPException``), no auth deps.
+Since sprint-04 3a, ``getApplications``/``getApplication``/``createApplication``
+are DB-backed (docs/sprints/sprint-04-spec.md PIN-6); every other op below
+(transitions/lifecycle/snapshot/timeline) STAYS on the MOCK ROUTE PATTERN in
+``routes/searches.py`` (read that file's header first) through 3b/3c: store
+access via ``app.store``, typed errors (never ``HTTPException``), no
+``TenantSession``. Wire mapping for the flipped ops lives in
+``app/application_mapper.py``.
+
+* ``getApplications``: RECOGNIZED mock search ids (``SEARCH_ID_BACKEND`` /
+  ``SEARCH_ID_AI_INFRA``) keep serving their mock pool verbatim (sprint-03
+  PIN-3 precedent -- searches stay mock through Release 0.1). Any OTHER
+  value -- explicit ``SEARCH_ID_PLATFORM``, an unrecognized id, or omitted --
+  is DB-backed: the caller's active applications (``removed_at IS NULL AND
+  outcome IS NULL``), joined to job (+ resume via LEFT JOIN). PR-8: the
+  mock's old PLATFORM-fallback pool re-derives to the caller's real DB list,
+  since PLATFORM was never a persisted entity -- serving the frozen mock
+  snapshot post-flip would split one entity across two stores.
+* ``getApplication``: DB first (id + ``removed_at IS NULL`` -- a
+  terminal-outcome row IS still readable, matching the mock's archive
+  fallback read); a DB miss falls back to the mock store read
+  (``store.applications``/``store.archive``) so seeded mock fixtures (still
+  referenced by the still-mock lifecycle ops) keep serving. This mock
+  fallback is the pre-existing DEBT-5 seam, unchanged this checkpoint -- an
+  explicit 3a-internal layer that 3c removes once every op that can produce
+  or mutate an application is DB-backed.
+* ``createApplication``: keeps the sprint-02 Job mint + ``store.jobs`` + DB
+  job dual-write as-is, but the Application write is now a DB INSERT (no
+  longer ``store.applications``) -- so a freshly created application is
+  readable via ``getApplications``/``getApplication`` but NOT yet
+  transitionable via the still-mock lifecycle ops (3b's job).
 
 ``transitionApplication`` is the core op. Its legal-move matrix
 (:data:`LEGAL_TRANSITIONS`) is DATA transcribed VERBATIM from the settled law
@@ -30,8 +56,10 @@ from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 
 from fastapi import APIRouter, Body, Depends, Query
 from pydantic import BaseModel
+from sqlalchemy import and_
+from sqlmodel import col, select
 
-from app import store
+from app import models, store
 from app.api.deps import CurrentUser, TenantSession, get_current_user
 from app.api.errors import (
     ConflictError,
@@ -40,6 +68,7 @@ from app.api.errors import (
     UndoWindowExpiredError,
     ValidationTaggedError,
 )
+from app.application_mapper import row_to_wire_view, wire_application_to_row
 from app.job_mapper import wire_job_to_row
 from app.schemas import (
     Actor,
@@ -138,30 +167,69 @@ class DismissBody(BaseModel):
 # ---------------------------------------------------------------------------
 
 
+def _joined_applications_query(current_user_id: UUID):  # type: ignore[no-untyped-def]
+    """Base SELECT joining application -> job (+ resume via LEFT JOIN), the
+    join's ON clauses carrying the app-level tenant predicate as the belt
+    (RLS on job/resume is the systemic backstop -- see PIN-7)."""
+    return (
+        select(models.Application, models.Job, models.Resume)
+        .join(
+            models.Job,
+            and_(
+                col(models.Job.id) == col(models.Application.job_id),
+                col(models.Job.user_id) == current_user_id,
+            ),
+        )
+        .outerjoin(
+            models.Resume,
+            and_(
+                col(models.Resume.id) == col(models.Application.resume_id),
+                col(models.Resume.user_id) == current_user_id,
+            ),
+        )
+        .where(models.Application.user_id == current_user_id)
+        .where(col(models.Application.removed_at).is_(None))
+    )
+
+
 @router.get(
     "/applications",
     operation_id="getApplications",
     response_model=list[ApplicationView],
 )
 def get_applications(
+    session: TenantSession,
+    current_user: CurrentUser,
     searchId: UUID | None = Query(default=None),  # noqa: N803 -- wire name verbatim
 ) -> list[ApplicationView]:
-    """Applications scoped to a saved search (getApplications).
+    """Applications, joined view (getApplications, PIN-6/PR-8).
 
-    Mirrors mock api.ts: BACKEND / AI_INFRA searches select their pool; any
-    other value (including omitted/unknown) falls back to the canonical
-    platform list.
+    A RECOGNIZED mock search id (BACKEND/AI_INFRA) returns the mock
+    per-search projection verbatim (searches stay mock through Release 0.1).
+    Any OTHER value -- explicit PLATFORM, an unrecognized id, or omitted --
+    is DB-backed: the caller's active applications (excluding soft-removed
+    and terminal-outcome rows), ordered created_at then id.
     """
     if searchId == store.SEARCH_ID_BACKEND:
-        target = store.SEARCH_ID_BACKEND
-    elif searchId == store.SEARCH_ID_AI_INFRA:
-        target = store.SEARCH_ID_AI_INFRA
-    else:
-        target = store.SEARCH_ID_PLATFORM
+        return [
+            store.application_view(app)
+            for app in store.applications.values()
+            if app.searchId == store.SEARCH_ID_BACKEND
+        ]
+    if searchId == store.SEARCH_ID_AI_INFRA:
+        return [
+            store.application_view(app)
+            for app in store.applications.values()
+            if app.searchId == store.SEARCH_ID_AI_INFRA
+        ]
+    rows = session.exec(
+        _joined_applications_query(current_user.id)
+        .where(col(models.Application.outcome).is_(None))
+        .order_by(col(models.Application.created_at), col(models.Application.id))
+    ).all()
     return [
-        store.application_view(app)
-        for app in store.applications.values()
-        if app.searchId == target
+        row_to_wire_view(app_row, job_row, resume_row)
+        for app_row, job_row, resume_row in rows
     ]
 
 
@@ -170,8 +238,24 @@ def get_applications(
     operation_id="getApplication",
     response_model=ApplicationView,
 )
-def get_application(id: UUID) -> ApplicationView:
-    """One application, joined view (getApplication). 404 on unknown id."""
+def get_application(
+    id: UUID, session: TenantSession, current_user: CurrentUser
+) -> ApplicationView:
+    """One application, joined view (getApplication, DB-backed).
+
+    DB first (a terminal-outcome row IS still readable here -- only the
+    internal soft-remove excludes it). A DB miss falls back to the mock
+    store read (``store.applications``/``store.archive``, DEBT-5 -- an
+    explicit 3a-internal seam removed in 3c) so seeded mock fixtures still
+    referenced by the still-mock lifecycle ops keep serving. Unknown in
+    both -> 404.
+    """
+    row = session.exec(
+        _joined_applications_query(current_user.id).where(models.Application.id == id)
+    ).first()
+    if row is not None:
+        app_row, job_row, resume_row = row
+        return row_to_wire_view(app_row, job_row, resume_row)
     app = store.applications.get(id) or store.archive.get(id)
     if app is None:
         raise NotFoundError(f"applications/{id}")
@@ -215,13 +299,30 @@ def create_application(
     session: TenantSession,
     current_user: CurrentUser,
 ) -> ApplicationView:
-    """Create an application (createApplication, ORI-014).
+    """Create an application (createApplication, ORI-014, DB-backed).
 
     Normalized (ADR-006): mints a Job posting into ``store.jobs`` as a side
-    effect (mirrors the mock's dynamic-job mint) plus an ids-only Application
-    at stage DRAFTING, and returns the joined view. searchId is auto-assigned
-    via :func:`_ensure_default_search` when the client omits it (D15).
+    effect (mirrors the mock's dynamic-job mint, sprint-02 PIN-1's DB dual
+    write, unchanged here) plus a DB Application row at stage DRAFTING, and
+    returns the joined view. searchId is auto-assigned via
+    :func:`_ensure_default_search` when the client omits it (D15). A
+    ``resumeId`` the caller does not own (cross-tenant or unknown) is a
+    tenant-indistinguishable 404 -- the composite FK is the DB backstop. ONE
+    commit, at the end of the tenant transaction; the wire response is built
+    from the in-memory rows BEFORE that commit (see get_tenant_session).
     """
+    # Validate the resumeId (if any) BEFORE minting the job: a rejected
+    # request must not leave a job side-mutation in ``store.jobs``.
+    resume_row = None
+    if body.resumeId is not None:
+        resume_row = session.exec(
+            select(models.Resume)
+            .where(models.Resume.id == body.resumeId)
+            .where(models.Resume.user_id == current_user.id)
+        ).first()
+        if resume_row is None:
+            raise NotFoundError(f"resumes/{body.resumeId}")
+
     now = store.now()
     job_id = uuid4()
     job = Job(
@@ -244,11 +345,20 @@ def create_application(
     )
     store.jobs[job_id] = job
     # Sprint-02 (PIN-1): manual capture persists the canonical job row. The
-    # store copy above stays for the mock joins (application_view etc.);
-    # the DB row is what getJobs/getJob serve. One commit, at the end of the
-    # tenant transaction (see get_tenant_session).
-    session.add(wire_job_to_row(job, user_id=current_user.id))
-    session.commit()
+    # store copy above stays for the mock joins used by the still-mock
+    # lifecycle ops; the DB row is what getJobs/getJob/this route's own view
+    # serve. Added now, committed once at the end (below) with everything
+    # else in this transaction.
+    job_row = wire_job_to_row(job, user_id=current_user.id)
+    session.add(job_row)
+    # The composite fk_application_job FK is a raw-SQL constraint (DEBT-6):
+    # the ORM has no declared relationship between Application and Job, so
+    # the unit-of-work has no basis to order the two INSERTs -- flush the
+    # job row NOW so it exists in the DB before the application row (which
+    # references it) is even staged (same class of ordering trap as
+    # set_default_resume's demote-before-promote flush).
+    session.flush()
+
     new_app = Application(
         id=uuid4(),
         jobId=job_id,
@@ -259,8 +369,13 @@ def create_application(
         outcomeReasons=None,
         searchId=body.searchId or _ensure_default_search(),
     )
-    store.applications[new_app.id] = new_app
-    return store.application_view(new_app)
+    app_row = wire_application_to_row(new_app, user_id=current_user.id)
+    session.add(app_row)
+    # Build the wire response NOW, from the in-memory rows, while the tenant
+    # role/GUC are still live for this transaction (see get_tenant_session).
+    result = row_to_wire_view(app_row, job_row, resume_row)
+    session.commit()
+    return result
 
 
 # ---------------------------------------------------------------------------

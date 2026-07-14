@@ -49,15 +49,33 @@ STUB_USER = DbUser(
 )
 
 
+class _EmptyExecResult:
+    """Stands in for ``Session.exec()``'s return value as an always-empty
+    result -- the contract world has no real DB, so a DB-first read a
+    flipped op performs must degrade to a clean miss (not an
+    ``AttributeError`` crash) so the op's mock-store fallback still runs."""
+
+    def first(self) -> None:
+        return None
+
+    def all(self) -> list:
+        return []
+
+
 class NullTenantSession:
-    """Absorbs the DB side of dual-write mock ops in the DB-free world.
+    """Absorbs the DB side of dual-write / DB-first-read mock ops in the
+    DB-free world.
 
     Since sprint-02, createApplication persists its minted job through
-    ``deps.get_tenant_session`` (PIN-1). Contract tests judge the WIRE
-    behavior against the store; the DB side is covered in
-    ``tests/api/routes/test_jobs.py``. This stub accepts the two calls the
-    dual-write makes and nothing else -- an unexpected DB call fails loudly
-    instead of silently opening a real connection.
+    ``deps.get_tenant_session`` (PIN-1); since sprint-04 3a,
+    getApplications/getApplication/createApplication also READ through it
+    (DB-first, falling back to the mock store on a miss) before any
+    mock-served remainder runs. Contract tests judge the WIRE behavior
+    against the store; the DB side is covered in
+    ``tests/api/routes/test_jobs.py`` / ``tests/api/routes/test_applications.py``.
+    ``exec()`` always reports a clean miss (mirroring "no rows for this
+    tenant") so those DB-first reads degrade into their mock fallback
+    instead of crashing on a stub that has no rows.
     """
 
     def add(self, instance: object) -> None:
@@ -65,6 +83,9 @@ class NullTenantSession:
 
     def commit(self) -> None:
         pass
+
+    def exec(self, *args: object, **kwargs: object) -> _EmptyExecResult:
+        return _EmptyExecResult()
 
 
 @pytest.fixture

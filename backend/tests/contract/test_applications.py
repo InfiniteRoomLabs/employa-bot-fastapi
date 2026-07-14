@@ -1,12 +1,18 @@
-"""Behavior tests for the applications resource (ADR-006 / D6..D19). No
-database.
+"""Behavior tests for the MOCK-SERVED applications surface. No database.
 
-Covers the transitionApplication core op exhaustively (every legal edge in
+Since sprint-04 3a, getApplications' default view / getApplication /
+createApplication are DB-backed (docs/sprints/sprint-04-spec.md PIN-6); their
+fidelity/tenancy/provenance coverage lives in
+``tests/api/routes/test_applications.py``. Only getApplications' RECOGNIZED
+mock searchId view (BACKEND/AI_INFRA) is still mock-served and covered here
+(PIN-3 precedent from ``tests/contract/test_shortlist.py``).
+
+Everything else on this resource stays mock through 3b/3c and is covered
+here exhaustively: the transitionApplication core op (every legal edge in
 the settled matrix accepted; a representative illegal edge per source stage
 rejected; version conflict; the applied/resumeId conditional and its
 snapshot side effect), plus the full lifecycle: mark-won + undo (incl. an
-expired window), dismiss dual-mode, reactivate, the timeline, and
-createApplication's Job mint.
+expired window), dismiss dual-mode, reactivate, and the timeline.
 """
 
 from __future__ import annotations
@@ -45,14 +51,8 @@ def _put_app_at(stage: Stage, version: int = 1) -> str:
 
 
 # ---------------------------------------------------------------------------
-# reads: getApplications / getApplication
+# reads: getApplications' recognized-searchId mock view (PIN-3 precedent)
 # ---------------------------------------------------------------------------
-
-
-def test_get_applications_defaults_to_platform(store_client: TestClient) -> None:
-    resp = store_client.get(f"{B}/applications")
-    assert resp.status_code == 200
-    assert len(resp.json()) == 14
 
 
 def test_get_applications_filters_by_search_id(store_client: TestClient) -> None:
@@ -72,37 +72,6 @@ def test_get_applications_filters_by_search_id(store_client: TestClient) -> None
         )
         == 1
     )
-
-
-def test_get_applications_unknown_search_falls_back_to_platform(
-    store_client: TestClient,
-) -> None:
-    assert (
-        len(store_client.get(f"{B}/applications", params={"searchId": UNKNOWN}).json())
-        == 14
-    )
-
-
-def test_get_application_joined_view(store_client: TestClient) -> None:
-    resp = store_client.get(f"{B}/applications/{STRIPE}")
-    assert resp.status_code == 200
-    body = resp.json()
-    assert body["company"] == "Stripe"
-    assert body["role"] == "Staff Engineer, Payments core"
-    assert body["resumeName"] == "Distributed-systems"
-    assert body["match"] == 92
-    assert body["job"]["id"] == body["jobId"]
-
-
-def test_get_application_resolves_archived(store_client: TestClient) -> None:
-    assert store_client.get(f"{B}/applications/{ARC_WON}").status_code == 200
-
-
-def test_get_application_unknown_404(store_client: TestClient) -> None:
-    resp = store_client.get(f"{B}/applications/{UNKNOWN}")
-    assert resp.status_code == 404
-    assert resp.json()["kind"] == "not_found"
-    assert resp.json()["path"] == f"{B}/applications/{UNKNOWN}"
 
 
 # ---------------------------------------------------------------------------
@@ -242,8 +211,14 @@ def test_mark_won_archives_and_grants_undo(store_client: TestClient) -> None:
     assert body["undoWindowSeconds"] == 300
     assert body["undoToken"]
     assert body["undoExpiresAt"]
-    # moved out of the active pool, into the archive (won count 1 -> 2).
-    assert store_client.get(f"{B}/archive/counts").json()["won"] == 2
+    # Moved out of the active pool, into the mock archive. Checked directly
+    # against the mock store, not getArchiveCounts: since sprint-04 3a that
+    # op is DB-backed (PIN-16) and markWon stays mock through 3c, so a mock
+    # archive move doesn't (yet) move the DB-backed counts -- an accepted
+    # seam of this checkpoint's operation-boundary split, same class as
+    # DEBT-5.
+    assert UUID(VERCEL) in store.archive
+    assert UUID(VERCEL) not in store.applications
     assert store_client.get(f"{B}/applications/{VERCEL}").json()["outcome"] == "won"
 
 
@@ -256,7 +231,10 @@ def test_mark_won_undo_round_trip(store_client: TestClient) -> None:
     )
     assert resp.status_code == 200
     assert resp.json()["stage"] == "offer"  # restored to the pre-win stage
-    assert store_client.get(f"{B}/archive/counts").json()["won"] == 1
+    # Restored to the mock active pool (checked directly -- see the
+    # DB-backed-getArchiveCounts note above).
+    assert UUID(VERCEL) in store.applications
+    assert UUID(VERCEL) not in store.archive
 
 
 def test_mark_won_undo_expired_window(store_client: TestClient) -> None:
@@ -298,9 +276,16 @@ def test_reactivate_clears_outcome_and_resurrects(store_client: TestClient) -> N
     assert body["stage"] == "applied"
     assert body["resurrected"] is True
     assert body["outcome"] is None
-    # now back in the active platform pool.
-    ids = [a["id"] for a in store_client.get(f"{B}/applications").json()]
-    assert ARC_REJ in ids
+    # Now readable again as a live (non-archived) application via
+    # getApplication -- checked at the ITEM endpoint (mock-store fallback),
+    # not the collection endpoint: since sprint-04 3a getApplications'
+    # default view is DB-backed (PIN-6) and reactivateApplication itself
+    # stays mock through 3b/3c, so a reactivated mock fixture does not
+    # (yet) resurface in that DB-backed list -- an accepted seam of this
+    # checkpoint's operation-boundary split, same class as DEBT-5.
+    again = store_client.get(f"{B}/applications/{ARC_REJ}")
+    assert again.status_code == 200
+    assert again.json()["stage"] == "applied"
 
 
 def test_reactivate_unknown_404(store_client: TestClient) -> None:
@@ -332,8 +317,11 @@ def test_dismiss_post_applied_withdraws_and_archives(store_client: TestClient) -
     archived = store_client.get(f"{B}/applications/{STRIPE}").json()
     assert archived["outcome"] == "withdrawn"
     assert archived["stage"] == "withdrew"
-    # counted in the "passed" archive bucket now.
-    assert store_client.get(f"{B}/archive/counts").json()["passed"] == 15
+    # Moved into the mock archive's "passed" bucket (checked directly, not
+    # via getArchive/getArchiveCounts -- DB-backed since sprint-04 3a while
+    # dismissApplication stays mock through 3c; see the mark-won note above).
+    assert UUID(STRIPE) in store.archive
+    assert store.archive[UUID(STRIPE)].outcome == "withdrawn"
 
 
 def test_dismiss_unknown_404(store_client: TestClient) -> None:
@@ -380,53 +368,6 @@ def test_timeline_unknown_404(store_client: TestClient) -> None:
     assert store_client.get(f"{B}/applications/{UNKNOWN}/timeline").status_code == 404
 
 
-# ---------------------------------------------------------------------------
-# createApplication (ORI-014) -- mints a Job
-# ---------------------------------------------------------------------------
-
-
-def test_create_application_mints_job(store_client: TestClient) -> None:
-    from uuid import UUID
-
-    from app import store
-
-    jobs_before = len(store.jobs)
-    resp = store_client.post(
-        f"{B}/applications",
-        json={
-            "company": "Acme",
-            "role": "Staff Engineer",
-            "location": "Remote - US",
-            "salary": {"min": 200000, "max": 250000, "extra": []},
-            "match": 77,
-            "source": "greenhouse",
-        },
-    )
-    assert resp.status_code == 201
-    body = resp.json()
-    assert body["company"] == "Acme"
-    assert body["stage"] == "drafting"
-    assert body["searchId"] is not None  # auto-assigned via ensure-default-search
-    # The posting was minted into the STORE copy (the mock joins' source).
-    # Since sprint-02 getJobs/getJob are DB-backed, so the served-collection
-    # half of this claim lives in tests/api/routes/test_jobs.py
-    # (test_create_application_mints_job_for_caller_only).
-    assert len(store.jobs) == jobs_before + 1
-    assert UUID(body["jobId"]) in store.jobs
-
-
-def test_create_application_honors_explicit_search(store_client: TestClient) -> None:
-    resp = store_client.post(
-        f"{B}/applications",
-        json={
-            "company": "Beta",
-            "role": "Principal Engineer",
-            "location": "Remote - US",
-            "salary": None,
-            "match": 60,
-            "source": "lever",
-            "searchId": SEARCH_ID_BACKEND,
-        },
-    )
-    assert resp.status_code == 201
-    assert resp.json()["searchId"] == SEARCH_ID_BACKEND
+# createApplication (ORI-014) is DB-backed since sprint-04 3a -- its Job-mint
+# and DB-persistence coverage now lives in
+# tests/api/routes/test_applications.py.

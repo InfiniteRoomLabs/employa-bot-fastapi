@@ -84,10 +84,10 @@ def test_create_projection_defaults_and_persists(store_client: TestClient) -> No
     assert body["templateId"] == str(store.TEMPLATE_ID_CLASSIC)  # default fallback
     assert body["body"] == "Projection including 2 career-history items."
 
-    # Persisted: shows up in both getResumes and getProjections.
-    assert resp.json()["id"] in {
-        r["id"] for r in store_client.get("/api/v1/resumes").json()
-    }
+    # Persisted: shows up in getProjections. NOTE getResumes is DB-backed
+    # (sprint-04 3a) and no longer shares the store -- a mock projection does
+    # NOT appear there (accepted deviation, docs/sprints/sprint-04-spec.md
+    # operation boundary note).
     assert resp.json()["id"] in {
         r["id"] for r in store_client.get("/api/v1/projections").json()
     }
@@ -120,8 +120,14 @@ def test_create_projection_snapshot_is_immutable_to_later_career_history_changes
 
     assert len(store_client.get("/api/v1/career-history").json()) == 6
 
-    # The already-created projection's body/snapshot must NOT change.
-    again = store_client.get(f"/api/v1/resumes/{projection_id}").json()
+    # The already-created projection's body/snapshot must NOT change. Reread
+    # via getProjections (mock, still store-backed) -- getResumes is
+    # DB-backed since sprint-04 3a and no longer shares the store.
+    again = next(
+        p
+        for p in store_client.get("/api/v1/projections").json()
+        if p["id"] == projection_id
+    )
     assert again["body"] == "Projection including 2 career-history items."
     assert len(store.resume_projection_items[UUID(projection_id)]) == 2
 
@@ -135,7 +141,13 @@ def test_assign_template_updates_and_persists(store_client: TestClient) -> None:
     body = resp.json()
     assert body["templateId"] == str(store.TEMPLATE_ID_COMPACT)
 
-    again = store_client.get(f"/api/v1/resumes/{store.RESUME_ID_DISTRIBUTED}").json()
+    # Reread via getProjections (mock, still store-backed) -- getResume is
+    # DB-backed since sprint-04 3a and no longer shares the store.
+    again = next(
+        p
+        for p in store_client.get("/api/v1/projections").json()
+        if p["id"] == str(store.RESUME_ID_DISTRIBUTED)
+    )
     assert again["templateId"] == str(store.TEMPLATE_ID_COMPACT)
 
 

@@ -113,22 +113,25 @@ operations:
     tests: [contract-fidelity, ownership-404]
 
   getApplications:
+    # sprint-04 3a: DB-backed default view (excludes soft-removed/terminal
+    # rows); recognized mock searchId (BACKEND/AI_INFRA) still serves the
+    # mock pool (PIN-6/PR-8, mirrors getShortlist's PIN-3 split).
     slice: 2
-    status: planned
+    status: implemented
     ai: false
     consumer: useApplications / applications screen
     tests: [contract-fidelity]
 
   createApplication:
     slice: 2
-    status: planned
+    status: implemented  # sprint-04 3a: DB-backed INSERT; job mint dual-write unchanged
     ai: false
     consumer: createApplication / job capture (manual/paste) flow (ORI-014)
     tests: [contract-fidelity]
 
   getApplication:
     slice: 2
-    status: planned
+    status: implemented  # sprint-04 3a: DB-backed; falls back to the mock store (DEBT-5) on a miss
     ai: false
     consumer: useApplication / application detail screen
     tests: [contract-fidelity, ownership-404]
@@ -191,14 +194,14 @@ operations:
 
   getArchive:
     slice: 2
-    status: planned
+    status: implemented  # sprint-04 3a: DB-backed outcome-bucketed SELECT (PIN-16)
     ai: false
     consumer: getArchive / archive screen (ORI-009)
     tests: [contract-fidelity]
 
   getArchiveCounts:
     slice: 2
-    status: planned
+    status: implemented  # sprint-04 3a: DB-backed (PIN-16)
     ai: false
     consumer: getArchiveCounts / archive badge counts
     tests: [contract-fidelity]
@@ -206,56 +209,56 @@ operations:
   # ---------------------------------------------------- Slice 3: Resumes + match
   getResumes:
     slice: 3
-    status: planned
+    status: implemented  # sprint-04: DB-backed (tests/api/routes/test_resumes.py)
     ai: false
     consumer: useResumes / resumes screen
     tests: [contract-fidelity]
 
   createResume:
     slice: 3
-    status: planned
+    status: implemented  # sprint-04: DB-backed
     ai: false
     consumer: createResume / resumes screen new-draft action (RES-019)
     tests: [contract-fidelity]
 
   getResume:
     slice: 3
-    status: planned
+    status: implemented  # sprint-04: DB-backed; cross-tenant/unknown -> 404
     ai: false
     consumer: useResume / resume detail screen
     tests: [contract-fidelity, ownership-404]
 
   patchResume:
     slice: 3
-    status: planned
+    status: implemented  # sprint-04: DB-backed
     ai: false
     consumer: patchResume / resume editor (rename, body, scoring toggle)
     tests: [contract-fidelity, ownership-404]
 
   deleteResume:
     slice: 3
-    status: planned
+    status: implemented  # sprint-04: DB-backed; 409 lock + FK constraint-name backstop (PIN-17)
     ai: false
     consumer: deleteResume / resumes screen delete action (RES-019)
     tests: [contract-fidelity, ownership-404, resume-lock-conflict]
 
   duplicateResume:
     slice: 3
-    status: planned
+    status: implemented  # sprint-04: DB-backed
     ai: false
     consumer: duplicateResume / resumes screen duplicate action (RES-019)
     tests: [contract-fidelity, ownership-404]
 
   setDefaultResume:
     slice: 3
-    status: planned
+    status: implemented  # sprint-04: DB-backed; user-row lock + fixed demote/promote order (PIN-5)
     ai: false
     consumer: setDefaultResume / resumes screen set-default action (RES-019)
     tests: [contract-fidelity, ownership-404]
 
   forkResumeAsDraft:
     slice: 3
-    status: planned
+    status: implemented  # sprint-04: DB-backed; jobId now ownership-checked (AC-08)
     ai: false
     consumer: forkResumeAsDraft / job detail "tailor resume" action (CUR-020)
     tests: [contract-fidelity, ownership-404]
