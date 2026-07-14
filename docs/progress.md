@@ -80,6 +80,34 @@ PLAN (v3) says what we are building; this file says where we are. Update at ever
 
 (One entry per shipped sprint: outcomes with evidence, AC covered, review results, deviations, cost line. This section absorbs the CHANGELOG role for sprint work.)
 
+### sprint-02-jobs-manual-capture (run sprint-02-run-2, shipped 2026-07-13, merge b942a1f)
+
+The first populated-schema DB vertical -- the `job` table exemplar under plan v3's binding Design conventions. Outcomes vs run-2's 7 conjuncts (Job-scoped conjunct 3 after the PO re-plan):
+
+1. Job migration under every binding convention: migration 4c17ea8b5656 (models.Job) -- UNIQUE(user_id,id), user_id FK ON DELETE CASCADE, FORCE RLS (policy `job_tenant_isolation` on the `app.user_id` GUC) under app_runtime != owner, timestamptz, no float money column (compensation is JSONB Salary, PIN-6), 9 named JSONB CHECKs (IS-TRUE-wrapped), schema_version, partial-unique `uq_job_user_source_url (user_id, source_url) WHERE NOT NULL`. `tests/migrations/test_job_table.py` 15 tests prove each AC-01a..h by introspection + 14 negative-insert cases + raw SQL under SET ROLE app_runtime. Evidence at merge SHA b942a1f: `POSTGRES_SERVER=localhost uv run pytest tests/migrations -q` -> 39 passed.
+2. Jobs ops DB-backed + manifest flipped + fidelity: getJobs/getJob served from the DB via app/job_mapper.py through TenantSession; getJobsInbox stays mock (PIN-2, seam-safe -- no DB row keyed by a mock search id); manifest flips getJobs+getJob to implemented. Provenance discriminators (store-only job not served / DB-only job served) + wire-fidelity + drift round-trip in tests/api/routes/test_jobs.py. `uv run pytest tests/contract -q -k jobs` + test_operation_manifest green.
+3. Ownership matrix (Job resource, run-2 scope): intruder getJobs sees zero victim rows; cross-tenant getJob 404 byte-identical to unknown-id 404; the Job resource has no mutation op; createApplication mints under the caller's user_id (DB-asserted). Correctness (Opus) independently proved RLS holds with no `.where` and with the GUC unset. `POSTGRES_SERVER=localhost uv run pytest tests/api -q -k job` green.
+4. Browser persistence: core-journey creates a per-run unique-content job, asserts absent-before / present-after / present-after-reload on the getJobs-backed /jobs list (network-asserted served by GET /api/v1/jobs), reads /jobs/{id} back via DB getJob. Clean-volume boot (`docker compose down -v && up --wait`) + fresh seed (7 demo jobs) at b942a1f -> `bunx playwright test e2e/core-journey.spec.ts` 1 passed (10.0s).
+5. core-journey in CI: frontend/e2e/core-journey.spec.ts exists in the e2e dir that playwright.yml runs whole (no filter/skip); required via the alls-green-playwright branch-protection job. Verified in CI at the master SHA (below).
+6. Ledger: all sprint-02 findings at terminal dispositions (sprint-02 review ledger below).
+7. Retarget: this ship self-advances GOAL.md to sprint-03-shortlist.
+
+AC covered: AC-01a..h, AC-02..07 (docs/sprints/sprint-02-spec.md). Manifest conjuncts: run-2 (7), superseding run-1 after the PO re-scope.
+
+Review results: 3-seat panel -- correctness (Opus) no HIGH/MED, charter YES (RLS proven under app_runtime, tenant-session survives the mid-request commit, JSONB IS-TRUE airtight, jsonb-null rejected); simplification SIM-1/SIM-2 (both fixed) + SIM-3->DEBT-7 + positives; QA-1 HIGH (mock Application layer cross-tenant leak, PIN-9-activated). Sweep corroborated QA-1's scope (shortlist/fork/match-report/deep-score also un-tenanted mock). Codex D1 (thread 019f5da8) UNSOUND->hardened->SOUND (14 findings dispositioned pre-work); Codex D2 (thread 019f5df8) UNSOUND on QA-1/D2-1 -> PO re-scoped conjunct 3 to the Job resource (run-2) -> SOUND at 493f2a9. D2-2 (empty ledger) fixed.
+
+Deviations worth knowing: QA-1/D2-1 -- PIN-9 made createApplication write real user data into the shared un-tenanted mock store; the DB job vertical is correctly isolated, but the frozen run-1 conjunct 3 read broader than the Job resource. PO (Wes) re-scoped it to the DB Job resource and accepted the mock layer as DEBT-5 (structural fix sprint-04). The panel caught this release-blocking finding that the AC matrix AND Codex D1 both missed -- panel independence earned its cost. Migration recreated once to add the CASCADE FK (SIM-2). Frontend full-suite timeouts under concurrent load were flakes (unit project green in isolation).
+
+Retro (2 questions):
+Q1 -- Proven-patterns proposals (inert until ratified at sprint-03 S0; default: adopt; expire after 2 plannings):
+  - PR-1: the `get_tenant_session` dependency (SET LOCAL ROLE app_runtime + set_config('app.user_id', true) + RESET teardown; app-level `.where` as belt, RLS as backstop) is THE copyable pattern for every future tenant route.
+  - PR-2: ON DELETE CASCADE on every tenant-child FK -- user teardown stays one DELETE instead of an ordered manual chain (SIM-2).
+  - PR-3: `sa_type=JSONB(none_as_null=True)` is mandatory on nullable JSONB columns paired with named CHECKs, else the CHECK silently skips NULL (SIM-3/DEBT-7); document centrally before sprint-03 adds one.
+  - PR-4: e2e/smoke authenticate as the DEMO tenant now that surfaces are tenant-filtered; new DB verticals keep their smoke fixtures owned by the demo user.
+Q2 -- debt: DEBT-5 (mock layer un-tenanted; HIGH mock-layer, non-blocking for the prototype; sprint-04), DEBT-6 (autogenerate drift on migration-only RLS/index), DEBT-7 (none_as_null landmine). All ledgered above.
+
+Cost line: 1 session (attended). Inline implementation (no fanned implementers -- exemplar judgment work). Fan-out = 3 panel seats (2 Sonnet + 1 Opus) + 1 Haiku sweep finder. Codex = D1 (1 dispatch + 2 replies) + D2 (1 dispatch + 3 replies). 1 PO decision (QA-1 re-scope). Panel/D2 independence caught the one release-blocker the AC matrix + D1 missed -- the fan-out cost bought a real defect, not theater.
+
 ### sprint-01-gates-and-foundation (run sprint-01-run-1, shipped 2026-07-13, merge 0b83cd2)
 
 Outcomes vs the 10 manifest conjuncts (AC-01..10, docs/sprints/sprint-01-spec.md):
