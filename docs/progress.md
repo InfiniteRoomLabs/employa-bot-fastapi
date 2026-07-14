@@ -4,9 +4,10 @@ PLAN (v3) says what we are building; this file says where we are. Update at ever
 
 ## Current state
 
-- Phase / run: sprint-03-shortlist / sprint-03-run-1 (status: shipping -- merged 5b3e09c, self-advanced; CI verification pending)
-- Active branch: master (sprint-03 merged at 5b3e09c; impl commits cae09d4..c0bd8b1)
-- Last verified checkpoint: sprint-03 merged + evidence re-run at 5b3e09c; self-advanced to sprint-04
+- Phase / run: sprint-03-shortlist / sprint-03-run-1 (status: COMPLETE -- shipped + self-advanced; master CI green at 2567e4c)
+- Active branch: master (sprint-03 merged 5b3e09c, ship + self-advance 2567e4c)
+- Last verified checkpoint: sprint-03 shipped and self-advanced to sprint-04; master CI fully green at 2567e4c
+- CI verification at the ship SHA 2567e4c (all first-try green, no INT-class fix): Test Backend (run 29306199586), Test Docker Compose (29306199563), Playwright incl. the extended core-journey job->shortlist (29306199566), Zizmor (29306199581) all success. The "core-journey required in CI" conjunct is closed against this run.
 - Next phase (sprint-04-applications-resume-snapshot) exact next action: SYNCHRONOUS S0 read-back with Wes (ADVISORY, HIGH-risk, fresh Goal block; the long-pole sprint -- applications+resume+snapshot as ONE slice with 3a/3b/3c internal checkpoints, ONE master merge). Codex D1+D2 MUST fire. See the sprint-04 Goal block in GOAL.md.
 - S7 ship evidence at the merge SHA 5b3e09c: backend 354 passed (POSTGRES_SERVER=localhost uv run pytest -q), lint clean, generate-client zero diff, frontend unit 323 passed; core-journey (login -> create job -> lists/persists -> shortlist -> shortlist lists) green 11.7s against the rebuilt compose stack with a fresh seed (7 demo jobs + 6 shortlist entries). CI verification at the master SHA recorded below once green.
 - sprint-02 (prior phase) shipped + verified: run sprint-02-run-2, merge b942a1f, INT-3 fix 07dd4bf, master CI fully green at 07dd4bf.
