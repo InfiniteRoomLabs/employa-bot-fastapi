@@ -4,11 +4,12 @@ PLAN (v3) says what we are building; this file says where we are. Update at ever
 
 ## Current state
 
-- Phase / run: sprint-02-jobs-manual-capture / sprint-02-run-2 (status: COMPLETE -- shipped + self-advanced; master CI green)
-- Active branch: master (at 07dd4bf; sprint work merged b942a1f, self-advance 3363e16, INT-3 fix 07dd4bf)
-- Last verified checkpoint: sprint-02 shipped and self-advanced to sprint-03; master CI fully green at 07dd4bf
-- Next phase (sprint-03-shortlist) exact next action: SYNCHRONOUS S0 read-back with Wes (ADVISORY, fresh Goal block -- Codex D1 MUST fire pre-guard); at S0 ratify the sprint-02 retro proposals PR-1..PR-4 and rule on the sprint-03 D2 (composite-FK first-instance); then resume preflight + `/goal` + run manifest. See the sprint-03 Goal block in GOAL.md.
-- S7 ship evidence at the master SHA: sprint-02-run-2 merged at b942a1f; evidence re-run there (backend 325 + lint, generate-client zero diff, frontend build + 323 unit, clean-volume boot + fresh seed 7 demo jobs + core-journey 10.0s). CI surfaced INT-3 (Playwright ENOENT on the absent CI `.env`), fixed at 07dd4bf. VERIFIED master CI fully green at 07dd4bf: Test Backend (run 29298986178), Test Docker Compose (29298986172), Playwright incl. core-journey (29298986175), Zizmor (29298986168) all success. The "core-journey required in CI" conjunct is closed against this run.
+- Phase / run: sprint-03-shortlist / sprint-03-run-1 (status: shipping -- merged 5b3e09c, self-advanced; CI verification pending)
+- Active branch: master (sprint-03 merged at 5b3e09c; impl commits cae09d4..c0bd8b1)
+- Last verified checkpoint: sprint-03 merged + evidence re-run at 5b3e09c; self-advanced to sprint-04
+- Next phase (sprint-04-applications-resume-snapshot) exact next action: SYNCHRONOUS S0 read-back with Wes (ADVISORY, HIGH-risk, fresh Goal block; the long-pole sprint -- applications+resume+snapshot as ONE slice with 3a/3b/3c internal checkpoints, ONE master merge). Codex D1+D2 MUST fire. See the sprint-04 Goal block in GOAL.md.
+- S7 ship evidence at the merge SHA 5b3e09c: backend 354 passed (POSTGRES_SERVER=localhost uv run pytest -q), lint clean, generate-client zero diff, frontend unit 323 passed; core-journey (login -> create job -> lists/persists -> shortlist -> shortlist lists) green 11.7s against the rebuilt compose stack with a fresh seed (7 demo jobs + 6 shortlist entries). CI verification at the master SHA recorded below once green.
+- sprint-02 (prior phase) shipped + verified: run sprint-02-run-2, merge b942a1f, INT-3 fix 07dd4bf, master CI fully green at 07dd4bf.
 - S6 review outcome: DB job exemplar SOUND (correctness Opus: no HIGH/MED, RLS proven under app_runtime; D2: exemplar statically sound). SIM-1/SIM-2 fixed (88bbc5b). QA-1/D2-1 (mock-layer cross-tenant leak activated by PIN-9) -> PO re-scoped conjunct 3 to the DB Job resource (run-2), mock layer accepted as DEBT-5 (sprint-04 structural fix). Reports: scratchpad/panel-{qa,correctness,simplification}.md + sweep-finder.md; ledger below.
 - Packet log (sprint-02): spec 06d952c/7d0f6f3 (D1 UNSOUND -> hardened -> SOUND, thread 019f5da8); P1-P3 9723739 (job table migration 4c17ea8b5656 + tenant session + DB getJobs/getJob + dual-write mint + seed jobs); P4 cf3d268 (editable wizard, getJobs-backed /jobs default view, core-journey.spec.ts born, smoke auths as demo tenant).
 - S5 evidence (2026-07-13, branch sprint-02-jobs at cf3d268): backend 325 passed (POSTGRES_SERVER=localhost uv run pytest -q) incl. tests/migrations 39 (job-table AC-01 suite) and tests/api/routes/test_jobs.py (fidelity/tenancy/provenance/drift); lint (mypy strict + ty + ruff + format) clean; frontend build green, vitest 323 passed, biome clean; generate-client.sh produced ZERO diff; playwright 36/36 (35 smoke + core-journey) against the rebuilt compose stack; core-journey transcript: real-form login -> unique-content capture -> getJobs-network-asserted list -> reload-persists -> DB detail render, 9.5s.
@@ -97,6 +98,34 @@ PLAN (v3) says what we are building; this file says where we are. Update at ever
 ## Completed sprints
 
 (One entry per shipped sprint: outcomes with evidence, AC covered, review results, deviations, cost line. This section absorbs the CHANGELOG role for sprint work.)
+
+### sprint-03-shortlist (run sprint-03-run-1, shipped 2026-07-14, merge 5b3e09c)
+
+The first child table that composite-FKs a parent -- the exemplar sprint-04's children (stage_transition, resume_snapshot, match_report) copy. Outcomes vs the 7 run-manifest conjuncts:
+
+1. shortlist_entry migration (4317eb75f1cd) under the conventions + dedup: tenant user_id + composite UNIQUE(user_id,id) anchor, CASCADE user FK, FORCE RLS (policy shortlist_tenant_isolation on the app.user_id GUC) under app_runtime != owner, timestamptz, named salary JSONB CHECK (IS-TRUE-wrapped, none_as_null), schema_version, source CHECK; partial dedup uq_shortlist_user_job UNIQUE(user_id,job_id) WHERE job_id IS NOT NULL. tests/migrations/test_shortlist_entry.py 20 tests (AC-01a..d, AC-02, AC-02b) green under app_runtime.
+2. composite FK (user_id,job_id) -> job(user_id,id) rejects a cross-tenant job_id at the DB, PROVEN under app_runtime (test_composite_fk_is_the_backstop_under_app_runtime, D2-2) not just as owner; MATCH SIMPLE skips the FK on NULL job_id.
+3. shortlist ops DB-backed + manifest flipped + fidelity: getShortlist(default)/addToShortlist/dismissFromShortlist served from the DB via get_tenant_session; searchId-scoped getShortlist stays mock (PIN-3), unrecognized searchId falls through to the DB default (SIM-2). Manifest flips the three ops. Provenance discriminators + wire fidelity + drift round-trip in tests/api/routes/test_shortlist.py (14 tests).
+4. ownership matrix: intruder cross-tenant list sees zero victim rows; cross-tenant dismiss + not-owned-jobId add are byte-identical 404s; caller-stamped add DB-asserted; QA seat independently confirmed RLS holds via a bypassed-predicate raw SELECT + WITH CHECK rejects a spoofed user_id.
+5. journey extended: core-journey now login -> create job -> lists/persists -> add to shortlist (POST carries the created jobId, network-asserted; entry composite-FKs the job) -> /shortlist lists it. Green 11.7s from a fresh seed at 5b3e09c; required in CI (whole e2e dir, alls-green-playwright).
+6. ledger closed (sprint-03 review ledger below, all terminal).
+7. retarget: this ship self-advances GOAL.md to sprint-04-applications-resume-snapshot.
+
+AC covered: AC-01a..d, AC-02, AC-02b, AC-03..08 (docs/sprints/sprint-03-spec.md).
+
+Review results: Codex D1 (thread 019f5eaa) UNSOUND->hardened->SOUND (11 findings; PO ruled duplicate-add -> 409 via AskUserQuestion). 3-seat panel: QA PASS on tenancy (exhaustive independent attack incl. RLS-bypass probe), correctness (Opus) confirmed code correct (composite FK + RLS complementary, salary CHECK airtight, DEBT-6 index intact, tests discriminate), simplification SIM-1/SIM-2 fixed + rubric 6/10. Sweep (lead re-run, sl-sweep report lost in transit) corroborated QA PASS, no distinct finding. Codex D2 (thread 019f5eca) UNSOUND (4 findings) -> all fixed (D2-3 = this ship step) -> SOUND at c0bd8b1.
+
+Deviations worth knowing: PO HUMAN-DECISION on duplicate-add semantics (409 conflict, not idempotent). job_id kept NULLABLE (contract-faithful, jobId optional) with a partial dedup -- no mvp-api.yaml edit. The catch-all `except IntegrityError->409` was narrowed to the dedup constraint name (QA-1/COR-2/SIM-1) so the exemplar disambiguates 404-vs-409 for sprint-04's deletable-parent children. A two-connection race test's session-level SET ROLE poisoned the pool under FORCE RLS -> connections invalidate()'d. D2 re-opened D2-1 twice (sequential test -> lock_timeout contention test -> concurrent-route [201,409] test) before closing.
+
+Retro (2 questions):
+Q1 -- Proven-patterns proposals (inert until ratified at sprint-04 S0; default: adopt; expire after 2 plannings):
+  - PR-5: the composite-FK-to-parent + partial-dedup + nullable-reference pattern (shortlist_entry) is the copyable template for sprint-04's child tables; copy the migration shape (composite FK via raw op.execute, MATCH SIMPLE for optional refs, partial unique for optional dedup).
+  - PR-6: a DB constraint surfaced through a route MUST disambiguate by constraint name (`exc.orig.diag.constraint_name`), never a catch-all `except IntegrityError`, when >1 constraint can fire -- else a TOCTOU on a deletable parent mislabels the error.
+  - PR-7: two-connection / concurrency tests that use session-level `SET ROLE` MUST invalidate() their connections (or use SET LOCAL) -- a pooled connection left as app_runtime breaks later owner-role inserts under FORCE RLS.
+  - PR-8: a DB/mock split's "no-match" fallback must be re-derived per resource (unrecognized searchId -> DB default here), not mechanically inherited from a fully-mock op's shape.
+Q2 -- debt: no new blocking debt. DEBT-6 (autogenerate drift on migration-only RLS/index) now applies to shortlist_entry too (carried, same pattern). DEBT-7 (none_as_null) honored on the salary column.
+
+Cost line: 1 session (attended handoff continued). Inline implementation (no fanned implementers -- exemplar-copy judgment work). Fan-out = 3 panel seats (2 Sonnet + 1 Opus) + 1 Haiku sweep finder (report lost, lead re-ran). Codex = D1 (1 dispatch + 3 replies) + D2 (1 dispatch + 3 replies). 1 PO decision (duplicate-add 409). The panel + D2 caught 6 real evidence/robustness issues (sequential race test, FK-not-tested-under-runtime, catch-all error taxonomy, dead mock fallback, pool poison) the AC matrix alone missed -- independence paid off again.
 
 ### sprint-02-jobs-manual-capture (run sprint-02-run-2, shipped 2026-07-13, merge b942a1f)
 
@@ -217,6 +246,29 @@ Dispositions: fixed / disproved-with-evidence / waived-by-Wes / frozen-HUMAN-DEC
 | COR/QA controls | panel-qa QA-2/3/4 | INFO | RLS backstop holds with no WHERE + unset GUC; cross-tenant 404 byte-identical incl. headers; getJobs collection filtering + caller-stamped mint re-verified non-vacuous | recorded (controls confirmed) | panel-qa.md |
 | INT-3 | lead (S7 ship, CI at merge/self-advance SHA) | MED | Playwright CI red at 3363e16: e2e `envVal()` read the repo-root `.env` before honoring its fallback, so the demo-tenant `SEED_DEMO_*` creds (not in the CI Playwright container env; `.env` gitignored/absent there) threw ENOENT in globalSetup. Green locally, red in CI. | fixed | envVal wraps the read in try/catch so a fallback survives an absent file; core-journey logs in as the demo user with fallbacked creds (commit 07dd4bf). VERIFIED master CI fully green at 07dd4bf: Playwright run 29298986175 success (Test Backend 29298986178, Docker Compose 29298986172, Zizmor 29298986168 all success). Security-review flag on the `employa-demo-1` fallback acknowledged: non-secret local-only demo default (Settings.SEED_DEMO_PASSWORD; seed.py refuses it outside local), already public in the repo. |
 
+### sprint-03 review ledger (run sprint-03-run-1)
+
+Dispositions detailed in docs/sprints/sprint-03-spec.md. D1 thread 019f5eaa (SOUND after replies); D2 thread 019f5eca (SOUND at c0bd8b1).
+
+| ID | Reviewer | Sev | Finding | Disposition | Closure evidence |
+|---|---|---|---|---|---|
+| S03-D1-1..11 | Codex D1 | HIGH/MED/LOW | 11 findings on the fresh Goal block (journey-exercises-FK, DB/mock split, dedup semantics, nullable job_id, JSONB/schema_version/drift, snapshot semantics, D2-fires) | fixed / disproved-with-evidence / PO-decision | dispositions table in sprint-03-spec.md; D1 verdict SOUND after 3 replies |
+| S03-D1-3 | Codex D1 + PO | HIGH | duplicate-add response semantics contract-silent | waived->PO decision | Wes ruled 409 conflict (AskUserQuestion 2026-07-13); AC-02b asserts one-201/one-409 |
+| QA-1 | sl-qa (Sonnet) | INFO->fixed | catch-all except IntegrityError->409 could mislabel a TOCTOU composite-FK fire | fixed | narrowed to _constraint_name == uq_shortlist_user_job; else re-raise (commit c1231f4) |
+| QA-2 | sl-qa | INFO | unrecognized searchId returns mock default (pre-existing) | subsumed by SIM-2 fix | unrecognized searchId now -> DB default (c1231f4) |
+| QA-3/4 (controls) | sl-qa | -- | RLS holds via bypassed-predicate raw SELECT; WITH CHECK rejects spoofed user_id; cross-tenant list/dismiss/add all clean | recorded (PASS) | sl-qa.md; zero tenancy findings |
+| COR-1 | sl-correctness (Opus) | MED | "concurrent" dedup test was sequential | fixed (= D2-1) | replaced by concurrent-route [201,409] test + two-connection lock_timeout test (c0bd8b1) |
+| COR-2 | sl-correctness | LOW | route maps all IntegrityError->409 | fixed | = QA-1/SIM-1 narrowing (c1231f4) |
+| COR (controls) | sl-correctness | -- | composite FK + RLS complementary; salary CHECK airtight (jsonb-null/{}/missing-key rejected); DEBT-6 index intact; manifest flip honest; tests discriminate | recorded (charter YES) | sl-correctness.md |
+| SIM-1 | sl-simplification (Sonnet) | MED | 404-vs-409 disambiguation relied on the FK case being unreachable, not distinguished | fixed | constraint-name disambiguation (c1231f4); flagged for sprint-04 children |
+| SIM-2 | sl-simplification | LOW-MED | dead store.shortlist searchId fallback (write-dead, untested) | fixed | unrecognized searchId -> DB default + test (c1231f4) |
+| SIM (rubric) | sl-simplification | -- | mechanical scaffolding copies cleanly; 6/10 (composite-FK/dedup residual judgment now explicit) | recorded | sl-simplification.md; sprint-04 copy verdict recorded |
+| SWEEP | Haiku finder (lost) + lead re-run | -- | 8-list ownership enumeration: no orphan store writes, every id/jobId path ownership-validated, 3 ops flipped, DEBT-6 index intact | recorded (no distinct finding) | scratchpad/sl-sweep.md (lead re-run) |
+| S03-D2-1 | Codex D2 (thread 019f5eca) | HIGH | AC-02b test sequential, not a concurrent route race | fixed | test_concurrent_route_add_one_201_one_409 (two threads, shared client) -> [201,409] + one row (c0bd8b1); D2 confirmed close |
+| S03-D2-2 | Codex D2 | HIGH | composite-FK cross-tenant rejection tested only as owner | fixed | test_composite_fk_is_the_backstop_under_app_runtime under SET ROLE app_runtime + GUC (c1231f4) |
+| S03-D2-3 | Codex D2 | HIGH | ledger + retarget not yet done | fixed | this ship step: ledger written, GOAL.md self-advanced to sprint-04 |
+| S03-D2-4 | Codex D2 | MED | no jsonb 'null' salary case / named-CHECK introspection | fixed | test_named_checks_exist + salary='null'::jsonb negative case (d3c5202) |
+
 ## Open-debt ledger
 
 | ID | Description + evidence | Severity | Affected AC | Owner | Release-blocking | Target phase |
@@ -226,7 +278,7 @@ Dispositions: fixed / disproved-with-evidence / waived-by-Wes / frozen-HUMAN-DEC
 | DEBT-3 | UNDO_WINDOW_SECONDS=300 hardcoded in the MOCK applications route; becomes a Settings value when sprint-04 replaces that code with the real DB implementation | low | -- | backend | no | sprint-04 |
 | DEBT-4 | Axe dev-check reports real a11y violations on /agents and /dashboard ("element has focusable descendants", "content not contained by landmarks") -- logged, filtered from the smoke gate; the accessibility gate itself is deferred per plan v3's register | low | -- | frontend | no | post-0.1 (v3 deferred register) |
 | DEBT-5 | The mock Application/searches/resume/shortlist layer is a shared single-tenant store with no ownership checks (sprint-01 design: mock routes are "valid token", the store is decoupled from DB user identity). Since sprint-02 PIN-9, createApplication carries REAL user-typed job data into it, so an intruder with a valid token + an application id can read/dismiss another tenant's captured job data (QA-1/D2-1, probes in scratchpad/probes/). The DB `job` vertical is correctly tenant-isolated; this is the adjacent mock layer. PO-accepted 2026-07-13 (conjunct 3 re-scoped to the Job resource). | HIGH (mock-layer) | conjunct 3 (Job-scoped) | backend | no (prototype; single-founder learning artifact, not a multi-tenant deploy) | sprint-04 (applications go DB-side + tenant-isolated) |
-| DEBT-6 | RLS policy + partial-unique dedup index live only in migration 4c17ea8b5656 (raw op.execute), not in models.Job metadata; a future `alembic revision --autogenerate` could emit a spurious drop_index/no-op for them (COR-4). | low | -- | backend | no | next migration touching job / when autogenerate is next run |
+| DEBT-6 | RLS policy + partial-unique dedup indexes live only in the migrations (raw op.execute), not in model metadata -- job (4c17ea8b5656) AND shortlist_entry (4317eb75f1cd, incl. the composite FK); a future `alembic revision --autogenerate` emits a spurious drop for them (observed and hand-removed in the shortlist migration). Every new tenant migration must hand-strip the autogenerate drops. | low | -- | backend | no | next migration / when autogenerate is next run |
 | DEBT-7 | `sa_type=JSONB(none_as_null=True)` is mandatory on every nullable JSONB column (else psycopg sends jsonb 'null' and the named CHECK silently never fires on NULL); documented on one field, silently required on the rest (SIM-3). Needs a central callout before sprint-03 adds a nullable JSONB column. | low | -- | backend | no | sprint-03 (retro pattern PR) |
 
 ## Parked tangents
