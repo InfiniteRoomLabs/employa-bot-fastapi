@@ -11,9 +11,10 @@ are not served; a mock searchId view is still served. Drift: wire->row->wire.
 from __future__ import annotations
 
 import contextlib
+import threading
 import uuid
 from collections.abc import Generator
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
@@ -22,8 +23,11 @@ from sqlalchemy.exc import OperationalError
 from sqlmodel import Session, delete, select
 
 from app import models, schemas, store
+from app.core import security
+from app.core.config import settings
 from app.core.db import engine
 from app.job_mapper import wire_job_to_row
+from app.main import app
 from app.shortlist_mapper import row_to_wire_shortlist, wire_shortlist_to_row
 from tests.conftest import SeededUsers
 
@@ -210,6 +214,66 @@ def test_duplicate_add_returns_409(
     dup = db_client.post(f"{B}/shortlist", json=_add_body(job.id))
     assert dup.status_code == 409
     assert dup.json()["kind"] == "conflict"
+
+
+def test_concurrent_route_add_one_201_one_409(
+    seed_domain: SeededUsers,
+) -> None:
+    """Two CONCURRENT addToShortlist requests for the same (user_id, job_id),
+    driven through the ROUTE on two threads -> EXACTLY one 201 and one 409, and
+    exactly one row (AC-02b). This proves the losing concurrent request maps to
+    the 409 conflict envelope, not just that the DB index blocks (which the
+    two-connection test below proves at the SQL layer). Runs outside the
+    rollback fixture; cleaned up explicitly."""
+    uid = seed_domain.test_user.id
+    job = _wire_job(company="RaceHTTP")
+    with Session(engine) as s:
+        s.add(wire_job_to_row(job, user_id=uid))
+        s.commit()
+    token = security.create_access_token(
+        uid,
+        expires_delta=timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES),
+        session_version=seed_domain.test_user.session_version,
+    )
+    headers = {"Authorization": f"Bearer {token}"}
+    statuses: list[int] = []
+    lock = threading.Lock()
+
+    # ONE client shared by both threads: two `with TestClient(app)` blocks would
+    # run the app lifespan concurrently and corrupt shared state. httpx is
+    # thread-safe for concurrent requests.
+    try:
+        with TestClient(app) as c:
+            c.headers.update(headers)
+
+            def _attempt() -> None:
+                resp = c.post(f"{B}/shortlist", json=_add_body(job.id))
+                with lock:
+                    statuses.append(resp.status_code)
+
+            t1 = threading.Thread(target=_attempt)
+            t2 = threading.Thread(target=_attempt)
+            t1.start()
+            t2.start()
+            t1.join(timeout=20)
+            t2.join(timeout=20)
+        assert sorted(statuses) == [201, 409], statuses
+        with Session(engine) as s:
+            rows = s.exec(
+                select(models.ShortlistEntry).where(
+                    models.ShortlistEntry.job_id == job.id
+                )
+            ).all()
+            assert len(rows) == 1
+    finally:
+        with Session(engine) as s:
+            s.exec(
+                delete(models.ShortlistEntry).where(
+                    models.ShortlistEntry.job_id == job.id
+                )
+            )
+            s.exec(delete(models.Job).where(models.Job.id == job.id))
+            s.commit()
 
 
 def test_two_connection_duplicate_add_one_winner(
