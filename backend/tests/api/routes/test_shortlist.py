@@ -12,15 +12,15 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Generator
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlmodel import Session, select
+from sqlalchemy import text
+from sqlalchemy.exc import OperationalError
+from sqlmodel import Session, delete, select
 
 from app import models, schemas, store
-from app.core import security
-from app.core.config import settings
 from app.core.db import engine
 from app.job_mapper import wire_job_to_row
 from app.shortlist_mapper import row_to_wire_shortlist, wire_shortlist_to_row
@@ -195,36 +195,54 @@ def test_duplicate_add_returns_409(
     assert dup.json()["kind"] == "conflict"
 
 
-def test_concurrent_duplicate_add_exactly_one_winner(
+def test_two_connection_duplicate_add_one_winner(
     seed_domain: SeededUsers,
 ) -> None:
-    """Two connections race the same (user_id, job_id) -> one wins, one 409,
-    exactly one row (the partial unique index is concurrency-safe). Runs
-    outside the rollback fixture: real committed rows on two connections,
-    cleaned up explicitly."""
+    """A GENUINE two-connection race on the same (user_id, job_id), proved
+    deterministically (D2-1): connection A inserts the row and holds its
+    transaction OPEN (the unique-index key is locked); connection B, under a
+    short lock_timeout, tries to insert the SAME key WHILE A is still open and
+    is BLOCKED -> it raises (contention is real, not sequential). A then
+    commits, and exactly one row remains. This is the two-connection pattern
+    sprint-04 leans on. Runs outside the rollback fixture on two real
+    connections, cleaned up explicitly."""
     uid = seed_domain.test_user.id
     job = _wire_job(company="Race")
     with Session(engine) as s:
         s.add(wire_job_to_row(job, user_id=uid))
         s.commit()
 
-    token = security.create_access_token(
-        uid,
-        expires_delta=timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES),
-        session_version=seed_domain.test_user.session_version,
-    )
-    headers = {"Authorization": f"Bearer {token}"}
-
-    from app.main import app
-
+    conn_a = engine.connect()
+    conn_b = engine.connect()
     try:
-        with TestClient(app) as c1, TestClient(app) as c2:
-            c1.headers.update(headers)
-            c2.headers.update(headers)
-            r1 = c1.post(f"{B}/shortlist", json=_add_body(job.id))
-            r2 = c2.post(f"{B}/shortlist", json=_add_body(job.id))
-        statuses = sorted([r1.status_code, r2.status_code])
-        assert statuses == [201, 409], statuses
+        for c in (conn_a, conn_b):
+            c.execute(text("SET ROLE app_runtime"))
+            c.execute(
+                text("SELECT set_config('app.user_id', :uid, false)"),
+                {"uid": str(uid)},
+            )
+
+        def _insert(c: object) -> None:
+            entry = wire_shortlist_to_row(_wire_entry(job_id=job.id), user_id=uid)
+            c.execute(  # type: ignore[attr-defined]
+                text(
+                    "INSERT INTO shortlist_entry"
+                    " (id, user_id, job_id, company, role, location, match, source)"
+                    " VALUES (:id, :uid, :jid, 'S', 'E', 'R', 90, 'you')"
+                ),
+                {"id": entry.id, "uid": uid, "jid": job.id},
+            )
+
+        # A inserts and holds its transaction open (key locked, uncommitted).
+        _insert(conn_a)
+        # B, with a short lock_timeout, tries the SAME key while A is open ->
+        # it BLOCKS on the index key and times out: contention is real.
+        conn_b.execute(text("SET LOCAL lock_timeout = '750ms'"))
+        with pytest.raises(OperationalError):
+            _insert(conn_b)
+        conn_b.rollback()
+        conn_a.commit()  # the winner
+
         with Session(engine) as s:
             rows = s.exec(
                 select(models.ShortlistEntry).where(
@@ -233,9 +251,9 @@ def test_concurrent_duplicate_add_exactly_one_winner(
             ).all()
             assert len(rows) == 1
     finally:
+        conn_a.close()
+        conn_b.close()
         with Session(engine) as s:
-            from sqlmodel import delete
-
             s.exec(
                 delete(models.ShortlistEntry).where(
                     models.ShortlistEntry.job_id == job.id

@@ -173,6 +173,23 @@ def test_null_job_id_accepted_fk_skipped(
     _insert_entry(conn, a, job_id=None)  # MATCH SIMPLE skips the FK on NULL
 
 
+def test_composite_fk_is_the_backstop_under_app_runtime(
+    conn: Connection, tenants: tuple[uuid.UUID, uuid.UUID]
+) -> None:
+    """The FK refuses a cross-tenant job_id under the RUNTIME role too (D2-2):
+    the route's app-level pre-check is the belt, but if it were dropped the DB
+    must still refuse. Insert directly under app_runtime + the caller's GUC,
+    bypassing any route logic."""
+    a, b = tenants
+    b_job = _mk_job(conn, b)  # created as owner, before the role switch
+    conn.execute(text("SET LOCAL ROLE app_runtime"))
+    conn.execute(text("SELECT set_config('app.user_id', :uid, true)"), {"uid": str(a)})
+    # a (the GUC tenant) shortlists b's job: (a, b_job) is not in job, so the
+    # composite FK refuses regardless of RLS visibility.
+    with pytest.raises(DBAPIError, match="fk_shortlist_job|foreign key"):
+        _insert_entry(conn, a, job_id=b_job)
+
+
 # --------------------------------------------- AC-02b partial dedup
 
 
@@ -277,11 +294,34 @@ def test_saved_is_timestamptz(conn: Connection) -> None:
     assert offenders == []
 
 
+def test_named_checks_exist(conn: Connection) -> None:
+    """The named CHECKs are actually on the table (D2-4: introspect, don't
+    infer from negative inserts alone)."""
+    names = {
+        r[0]
+        for r in conn.execute(
+            text(
+                "SELECT conname FROM pg_constraint"
+                " WHERE conrelid = 'shortlist_entry'::regclass AND contype = 'c'"
+            )
+        )
+    }
+    assert {
+        "ck_shortlist_salary_shape",
+        "ck_shortlist_source",
+        "ck_shortlist_schema_version",
+    } <= names
+
+
 @pytest.mark.parametrize(
     ("constraint", "kwargs"),
     [
         ("ck_shortlist_salary_shape", {"salary": "[]"}),
         ("ck_shortlist_salary_shape", {"salary": '{"value": "lots", "extra": []}'}),
+        # jsonb 'null' literal: SQL-not-null but jsonb-null -- the IS TRUE
+        # wrapping must still reject it (D2-4; distinct from SQL NULL, which is
+        # a legal absent salary).
+        ("ck_shortlist_salary_shape", {"salary_raw": "'null'::jsonb"}),
         ("ck_shortlist_source", {"source": "robot"}),
         ("ck_shortlist_schema_version", {"schema_version": 0}),
     ],
@@ -293,6 +333,19 @@ def test_named_checks_reject_bad_payloads(
     kwargs: dict[str, object],
 ) -> None:
     a, _ = tenants
+    if "salary_raw" in kwargs:
+        # A jsonb 'null' cannot go through the parametrized-CAST helper (that
+        # would send SQL NULL), so insert it as a raw literal.
+        with pytest.raises(DBAPIError, match=constraint):
+            conn.execute(
+                text(
+                    "INSERT INTO shortlist_entry (id, user_id, company, role,"
+                    " location, salary, match, source) VALUES"
+                    f" (:id, :uid, 'S', 'E', 'R', {kwargs['salary_raw']}, 90, 'you')"
+                ),
+                {"id": uuid.uuid4(), "uid": a},
+            )
+        return
     with pytest.raises(DBAPIError, match=constraint):
         _insert_entry(conn, a, job_id=None, **kwargs)  # type: ignore[arg-type]
 
