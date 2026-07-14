@@ -33,7 +33,7 @@ async function gotoJobsAndWaitForApi(page: Page): Promise<void> {
   expect((await jobsResponse).status()).toBe(200)
 }
 
-test("login -> create job -> job lists, persists across reload", async ({
+test("login -> create job -> lists + persists -> shortlist -> shortlist lists", async ({
   page,
 }) => {
   // --- Login through the real form (no token injection). The DEMO user
@@ -94,4 +94,30 @@ test("login -> create job -> job lists, persists across reload", async ({
   // --- Detail page renders the row via DB-backed getJob. ------------------
   await page.goto(`/jobs/${createdBody.jobId}`)
   await expect(page.getByText(ROLE).first()).toBeVisible()
+
+  // --- Sprint-03: add the created job to the shortlist and assert it lists.
+  // Select the created job's row (makes it the active detail pane), then
+  // shortlist it. The POST must carry the created jobId so the shortlist
+  // entry composite-FKs the job (PIN-5). ----------------------------------
+  await gotoJobsAndWaitForApi(page)
+  await page.getByText(COMPANY).first().click()
+  const shortlistPost = page.waitForResponse(
+    (r) =>
+      /\/api\/v1\/shortlist$/.test(r.url()) && r.request().method() === "POST",
+  )
+  await page.getByRole("button", { name: /\+ shortlist/i }).click()
+  const slResp = await shortlistPost
+  expect(slResp.status()).toBe(201)
+  const slBody = (await slResp.json()) as { jobId: string }
+  expect(slBody.jobId).toBe(createdBody.jobId)
+
+  // --- The shortlisted job lists on the DB-backed /shortlist view. --------
+  const shortlistGet = page.waitForResponse(
+    (r) =>
+      /\/api\/v1\/shortlist(\?|$)/.test(r.url()) &&
+      r.request().method() === "GET",
+  )
+  await page.goto("/shortlist")
+  expect((await shortlistGet).status()).toBe(200)
+  await expect(page.getByText(COMPANY).first()).toBeVisible()
 })
