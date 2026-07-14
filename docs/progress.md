@@ -4,11 +4,12 @@ PLAN (v3) says what we are building; this file says where we are. Update at ever
 
 ## Current state
 
-- Phase / run: sprint-03-shortlist / sprint-03-run-1 (status: COMPLETE -- shipped + self-advanced; master CI green at 2567e4c)
-- Active branch: master (sprint-03 merged 5b3e09c, ship + self-advance 2567e4c)
-- Last verified checkpoint: sprint-03 shipped and self-advanced to sprint-04; master CI fully green at 2567e4c
-- CI verification at the ship SHA 2567e4c (all first-try green, no INT-class fix): Test Backend (run 29306199586), Test Docker Compose (29306199563), Playwright incl. the extended core-journey job->shortlist (29306199566), Zizmor (29306199581) all success. The "core-journey required in CI" conjunct is closed against this run.
-- Next phase (sprint-04-applications-resume-snapshot) exact next action: SYNCHRONOUS S0 read-back with Wes (ADVISORY, HIGH-risk, fresh Goal block; the long-pole sprint -- applications+resume+snapshot as ONE slice with 3a/3b/3c internal checkpoints, ONE master merge). Codex D1+D2 MUST fire. See the sprint-04 Goal block in GOAL.md.
+- Phase / run: sprint-04-applications-resume-snapshot / sprint-04-run-1 (status: running -- guard on 2026-07-14)
+- Active branch: sprint-04-apps-resume-snapshot (internal checkpoints 3a/3b/3c commit here; ONE final merge to master per v3 abandonment-safety)
+- Last verified checkpoint: S1 guard-on manifest commit (this commit); prior: sprint-03 shipped + self-advanced, master CI fully green at 2567e4c (recorded e918403)
+- Exact next action: Codex D1 plan attack on the committed Goal block (MUST: fresh block + hard blocker + high risk), then S2 investigation.
+- Resume preflight 2026-07-14: prior session ended at checkpoint commit e918403; tree carried only the pre-existing `.idea/*.iml` dirt (not sprint work, left untouched). No prior sprint-04 manifest -> fresh run, NOT abandoned-dirty; direct start. Queue copy in GOAL.md diffed against approved-queue.md rev 1: identical.
+- sprint-03 CI verification at the ship SHA 2567e4c (all first-try green, no INT-class fix): Test Backend (run 29306199586), Test Docker Compose (29306199563), Playwright incl. the extended core-journey job->shortlist (29306199566), Zizmor (29306199581) all success. The "core-journey required in CI" conjunct is closed against this run.
 - S7 ship evidence at the merge SHA 5b3e09c: backend 354 passed (POSTGRES_SERVER=localhost uv run pytest -q), lint clean, generate-client zero diff, frontend unit 323 passed; core-journey (login -> create job -> lists/persists -> shortlist -> shortlist lists) green 11.7s against the rebuilt compose stack with a fresh seed (7 demo jobs + 6 shortlist entries). CI verification at the master SHA recorded below once green.
 - sprint-02 (prior phase) shipped + verified: run sprint-02-run-2, merge b942a1f, INT-3 fix 07dd4bf, master CI fully green at 07dd4bf.
 - S6 review outcome: DB job exemplar SOUND (correctness Opus: no HIGH/MED, RLS proven under app_runtime; D2: exemplar statically sound). SIM-1/SIM-2 fixed (88bbc5b). QA-1/D2-1 (mock-layer cross-tenant leak activated by PIN-9) -> PO re-scoped conjunct 3 to the DB Job resource (run-2), mock layer accepted as DEBT-5 (sprint-04 structural fix). Reports: scratchpad/panel-{qa,correctness,simplification}.md + sweep-finder.md; ledger below.
@@ -27,6 +28,24 @@ PLAN (v3) says what we are building; this file says where we are. Update at ever
 - Resume preflight 2026-07-13: tree carried pre-run dirt only (Wes's `.idea/*.iml` modifications + untracked `AGENTS.md`, both predating activation commit 9d3a784; not sprint work, left untouched). No prior manifest, run never started -> NOT abandoned-dirty; direct start. Queue copy in GOAL.md diffed against approved-queue.md rev 1: identical.
 
 ## Run manifests
+
+### sprint-04-run-1 (guard on 2026-07-14)
+
+- run_id: sprint-04-run-1
+- GOAL.md commit SHA as invoked: this guard-on commit (branch sprint-04-apps-resume-snapshot); repo HEAD at invocation e918403 (master, sprint-03 shipped + CI verification recorded)
+- approved-queue.md commit SHA: 9d3a784dc830ae3bf2653d7b6a7c5eb2f9670d27 (Wes-authored, queue_revision 1, unchanged)
+- S0 record: Wes invoked `/goal Complete the snapshotted current run in @GOAL.md` against the sprint-04 ADVISORY block = the go decision (same recorded pattern as sprint-02/03). Retro proposals PR-5..PR-8 ratified at their stated default (adopt) into GOAL.md Proven patterns (this commit). Queue copy diffed vs approved-queue.md rev 1 at invocation: identical. Entry criteria met: sprint-03 shipped (merge 5b3e09c, ship 2567e4c, master CI fully green, recorded e918403); the append-only machinery (075675058c67) and the composite-FK child exemplar (shortlist_entry, 4317eb75f1cd) both exist on master. Multi-session plan confirmed per queue row + runbook: 3a/3b/3c are internal checkpoints on ONE branch, ONE final merge to master (v3 abandonment-safety: applications+resume+snapshot move together). Preflight: clean (only pre-existing `.idea/*.iml` dirt).
+- Codex D1 fires immediately after this commit (MUST: fresh block + recorded hard blocker + high risk); thread id, verdict, and dispositions recorded in docs/sprints/sprint-04-spec.md and the ledger. Codex D2 WILL fire pre-merge (MUST: append-only mechanics + populated concurrency + the guarded-UPDATE exemplar).
+- Done-when conjuncts, verbatim from GOAL.md at that SHA:
+  1. the `application` / `stage_transition` / minimal `resume` / `resume_snapshot` tables exist via a migration satisfying every binding convention (tenant user_id + composite UNIQUE(user_id, id) anchors, composite FKs on every child (user_id, <parent>_id) -> parent(user_id, id), FORCE RLS under app_runtime != owner, timestamptz, NUMERIC money where present, append-only enforcement on stage_transition + resume_snapshot via role REVOKE + triggers) with migration tests green under app_runtime
+  2. the applications/resume/snapshot contract operations are served from the database with their manifest entries flipped to implemented and contract fidelity green
+  3. the guarded versioned UPDATE aborts on zero rows before any child write, proven by a two-connection test where exactly one of two same-version transition requests commits and the loser leaves NO orphan child rows
+  4. an illegal transition is rejected with the invalid_transition envelope
+  5. undo is a compensating transition (never a history delete)
+  6. the ownership-matrix tenancy tests pass (intruder_client cross-tenant reads/writes across every application/resume/snapshot op all fail as tenant-indistinguishable 404s)
+  7. frontend/e2e/core-journey.spec.ts is extended through job -> shortlist -> application -> applied (resume required, one illegal transition rejected) -> resume locked + snapshot visible, green from a fresh seed and required in CI
+  8. the review ledger has no finding outside a terminal disposition
+  9. GOAL.md is retargeted to sprint-05-fake-ai-seam and committed
 
 ### sprint-03-run-1 (guard on 2026-07-13)
 
