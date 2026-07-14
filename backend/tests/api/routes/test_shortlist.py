@@ -10,6 +10,7 @@ are not served; a mock searchId view is still served. Drift: wire->row->wire.
 
 from __future__ import annotations
 
+import contextlib
 import uuid
 from collections.abc import Generator
 from datetime import UTC, datetime
@@ -124,6 +125,22 @@ def test_add_to_shortlist_stamps_caller(
 
 
 # -------------------------------------------------------------- tenancy
+
+
+def test_unrecognized_searchid_falls_to_db_default(
+    db: Session, db_client: TestClient, seed_domain: SeededUsers
+) -> None:
+    """SIM-2: an unrecognized searchId no longer serves the write-dead
+    store.shortlist snapshot -- it falls through to the caller's DB shortlist."""
+    db.add(
+        wire_shortlist_to_row(
+            _wire_entry(company="MyDbEntry"), user_id=seed_domain.test_user.id
+        )
+    )
+    db.commit()
+    resp = db_client.get(f"{B}/shortlist", params={"searchId": str(uuid.uuid4())})
+    assert resp.status_code == 200
+    assert "MyDbEntry" in {e["company"] for e in resp.json()}
 
 
 def test_get_shortlist_excludes_other_tenant(
@@ -251,8 +268,14 @@ def test_two_connection_duplicate_add_one_winner(
             ).all()
             assert len(rows) == 1
     finally:
-        conn_a.close()
-        conn_b.close()
+        # These connections carry a session-level SET ROLE app_runtime, which
+        # rollback/close do NOT clear; a reused pooled connection would then run
+        # as app_runtime and, under FORCE RLS, break a later test's owner-role
+        # insert. invalidate() discards them from the pool entirely -- bulletproof.
+        for c in (conn_a, conn_b):
+            with contextlib.suppress(Exception):
+                c.invalidate()
+            c.close()
         with Session(engine) as s:
             s.exec(
                 delete(models.ShortlistEntry).where(

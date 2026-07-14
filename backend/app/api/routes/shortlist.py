@@ -39,6 +39,13 @@ from app.shortlist_mapper import row_to_wire_shortlist, wire_shortlist_to_row
 router = APIRouter(dependencies=[Depends(get_current_user)], tags=["shortlist"])
 
 
+def _constraint_name(exc: IntegrityError) -> str | None:
+    """The DB constraint that an IntegrityError violated (psycopg diag), or
+    None. Lets a route 409 on the dedup index only, not on every violation."""
+    diag = getattr(exc.orig, "diag", None)
+    return getattr(diag, "constraint_name", None)
+
+
 class AddToShortlistBody(BaseModel):
     """Inline requestBody for ``POST /shortlist`` (no named contract schema)."""
 
@@ -60,13 +67,16 @@ def get_shortlist(
 ) -> list[ShortlistEntry]:
     """Shortlist entries (getShortlist).
 
-    Default view: DB-backed, the caller's saved entries. A ``searchId``-scoped
-    view stays mock (PIN-3) -- searches are mock through Release 0.1.
+    Default view (no searchId): DB-backed, the caller's saved entries. A
+    RECOGNIZED ``searchId`` returns the mock per-search projection (PIN-3 --
+    searches are mock through Release 0.1). An unrecognized ``searchId`` falls
+    through to the DB default (SIM-2: the old mock-era fallback to
+    ``store.shortlist`` is now write-dead since add/dismiss moved to the DB, so
+    serving it would be a frozen disconnected snapshot -- the caller's real
+    shortlist is the right answer).
     """
-    if searchId is not None:
-        if searchId in store.SHORTLIST_BY_SEARCH:
-            return store.SHORTLIST_BY_SEARCH[searchId]
-        return list(store.shortlist.values())
+    if searchId is not None and searchId in store.SHORTLIST_BY_SEARCH:
+        return store.SHORTLIST_BY_SEARCH[searchId]
     rows = session.exec(
         select(models.ShortlistEntry)
         .where(models.ShortlistEntry.user_id == current_user.id)
@@ -116,7 +126,18 @@ def add_to_shortlist(
         session.commit()
     except IntegrityError as exc:
         session.rollback()
-        raise ConflictError(f"shortlist: job {body.jobId} already shortlisted") from exc
+        # Only the dedup index means "already shortlisted" -> 409. Any OTHER
+        # integrity violation (e.g. the composite FK firing because the job was
+        # deleted between the ownership pre-check and the commit -- a TOCTOU
+        # window) is NOT a conflict; re-raise rather than mislabel it a 409
+        # (QA-1/COR-2/SIM-1). The exemplar disambiguates by constraint name so
+        # sprint-04's children -- whose parents ARE deletable mid-request --
+        # inherit correct error taxonomy, not a catch-all.
+        if _constraint_name(exc) == "uq_shortlist_user_job":
+            raise ConflictError(
+                f"shortlist: job {body.jobId} already shortlisted"
+            ) from exc
+        raise
     return entry
 
 

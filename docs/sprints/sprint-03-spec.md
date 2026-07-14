@@ -72,6 +72,17 @@ Constraints/indexes: `UNIQUE(user_id, id)` anchor `uq_shortlist_user_id_id`; com
 
 Which sprint-02 patterns cover sprint-03's work: tenancy (RLS + get_tenant_session) = CLEAN-COPY from job; migration shape (ENABLE/FORCE RLS + raw op.execute) = CLEAN-COPY; per-convention migration tests = CLEAN-COPY; api/route tests = CLEAN-COPY; e2e journey extension = CLEAN-COPY; wire mapper = NEEDS-JUDGMENT (per-resource field list). NET-NEW (not covered by sprint-02, hence D2): the composite FK (user_id, job_id) -> parent, the partial dedup index + 409 mapping, the nullable-FK MATCH-SIMPLE behavior, the denormalized-snapshot child. Rubric score (representativeness of the job exemplar for child tables): 7/10 -- tenancy/migration/test scaffolding copies cleanly; the composite-FK + dedup + nullable-reference mechanics are genuinely new and are why D2 fires. This is the recorded artifact the queue's sprint-03->AUTONOMOUS promotion path requires (Wes-only queue edit; NOT self-advanced).
 
+## Panel + D2 dispositions (S6)
+
+- D2-1 / COR-1 (MED, sequential race test): fixed -- the sequential TestClient test is replaced by a deterministic two-connection race (A holds the key in an open txn; B under lock_timeout blocks and raises; A commits -> one row).
+- D2-2 (HIGH, FK backstop not tested under app_runtime): fixed -- test_composite_fk_is_the_backstop_under_app_runtime inserts a cross-tenant job_id under SET ROLE app_runtime + the caller's GUC (bypassing the route pre-check) and asserts the composite FK refuses it.
+- D2-4 (MED, jsonb-null + named-CHECK introspection): fixed -- test_named_checks_exist + a jsonb 'null' salary negative case.
+- QA-1 / COR-2 / SIM-1 (INFO/LOW/MED, catch-all IntegrityError -> 409 conflates FK vs dedup): fixed -- add_to_shortlist now 409s ONLY when the violated constraint is uq_shortlist_user_job (via _constraint_name); any other integrity violation (e.g. a TOCTOU composite-FK fire) re-raises, so sprint-04's children with deletable parents inherit correct error taxonomy, not a catch-all.
+- SIM-2 (LOW-MED, dead store.shortlist searchId fallback): fixed -- an unrecognized searchId now falls through to the DB default (the caller's real shortlist) instead of the write-dead mock snapshot; test_unrecognized_searchid_falls_to_db_default covers it.
+- QA-2 (INFO): the searchId param has no existence validation -- pre-existing mock-boundary behavior, subsumed by the SIM-2 fix (unrecognized -> DB default). No further action.
+- COR panel confirmed correct: composite FK + RLS complementary, salary CHECK airtight (jsonb 'null'/{}/missing-key all rejected), DEBT-6 index intact, manifest flip honest, tests discriminate.
+- Rubric revised to 6/10 (simplification seat): the mechanical scaffolding copies cleanly, but the 404-vs-409 disambiguation and the DB/mock split's "no-match fallback" are genuine residual judgment for sprint-04's children -- now made explicit here + fixed in the exemplar so the copy is safe.
+
 ## Packets (S4; inline, sequential)
 
 - P1: models.ShortlistEntry + migration (DDL above; copy the job exemplar's RLS/policy) + tests/migrations/test_shortlist_entry.py (AC-01a..d, AC-02, AC-02b). Commit boundary.
