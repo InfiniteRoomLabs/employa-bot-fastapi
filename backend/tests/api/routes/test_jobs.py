@@ -138,7 +138,7 @@ def test_cross_tenant_get_job_404_indistinguishable_from_unknown(
 
 
 @pytest.mark.usefixtures("clean_store")
-def test_create_application_mints_job_for_caller_only(
+def test_create_application_mints_db_only_job_for_caller(
     db: Session,
     db_client: TestClient,
     seed_domain: SeededUsers,
@@ -162,8 +162,11 @@ def test_create_application_mints_job_for_caller_only(
     assert row.user_id == seed_domain.test_user.id
     assert row.company == "Minted Co"
     assert row.schema_version == 1
-    # Dual-write (PIN-1): the store copy feeds the mock joins.
-    assert job_id in store.jobs
+    # Since sprint-04 3c the mint is DB-only: getApplication's mock-store
+    # fallback (DEBT-5) is gone, so a freshly created application never
+    # appears in the mock searchId pools -- the old store.jobs mirror fed
+    # nothing and was removed.
+    assert job_id not in store.jobs
 
 
 # -------------------------------------------------------------- provenance

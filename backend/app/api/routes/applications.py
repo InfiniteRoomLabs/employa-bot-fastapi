@@ -1,12 +1,12 @@
 """Applications resource -- the post-commit lifecycle (ADR-006 / D6..D19).
 
-Since sprint-04 3a, ``getApplications``/``getApplication``/``createApplication``
-are DB-backed (docs/sprints/sprint-04-spec.md PIN-6); every other op below
-(transitions/lifecycle/snapshot/timeline) STAYS on the MOCK ROUTE PATTERN in
-``routes/searches.py`` (read that file's header first) through 3b/3c: store
-access via ``app.store``, typed errors (never ``HTTPException``), no
-``TenantSession``. Wire mapping for the flipped ops lives in
-``app/application_mapper.py``.
+Since sprint-04 3c, ALL 20 flipped ops on this resource are DB-backed
+(docs/sprints/sprint-04-spec.md PIN-6); the DEBT-5 mock-store fallback seam
+in ``getApplication``/``getResumeSnapshot`` is gone. Wire mapping lives in
+``app/application_mapper.py``; the lifecycle ops (markWon/undoMarkWon/
+dismissApplication/reactivateApplication) and ``getApplicationTimeline``
+drive the ONE stage-mutation function via ``app.stage_flow`` exactly like
+``transitionApplication`` (3b).
 
 * ``getApplications``: RECOGNIZED mock search ids (``SEARCH_ID_BACKEND`` /
   ``SEARCH_ID_AI_INFRA``) keep serving their mock pool verbatim (sprint-03
@@ -17,19 +17,16 @@ access via ``app.store``, typed errors (never ``HTTPException``), no
   mock's old PLATFORM-fallback pool re-derives to the caller's real DB list,
   since PLATFORM was never a persisted entity -- serving the frozen mock
   snapshot post-flip would split one entity across two stores.
-* ``getApplication``: DB first (id + ``removed_at IS NULL`` -- a
-  terminal-outcome row IS still readable, matching the mock's archive
-  fallback read); a DB miss falls back to the mock store read
-  (``store.applications``/``store.archive``) so seeded mock fixtures (still
-  referenced by the still-mock lifecycle ops) keep serving. This mock
-  fallback is the pre-existing DEBT-5 seam, unchanged this checkpoint -- an
-  explicit 3a-internal layer that 3c removes once every op that can produce
-  or mutate an application is DB-backed.
-* ``createApplication``: keeps the sprint-02 Job mint + ``store.jobs`` + DB
-  job dual-write as-is, but the Application write is now a DB INSERT (no
-  longer ``store.applications``) -- so a freshly created application is
-  readable via ``getApplications``/``getApplication`` but NOT yet
-  transitionable via the still-mock lifecycle ops (3b's job).
+* ``getApplication``: DB only (id + ``removed_at IS NULL`` -- a
+  terminal-outcome row IS still readable, only the internal soft-remove
+  excludes it). A DB miss is a plain 404; the mock-store fallback (DEBT-5)
+  is gone as of 3c -- every op that can produce or mutate an application is
+  DB-backed now, so a store-only fixture id (never inserted) 404s here.
+* ``createApplication``: keeps the sprint-02 Job mint dual-write's DB half
+  (the created job persists as a real row), but no longer mirrors it into
+  ``store.jobs`` -- a freshly created application never appears in the mock
+  searchId pools, so that mint fed nothing after 3a. The Application write
+  is a DB INSERT (``store.applications`` untouched).
 
 ``transitionApplication`` is the core op. Its legal-move matrix
 (:data:`LEGAL_TRANSITIONS`) is DATA transcribed VERBATIM from the settled law
@@ -51,12 +48,13 @@ must equal ``Application.version`` -> 409 ``conflict``.
 
 from __future__ import annotations
 
-from datetime import timedelta
 from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 
 from fastapi import APIRouter, Body, Depends, Query
 from pydantic import BaseModel
 from sqlalchemy import and_
+from sqlalchemy import text as sa_text
+from sqlalchemy.exc import DBAPIError
 from sqlmodel import col, select
 
 from app import models, store
@@ -65,7 +63,6 @@ from app.api.errors import (
     ConflictError,
     InvalidTransitionError,
     NotFoundError,
-    UndoWindowExpiredError,
     ValidationTaggedError,
 )
 from app.application_mapper import (
@@ -74,6 +71,7 @@ from app.application_mapper import (
     row_to_wire_view,
     wire_application_to_row,
 )
+from app.core.config import settings
 from app.job_mapper import wire_job_to_row
 from app.schemas import (
     Actor,
@@ -107,8 +105,6 @@ from app.schemas import (
 from app.stage_flow import call_stage_transition
 
 router = APIRouter(dependencies=[Depends(get_current_user)], tags=["applications"])
-
-UNDO_WINDOW_SECONDS = 300
 
 # ---------------------------------------------------------------------------
 # Legal stage-transition matrix (state-machines.md#application-stages).
@@ -246,25 +242,20 @@ def get_applications(
 def get_application(
     id: UUID, session: TenantSession, current_user: CurrentUser
 ) -> ApplicationView:
-    """One application, joined view (getApplication, DB-backed).
+    """One application, joined view (getApplication, DB-only since 3c).
 
-    DB first (a terminal-outcome row IS still readable here -- only the
-    internal soft-remove excludes it). A DB miss falls back to the mock
-    store read (``store.applications``/``store.archive``, DEBT-5 -- an
-    explicit 3a-internal seam removed in 3c) so seeded mock fixtures still
-    referenced by the still-mock lifecycle ops keep serving. Unknown in
-    both -> 404.
+    A terminal-outcome row IS still readable here -- only the internal
+    soft-remove excludes it. DB miss -> 404 (the mock-store fallback,
+    DEBT-5, is gone as of 3c: every op that can produce or mutate an
+    application is DB-backed now).
     """
     row = session.exec(
         _joined_applications_query(current_user.id).where(models.Application.id == id)
     ).first()
-    if row is not None:
-        app_row, job_row, resume_row = row
-        return row_to_wire_view(app_row, job_row, resume_row)
-    app = store.applications.get(id) or store.archive.get(id)
-    if app is None:
+    if row is None:
         raise NotFoundError(f"applications/{id}")
-    return store.application_view(app)
+    app_row, job_row, resume_row = row
+    return row_to_wire_view(app_row, job_row, resume_row)
 
 
 def _ensure_default_search() -> UUID:
@@ -306,10 +297,12 @@ def create_application(
 ) -> ApplicationView:
     """Create an application (createApplication, ORI-014, DB-backed).
 
-    Normalized (ADR-006): mints a Job posting into ``store.jobs`` as a side
-    effect (mirrors the mock's dynamic-job mint, sprint-02 PIN-1's DB dual
-    write, unchanged here) plus a DB Application row at stage DRAFTING, and
-    returns the joined view. searchId is auto-assigned via
+    Normalized (ADR-006): a DB Job row (stage-2 dual write) plus a DB
+    Application row at stage DRAFTING, returning the joined view. Since 3c
+    the minted job is NOT mirrored into ``store.jobs`` -- a freshly created
+    application never appears in the mock searchId pools (those serve
+    fixture jobs only), so the mock mint fed nothing once getApplication's
+    DEBT-5 fallback was removed. searchId is auto-assigned via
     :func:`_ensure_default_search` when the client omits it (D15). A
     ``resumeId`` the caller does not own (cross-tenant or unknown) is a
     tenant-indistinguishable 404 -- the composite FK is the DB backstop. ONE
@@ -317,7 +310,7 @@ def create_application(
     from the in-memory rows BEFORE that commit (see get_tenant_session).
     """
     # Validate the resumeId (if any) BEFORE minting the job: a rejected
-    # request must not leave a job side-mutation in ``store.jobs``.
+    # request must not leave a job side-mutation in the DB.
     resume_row = None
     if body.resumeId is not None:
         resume_row = session.exec(
@@ -348,12 +341,9 @@ def create_application(
         posted=now,
         match=JobMatch(score=body.match, strengths=[], gaps=[]),
     )
-    store.jobs[job_id] = job
-    # Sprint-02 (PIN-1): manual capture persists the canonical job row. The
-    # store copy above stays for the mock joins used by the still-mock
-    # lifecycle ops; the DB row is what getJobs/getJob/this route's own view
-    # serve. Added now, committed once at the end (below) with everything
-    # else in this transaction.
+    # Sprint-02 (PIN-1): manual capture persists the canonical job row --
+    # what getJobs/getJob/this route's own view serve. Added now, committed
+    # once at the end (below) with everything else in this transaction.
     job_row = wire_job_to_row(job, user_id=current_user.id)
     session.add(job_row)
     # The composite fk_application_job FK is a raw-SQL constraint (DEBT-6):
@@ -495,16 +485,15 @@ def transition_application(
 def get_resume_snapshot(
     id: UUID, session: TenantSession, current_user: CurrentUser
 ) -> ResumeSnapshot:
-    """Immutable submitted-resume snapshot (getResumeSnapshot, D10, DB 3b).
+    """Immutable submitted-resume snapshot (getResumeSnapshot, D10, DB-only).
 
-    Mock parity: 404 on unknown id; 409 ``conflict`` before APPLIED. The
-    REAL snapshot row (written by the mutation function at the APPLIED
-    transition, PIN-2) takes precedence; a stage-past-drafting application
-    with no snapshot row (a runtime path that never legally crossed applied,
-    e.g. a future markWon straight from drafting) gets the mock's
-    deterministic read-only synthesis. Falls back to the mock store for
-    seeded fixtures (same 3a-internal DEBT-5 seam as getApplication,
-    removed in 3c).
+    404 on unknown id (the mock-store fallback, DEBT-5, is gone as of 3c);
+    409 ``conflict`` before APPLIED. The REAL snapshot row (written by the
+    mutation function at the APPLIED transition, PIN-2) takes precedence; a
+    stage-past-drafting application with no snapshot row is a seed/test-
+    fixture bug (PIN-15 -- every seeded past-drafting row owns a real
+    snapshot) and gets the mock's deterministic read-only synthesis rather
+    than a 500, but is not expected in steady-state runtime data.
     """
     app_row = session.exec(
         select(models.Application)
@@ -512,64 +501,40 @@ def get_resume_snapshot(
         .where(models.Application.user_id == current_user.id)
         .where(col(models.Application.removed_at).is_(None))
     ).first()
-    if app_row is not None:
-        if app_row.stage in (Stage.saved.value, Stage.drafting.value):
-            raise ConflictError(
-                f"applications/{id}/snapshot: no submitted copy exists until "
-                "the application reaches APPLIED."
-            )
-        snap_row = session.exec(
-            select(models.ResumeSnapshot)
-            .where(models.ResumeSnapshot.application_id == id)
-            .where(models.ResumeSnapshot.user_id == current_user.id)
-        ).first()
-        if snap_row is not None:
-            return row_to_wire_snapshot(snap_row)
-        resume_row = (
-            session.exec(
-                select(models.Resume)
-                .where(models.Resume.id == app_row.resume_id)
-                .where(models.Resume.user_id == current_user.id)
-            ).first()
-            if app_row.resume_id
-            else None
-        )
-        resume_id = app_row.resume_id or uuid5(NAMESPACE_URL, "mock:no-resume")
-        return ResumeSnapshot(
-            id=uuid5(NAMESPACE_URL, f"mock:snapshot:{id}"),
-            applicationId=id,
-            resumeId=resume_id,
-            name=resume_row.name if resume_row else "Submitted resume",
-            body=resume_row.body
-            if resume_row and resume_row.body
-            else "Submitted resume content -- locked at APPLIED.",
-            templateVersion="v1",
-            capturedAt=app_row.created_at,
-        )
-
-    app = store.applications.get(id) or store.archive.get(id)
-    if app is None:
+    if app_row is None:
         raise NotFoundError(f"applications/{id}/snapshot")
-    if app.stage in (Stage.saved, Stage.drafting):
+    if app_row.stage in (Stage.saved.value, Stage.drafting.value):
         raise ConflictError(
             f"applications/{id}/snapshot: no submitted copy exists until "
             "the application reaches APPLIED."
         )
-    captured = store.resume_snapshots.get(id)
-    if captured is not None:
-        return captured
-    resume = store.resumes.get(app.resumeId) if app.resumeId else None
-    fallback_resume_id = app.resumeId or uuid5(NAMESPACE_URL, "mock:no-resume")
+    snap_row = session.exec(
+        select(models.ResumeSnapshot)
+        .where(models.ResumeSnapshot.application_id == id)
+        .where(models.ResumeSnapshot.user_id == current_user.id)
+    ).first()
+    if snap_row is not None:
+        return row_to_wire_snapshot(snap_row)
+    resume_row = (
+        session.exec(
+            select(models.Resume)
+            .where(models.Resume.id == app_row.resume_id)
+            .where(models.Resume.user_id == current_user.id)
+        ).first()
+        if app_row.resume_id
+        else None
+    )
+    resume_id = app_row.resume_id or uuid5(NAMESPACE_URL, "mock:no-resume")
     return ResumeSnapshot(
         id=uuid5(NAMESPACE_URL, f"mock:snapshot:{id}"),
         applicationId=id,
-        resumeId=fallback_resume_id,
-        name=resume.name if resume else "Submitted resume",
-        body=resume.body
-        if resume and resume.body
+        resumeId=resume_id,
+        name=resume_row.name if resume_row else "Submitted resume",
+        body=resume_row.body
+        if resume_row and resume_row.body
         else "Submitted resume content -- locked at APPLIED.",
         templateVersion="v1",
-        capturedAt=app.createdAt,
+        capturedAt=app_row.created_at,
     )
 
 
@@ -583,35 +548,62 @@ def get_resume_snapshot(
     operation_id="markWon",
     response_model=MarkWonResult,
 )
-def mark_won(id: UUID, body: MarkWonInput | None = Body(default=None)) -> MarkWonResult:
-    """Mark an application WON, archive it, return a 300s undo grant (markWon).
+def mark_won(
+    id: UUID,
+    session: TenantSession,
+    current_user: CurrentUser,
+    body: MarkWonInput | None = Body(default=None),
+) -> MarkWonResult:
+    """Mark an application WON via the mutation function, mint a time-boxed
+    undo grant (markWon, D18, DB-backed since 3c).
 
-    Records the outcome, moves the app from the active pool to the archive, and
-    stores a time-boxed undo grant keyed by token (reversible via undoMarkWon).
+    Mock parity: an application whose outcome is already set (archived) is a
+    404 here, mirroring the mock's active-pool-only ``store.applications``
+    lookup (markWon never looked in the archive). Any ACTIVE stage is a
+    legal source -- the mock had no stage validation on markWon -- so
+    ``allowed_from=[the pre-read stage]`` keeps the guard race-safe without
+    re-deriving the whole legal matrix. The undo window comes from
+    ``Settings.UNDO_WINDOW_SECONDS`` (closes DEBT-3, W-1 convention).
     """
-    app = store.applications.get(id)
-    if app is None:
+    app_row = session.exec(
+        select(models.Application)
+        .where(models.Application.id == id)
+        .where(models.Application.user_id == current_user.id)
+        .where(col(models.Application.removed_at).is_(None))
+        .where(col(models.Application.outcome).is_(None))
+    ).first()
+    if app_row is None:
         raise NotFoundError(f"applications/{id}/mark-won")
-    now = store.now()
-    won = app.model_copy(
-        update={
-            "stage": Stage.won,
-            "outcome": Outcome.won,
-            "outcomeAt": now,
-            "outcomeReason": body.whatWorked if body else None,
-        }
+    current_stage = app_row.stage
+
+    result = call_stage_transition(
+        session,
+        app_id=id,
+        target=Stage.won.value,
+        allowed_from=[current_stage],
+        expected_version=None,
+        source=TransitionSource.user.value,
+        outcome=Outcome.won.value,
+        outcome_reason=body.whatWorked if body else None,
+        mint_undo_grant=True,
+        undo_window_seconds=settings.UNDO_WINDOW_SECONDS,
+        error_paths={"EMP04": f"applications/{id}/mark-won"},
     )
-    del store.applications[id]
-    store.archive[id] = won
-    token = uuid4()
-    expires_at = now + timedelta(seconds=UNDO_WINDOW_SECONDS)
-    store.undo_grants[token] = store.UndoGrant(application=app, expires_at=expires_at)
-    return MarkWonResult(
-        application=store.application_view(won),
-        undoToken=token,
-        undoExpiresAt=expires_at,
-        undoWindowSeconds=UNDO_WINDOW_SECONDS,
+    # The function wrote behind the ORM's back; drop stale identity-map state
+    # before the re-read, and build the ENTIRE wire response before commit
+    # (SET LOCAL role/GUC die at commit -- see get_tenant_session).
+    session.expire_all()
+    view_row = session.exec(
+        _joined_applications_query(current_user.id).where(models.Application.id == id)
+    ).one()
+    response = MarkWonResult(
+        application=row_to_wire_view(*view_row),
+        undoToken=UUID(result["grant_id"]),
+        undoExpiresAt=result["grant_expires_at"],
+        undoWindowSeconds=settings.UNDO_WINDOW_SECONDS,
     )
+    session.commit()
+    return response
 
 
 @router.post(
@@ -619,25 +611,47 @@ def mark_won(id: UUID, body: MarkWonInput | None = Body(default=None)) -> MarkWo
     operation_id="undoMarkWon",
     response_model=ApplicationView,
 )
-def undo_mark_won(id: UUID, body: UndoMarkWonBody) -> ApplicationView:
-    """Reverse a mark-won within the grace window (undoMarkWon, D18).
+def undo_mark_won(
+    id: UUID, body: UndoMarkWonBody, session: TenantSession, current_user: CurrentUser
+) -> ApplicationView:
+    """Reverse a mark-won within the grace window via a compensating
+    transition (undoMarkWon, D18, PIN-3, DB-backed since 3c).
 
-    Unknown token (or one not belonging to this application) -> 404; an expired
-    window -> 409 ``undo_window_expired``. On success the original pre-win
-    application is restored to the active pool.
+    No pre-read beyond the function itself -- it owns the atomic grant claim
+    (PIN-4). ``target='won'``/``allowed_from=['won']`` are the parameters
+    the ONE mutation function requires; the function OVERWRITES its internal
+    target with the claimed grant's corrected transition's ``from_stage``
+    (migration 7a2c91d40e88) before the guarded UPDATE runs, so the REAL
+    compensating stage is derived server-side from the grant, never here.
+    Passing ``allowed_from=['won']`` still does real work: it validates the
+    application is CURRENTLY in ``won`` (the stage markWon left it in) under
+    the same row lock the grant claim serializes against. Unknown token (or
+    one belonging to another application) -> 404; an expired/already-
+    consumed grant -> 409 ``undo_window_expired`` (the function
+    distinguishes via EMP04 vs EMP4A). The corrected (``won``) transition
+    row is never touched -- history stays intact (PIN-3, AC-06a).
     """
-    grant = store.undo_grants.get(body.undoToken)
-    if grant is None or grant.application.id != id:
-        raise NotFoundError(f"applications/{id}/undo-mark-won")
-    if store.now() > grant.expires_at:
-        del store.undo_grants[body.undoToken]
-        raise UndoWindowExpiredError(
-            f"applications/{id}/undo-mark-won: the undo window has expired."
-        )
-    store.archive.pop(grant.application.id, None)
-    store.applications[grant.application.id] = grant.application
-    del store.undo_grants[body.undoToken]
-    return store.application_view(grant.application)
+    call_stage_transition(
+        session,
+        app_id=id,
+        target=Stage.won.value,
+        allowed_from=[Stage.won.value],
+        expected_version=None,
+        source=TransitionSource.user_correction.value,
+        clear_outcome=True,
+        consume_grant=body.undoToken,
+        error_paths={
+            "EMP04": f"applications/{id}/undo-mark-won",
+            "EMP4A": f"applications/{id}/undo-mark-won",
+        },
+    )
+    session.expire_all()
+    view_row = session.exec(
+        _joined_applications_query(current_user.id).where(models.Application.id == id)
+    ).one()
+    response = row_to_wire_view(*view_row)
+    session.commit()
+    return response
 
 
 # ---------------------------------------------------------------------------
@@ -650,29 +664,49 @@ def undo_mark_won(id: UUID, body: UndoMarkWonBody) -> ApplicationView:
     operation_id="reactivateApplication",
     response_model=ApplicationView,
 )
-def reactivate_application(id: UUID) -> ApplicationView:
-    """Reactivate a closed/archived application (reactivateApplication, D19).
+def reactivate_application(
+    id: UUID, session: TenantSession, current_user: CurrentUser
+) -> ApplicationView:
+    """Reactivate a closed/archived application via the mutation function
+    (reactivateApplication, D19, DB-backed since 3c).
 
-    Clears the terminal outcome and re-enters the pipeline at APPLIED with
-    ``resurrected=true``. 404 if the id is not in the archive.
+    Pre-read requires a row WITH a terminal outcome set (the DB mirror of
+    the mock's archive-only lookup); a non-archived (or unknown) id is a
+    404, mock parity. Clears the outcome and re-enters at APPLIED with
+    ``resurrected=true``, ``source=user_reactivation``; the function's
+    applied-branch SKIPS a fresh snapshot when ``p_set_resurrected`` is set
+    (spec: reactivation re-enters applied WITHOUT a new snapshot -- it
+    already owns one from its original applied transition, PIN-15).
     """
-    archived = store.archive.get(id)
-    if archived is None:
+    app_row = session.exec(
+        select(models.Application)
+        .where(models.Application.id == id)
+        .where(models.Application.user_id == current_user.id)
+        .where(col(models.Application.removed_at).is_(None))
+        .where(col(models.Application.outcome).is_not(None))
+    ).first()
+    if app_row is None:
         raise NotFoundError(f"applications/{id}/reactivate")
-    revived = archived.model_copy(
-        update={
-            "stage": Stage.applied,
-            "outcome": None,
-            "outcomeAt": None,
-            "outcomeReason": None,
-            "outcomeReasons": None,
-            "resurrected": True,
-            "version": archived.version + 1,
-        }
+    current_stage = app_row.stage
+
+    call_stage_transition(
+        session,
+        app_id=id,
+        target=Stage.applied.value,
+        allowed_from=[current_stage],
+        expected_version=None,
+        source=TransitionSource.user_reactivation.value,
+        clear_outcome=True,
+        set_resurrected=True,
+        error_paths={"EMP04": f"applications/{id}/reactivate"},
     )
-    del store.archive[id]
-    store.applications[id] = revived
-    return store.application_view(revived)
+    session.expire_all()
+    view_row = session.exec(
+        _joined_applications_query(current_user.id).where(models.Application.id == id)
+    ).one()
+    response = row_to_wire_view(*view_row)
+    session.commit()
+    return response
 
 
 # ---------------------------------------------------------------------------
@@ -686,33 +720,62 @@ def reactivate_application(id: UUID) -> ApplicationView:
     response_model=DismissResult,
 )
 def dismiss_application(
-    id: UUID, body: DismissBody | None = Body(default=None)
+    id: UUID,
+    session: TenantSession,
+    current_user: CurrentUser,
+    body: DismissBody | None = Body(default=None),
 ) -> DismissResult:
-    """Dismiss an application (dismissApplication, D12 dual-mode).
+    """Dismiss an application (dismissApplication, D12 dual-mode, PIN-14,
+    DB-backed since 3c).
 
-    Pre-commit (SAVED/DRAFTING): hard-removed, ``outcome=removed``. Post-APPLIED
-    (any later stage): maps to WITHDREW with reason chips and archives,
-    ``outcome=withdrew`` -- a committed application is never silently deleted.
+    Pre-commit (SAVED/DRAFTING): soft-removed via the tiny
+    ``application_soft_remove`` SECURITY DEFINER helper -- app_runtime has no
+    UPDATE on this table at all, so even the internal ``removed_at`` marker
+    needs a definer function (PIN-14: no application row is ever hard-deleted
+    at runtime; append-only children make that impossible by design).
+    Post-APPLIED (any later stage): the ONE mutation function transitions to
+    WITHDREW with ``outcome=withdrawn`` and the D16 reason chips, mock
+    parity. PIN-12 (deviation from the mock, recorded): BOTH branches now
+    bump ``version``/append a ``stage_transition`` row where the mock
+    silently did neither.
     """
-    app = store.applications.get(id)
-    if app is None:
+    app_row = session.exec(
+        select(models.Application)
+        .where(models.Application.id == id)
+        .where(models.Application.user_id == current_user.id)
+        .where(col(models.Application.removed_at).is_(None))
+    ).first()
+    if app_row is None:
         raise NotFoundError(f"applications/{id}/dismiss")
-    if app.stage in (Stage.saved, Stage.drafting):
-        del store.applications[id]
+
+    if app_row.stage in (Stage.saved.value, Stage.drafting.value):
+        try:
+            session.connection().execute(
+                sa_text("SELECT application_soft_remove(:app_id)"), {"app_id": id}
+            )
+        except DBAPIError as exc:
+            session.rollback()
+            sqlstate = getattr(exc.orig, "sqlstate", None) or ""
+            if sqlstate == "EMP04":
+                raise NotFoundError(f"applications/{id}/dismiss") from exc
+            raise
+        session.commit()
         return DismissResult(outcome=Outcome1.removed)
+
     reasons = body.reasons if body else None
-    now = store.now()
-    withdrawn = app.model_copy(
-        update={
-            "stage": Stage.withdrew,
-            "outcome": Outcome.withdrawn,
-            "outcomeAt": now,
-            "outcomeReasons": reasons,
-            "outcomeReason": reasons[0] if reasons else None,
-        }
+    call_stage_transition(
+        session,
+        app_id=id,
+        target=Stage.withdrew.value,
+        allowed_from=[app_row.stage],
+        expected_version=None,
+        source=TransitionSource.user.value,
+        outcome=Outcome.withdrawn.value,
+        outcome_reasons=reasons,
+        outcome_reason=reasons[0] if reasons else None,
+        error_paths={"EMP04": f"applications/{id}/dismiss"},
     )
-    del store.applications[id]
-    store.archive[id] = withdrawn
+    session.commit()
     return DismissResult(outcome=Outcome1.withdrew)
 
 
@@ -726,24 +789,48 @@ def dismiss_application(
     operation_id="getApplicationTimeline",
     response_model=list[TimelineEvent],
 )
-def get_application_timeline(id: UUID) -> list[TimelineEvent]:
-    """Append-only audit timeline (getApplicationTimeline, TRK-118).
+def get_application_timeline(
+    id: UUID, session: TenantSession, current_user: CurrentUser
+) -> list[TimelineEvent]:
+    """Append-only audit timeline, DERIVED from ``stage_transition`` -- no
+    fifth timeline table (getApplicationTimeline, TRK-118, PIN-13, DB-backed
+    since 3c).
 
-    Returns the seeded fixture timeline (plus any events appended by
-    transitions); falls back to a single synthetic "Applied via <source>"
-    event when an application has no seeded timeline. 404 on unknown id.
+    A terminal-outcome row IS still readable (only the internal soft-remove
+    excludes it, mirroring getApplication). Each transition row (ordered by
+    ``seq``) becomes one event (``message = f"Moved to {toStage}"``); an
+    application with ZERO transitions yet (still DRAFTING, never
+    transitioned) gets the single mock-parity synthetic "Applied via
+    <source>" event instead. 404 on unknown id.
     """
-    events = store.timelines.get(id)
-    if events is not None:
-        return events
-    app = store.applications.get(id) or store.archive.get(id)
-    if app is None:
+    view_row = session.exec(
+        _joined_applications_query(current_user.id).where(models.Application.id == id)
+    ).first()
+    if view_row is None:
         raise NotFoundError(f"applications/{id}")
-    view = store.application_view(app)
+    app_row, job_row, resume_row = view_row
+    transitions = session.exec(
+        select(models.StageTransition)
+        .where(models.StageTransition.application_id == id)
+        .where(models.StageTransition.user_id == current_user.id)
+        .order_by(col(models.StageTransition.seq))
+    ).all()
+    if transitions:
+        return [
+            TimelineEvent(
+                id=tr.id,
+                time=tr.created_at,
+                who="You",
+                message=f"Moved to {tr.to_stage}",
+                actor=Actor.you,
+            )
+            for tr in transitions
+        ]
+    view = row_to_wire_view(app_row, job_row, resume_row)
     return [
         TimelineEvent(
             id=uuid5(NAMESPACE_URL, f"mock:timeline-synth:{id}"),
-            time=app.createdAt,
+            time=app_row.created_at,
             who="You",
             message=f"Applied via {view.source}",
             actor=Actor.you,

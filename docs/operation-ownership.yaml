@@ -149,36 +149,49 @@ operations:
     tests: [contract-fidelity, ownership-404, transition-matrix]
 
   getApplicationTimeline:
+    # sprint-04 3c: DB-backed, derived from stage_transition (PIN-13, no
+    # fifth timeline table); mock-parity synthetic fallback for a
+    # zero-transition application.
     slice: 2
-    status: planned
+    status: implemented
     ai: false
     consumer: getApplicationTimeline / application timeline tab (TRK-118)
     tests: [contract-fidelity, ownership-404]
 
   dismissApplication:
+    # sprint-04 3c: DB-backed dual-mode -- pre-commit soft-remove via
+    # application_soft_remove (PIN-14); post-APPLIED via the ONE mutation
+    # function (target=withdrew).
     slice: 2
-    status: planned
+    status: implemented
     ai: false
     consumer: dismissApplication / application dismiss action (D12)
     tests: [contract-fidelity, ownership-404]
 
   markWon:
+    # sprint-04 3c: DB-backed via the ONE mutation function + persistent
+    # undo_grant mint (PIN-4); window from Settings.UNDO_WINDOW_SECONDS.
     slice: 2
-    status: planned
+    status: implemented
     ai: false
     consumer: markWon / application mark-won action (D18)
     tests: [contract-fidelity, ownership-404]
 
   undoMarkWon:
+    # sprint-04 3c: DB-backed atomic grant claim + compensating transition
+    # (PIN-3/PIN-4); history stays intact, never a delete.
     slice: 2
-    status: planned
+    status: implemented
     ai: false
     consumer: undoMarkWon / mark-won undo toast (D18)
     tests: [contract-fidelity, ownership-404, undo-window-expired]
 
   reactivateApplication:
+    # sprint-04 3c: DB-backed via the ONE mutation function, source=
+    # user_reactivation, no fresh snapshot (re-enters an already-snapshotted
+    # applied stage).
     slice: 2
-    status: planned
+    status: implemented
     ai: false
     consumer: reactivateApplication / archive reactivate action (D19)
     tests: [contract-fidelity, ownership-404]
