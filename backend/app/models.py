@@ -156,7 +156,13 @@ class Job(SQLModel, table=True):
     )
 
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
-    user_id: uuid.UUID = Field(foreign_key="user.id", nullable=False, index=True)
+    # ondelete CASCADE: a tenant's rows die with the tenant. This is the
+    # convention for every tenant-child FK (sprint-02 spec SIM-2) -- it keeps
+    # user teardown a single DELETE instead of an ordered manual chain that
+    # grows with each child table.
+    user_id: uuid.UUID = Field(
+        foreign_key="user.id", ondelete="CASCADE", nullable=False, index=True
+    )
     company: str
     title: str
     location: dict[str, Any] = Field(sa_type=JSONB)

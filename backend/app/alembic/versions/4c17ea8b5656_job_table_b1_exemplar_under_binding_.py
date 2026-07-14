@@ -69,7 +69,7 @@ def upgrade():
     sa.CheckConstraint("work_mode IN ('remote', 'hybrid', 'onsite')", name='ck_job_work_mode'),
     sa.CheckConstraint('"match" IS NULL OR (jsonb_typeof("match") = \'object\' AND jsonb_typeof("match"->\'score\') = \'number\') IS TRUE', name='ck_job_match_shape'),
     sa.CheckConstraint('schema_version >= 1', name='ck_job_schema_version'),
-    sa.ForeignKeyConstraint(['user_id'], ['user.id'], ),
+    sa.ForeignKeyConstraint(['user_id'], ['user.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('user_id', 'id', name='uq_job_user_id_id')
     )

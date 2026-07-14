@@ -10,12 +10,12 @@ outer transaction blocks the script's INSERT). Cleanup is explicit instead.
 from collections.abc import Generator
 
 import pytest
-from sqlmodel import Session, col, delete, select
+from sqlmodel import Session, delete, select
 
 from app.core.config import settings
 from app.core.db import engine
 from app.core.security import verify_password
-from app.models import Job, User
+from app.models import User
 from app.scripts.seed import (
     DEMO_CITY,
     DEMO_COMP_FLOOR,
@@ -35,8 +35,8 @@ def _delete_demo_user() -> None:
             select(User).where(User.email == settings.SEED_DEMO_EMAIL)
         ).first()
         if demo is not None:
-            # Jobs reference the user (sprint-02); clear them first.
-            session.execute(delete(Job).where(col(Job.user_id) == demo.id))
+            # job.user_id is ON DELETE CASCADE (SIM-2) -- deleting the user
+            # takes its jobs with it.
             session.delete(demo)
         session.commit()
 

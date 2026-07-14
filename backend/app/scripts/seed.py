@@ -81,15 +81,14 @@ def seed_demo_jobs(session: Session, user: User) -> int:
 def seed_demo_user(session: Session, *, reset: bool = False) -> User:
     """Create or refresh the demo user. Idempotent: always leaves exactly one.
 
-    With ``reset=True``, the existing row (and every job it owns) is deleted
-    first.
+    With ``reset=True``, the existing row is deleted first; its jobs go with
+    it via the ``ON DELETE CASCADE`` on ``job.user_id`` (SIM-2).
     """
     existing = session.exec(
         select(User).where(User.email == settings.SEED_DEMO_EMAIL)
     ).first()
 
     if reset and existing is not None:
-        session.connection().execute(delete(Job).where(col(Job.user_id) == existing.id))
         session.delete(existing)
         session.commit()
         existing = None

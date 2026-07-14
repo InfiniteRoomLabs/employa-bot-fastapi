@@ -103,8 +103,10 @@ export default function JobsScreen() {
   // canonical captured collection (DB-backed getJobs); a search-scoped view
   // keeps the mock inbox feed. Both hooks run unconditionally (rules of
   // hooks); the unused one is ignored.
-  const inbox = useJobsInbox(searchId)
-  const captured = useJobs()
+  // Only the active source fetches (SIM-1): the default /jobs view lists the
+  // DB collection, a search-scoped view lists the mock inbox feed.
+  const inbox = useJobsInbox(searchId, Boolean(searchId))
+  const captured = useJobs(!searchId)
   // Memoized: a fresh .map() array every render would re-fire the rows
   // effect below forever.
   const data = React.useMemo(
