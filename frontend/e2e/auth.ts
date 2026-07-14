@@ -14,16 +14,23 @@ export function envVal(key: string, fallback?: string): string {
   if (fromProcess) {
     return fromProcess
   }
-  const specDir = dirname(fileURLToPath(import.meta.url))
-  const env = readFileSync(resolve(specDir, "../../.env"), "utf-8")
-  const line = env.split("\n").find((l) => l.startsWith(`${key}=`))
-  if (!line) {
-    if (fallback !== undefined) {
-      return fallback
+  // The repo-root .env is gitignored and NOT present in the CI Playwright
+  // container, so the read must not throw before the fallback is honored:
+  // a provided fallback has to survive an absent file, not just an absent key.
+  try {
+    const specDir = dirname(fileURLToPath(import.meta.url))
+    const env = readFileSync(resolve(specDir, "../../.env"), "utf-8")
+    const line = env.split("\n").find((l) => l.startsWith(`${key}=`))
+    if (line) {
+      return line.slice(key.length + 1).trim()
     }
-    throw new Error(`${key} not set and not found in ../.env`)
+  } catch {
+    // no .env on disk (CI container) -- fall through to the fallback
   }
-  return line.slice(key.length + 1).trim()
+  if (fallback !== undefined) {
+    return fallback
+  }
+  throw new Error(`${key} not set, not in process.env, and no fallback given`)
 }
 
 export async function fetchAccessToken(): Promise<string> {

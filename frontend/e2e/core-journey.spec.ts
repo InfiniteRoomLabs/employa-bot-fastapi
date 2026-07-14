@@ -36,12 +36,17 @@ async function gotoJobsAndWaitForApi(page: Page): Promise<void> {
 test("login -> create job -> job lists, persists across reload", async ({
   page,
 }) => {
-  // --- Login through the real form (no token injection). ------------------
+  // --- Login through the real form (no token injection). The DEMO user
+  // (same tenant the smoke suite authenticates as, owns the seeded jobs);
+  // creds carry fallbacks so the run never depends on a repo-root .env that
+  // the CI Playwright container does not have. ----------------------------
   await page.goto("/login")
-  await page.locator('input[type="email"]').fill(envVal("FIRST_SUPERUSER"))
+  await page
+    .locator('input[type="email"]')
+    .fill(envVal("SEED_DEMO_EMAIL", "wes.gilleland@gmail.com"))
   await page
     .locator('input[type="password"]')
-    .fill(envVal("FIRST_SUPERUSER_PASSWORD"))
+    .fill(envVal("SEED_DEMO_PASSWORD", "employa-demo-1"))
   await page.getByRole("button", { name: /log in/i }).click()
   await page.waitForURL("**/dashboard")
 
