@@ -3,7 +3,8 @@
 Run as ``python -m app.scripts.seed [--reset] [--force]``. Seeds exactly one
 demo user carrying the REMY persona profile (ported verbatim from
 ``app/store.py``'s ``_seed_current_user`` -- see that module for provenance),
-plus the seven demo job postings under that user (sprint-02): same fixed
+plus the seven demo job postings (sprint-02) and the demo shortlist entries
+(sprint-03) under that user: same fixed
 UUIDs as ``store.jobs`` so mock inbox links resolve against the DB-backed
 ``getJob``. Job seeding REPLACES rows with those fixed ids (demo fixtures are
 owned by the seed); other jobs -- including ones a demo user captured through
@@ -26,7 +27,8 @@ from app.core.config import settings
 from app.core.db import engine
 from app.core.security import get_password_hash
 from app.job_mapper import wire_job_to_row
-from app.models import Job, User, UserCreate
+from app.models import Job, ShortlistEntry, User, UserCreate
+from app.shortlist_mapper import wire_shortlist_to_row
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -74,6 +76,23 @@ def seed_demo_jobs(session: Session, user: User) -> int:
     session.connection().execute(delete(Job).where(col(Job.id).in_(list(seeds))))
     for wire_job in seeds.values():
         session.add(wire_job_to_row(wire_job, user_id=user.id))
+    session.commit()
+    return len(seeds)
+
+
+def seed_demo_shortlist(session: Session, user: User) -> int:
+    """Persist the demo shortlist entries under ``user`` (idempotent, replacing).
+
+    MUST run after ``seed_demo_jobs``: entries with a ``jobId`` composite-FK
+    the demo user's job rows (entries without a jobId are display-only). Keyed
+    by the fixed entry ids so a re-seed replaces cleanly.
+    """
+    seeds = store.demo_shortlist_seeds()
+    session.connection().execute(
+        delete(ShortlistEntry).where(col(ShortlistEntry.id).in_([e.id for e in seeds]))
+    )
+    for entry in seeds:
+        session.add(wire_shortlist_to_row(entry, user_id=user.id))
     session.commit()
     return len(seeds)
 
@@ -151,7 +170,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     with Session(engine) as session:
         user = seed_demo_user(session, reset=args.reset)
         job_count = seed_demo_jobs(session, user)
-    logger.info("Demo user seeded (with %d demo jobs)", job_count)
+        shortlist_count = seed_demo_shortlist(session, user)
+    logger.info(
+        "Demo user seeded (with %d demo jobs, %d shortlist entries)",
+        job_count,
+        shortlist_count,
+    )
     return 0
 
 

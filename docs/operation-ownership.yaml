@@ -90,22 +90,24 @@ operations:
     tests: [contract-fidelity, ownership-404]
 
   getShortlist:
+    # Default view DB-backed (sprint-03); searchId-scoped stays mock (PIN-3,
+    # searches mock through Release 0.1). Split noted; see routes/shortlist.py.
     slice: 2
-    status: planned
+    status: implemented
     ai: false
-    consumer: useShortlist / shortlist screen
+    consumer: useShortlist / shortlist screen (default view)
     tests: [contract-fidelity]
 
   addToShortlist:
     slice: 2
-    status: planned
+    status: implemented  # sprint-03: DB-backed; duplicate (user_id,job_id) -> 409
     ai: false
     consumer: addToShortlist / shortlist add action (ORI-014)
     tests: [contract-fidelity]
 
   dismissFromShortlist:
     slice: 2
-    status: planned
+    status: implemented  # sprint-03: DB-backed; cross-tenant/unknown -> 404
     ai: false
     consumer: dismissFromShortlist / shortlist dismiss action
     tests: [contract-fidelity, ownership-404]

@@ -150,6 +150,9 @@ export default function JobsScreen() {
   async function handleAddToShortlist(row: InboxRow) {
     try {
       await addToShortlist({
+        // Thread the DB job id so the shortlist entry composite-FKs the job
+        // (sprint-03 PIN-5); the default /jobs view carries it via jobToInboxItem.
+        jobId: row.job.jobId,
         company: row.job.company,
         role: row.job.role,
         location: row.job.location,

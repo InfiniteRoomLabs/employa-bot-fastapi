@@ -203,6 +203,71 @@ class Job(SQLModel, table=True):
     )
 
 
+class ShortlistEntry(SQLModel, table=True):
+    """A saved (shortlisted) job -- the FIRST child table that composite-FKs a
+    parent (``job``). The exemplar sprint-04's children copy
+    (docs/sprints/sprint-03-spec.md).
+
+    Copies the job exemplar's tenancy (PR-1..PR-4): tenant ``user_id`` with a
+    composite ``UNIQUE(user_id, id)`` anchor + ``ON DELETE CASCADE``, FORCE
+    row-level security (policy in the migration), ``timestamptz``, named
+    ``(...) IS TRUE``-wrapped JSONB CHECKs, ``schema_version``.
+
+    NET-NEW here (PIN-1/PIN-2): ``job_id`` is NULLABLE (the wire ``jobId`` is
+    optional) with a composite FK ``(user_id, job_id) -> job(user_id, id)``
+    (MATCH SIMPLE: enforced only when ``job_id`` is non-null, so a cross-tenant
+    job_id fails at the DB) and a PARTIAL dedup index
+    ``UNIQUE(user_id, job_id) WHERE job_id IS NOT NULL``. Display fields are a
+    client-supplied snapshot at save (PIN-4). The composite FK, partial index,
+    and RLS live only in the migration (raw ``op.execute``), not here -- DEBT-6.
+    """
+
+    __tablename__ = "shortlist_entry"
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "id", name="uq_shortlist_user_id_id"),
+        CheckConstraint(
+            "salary IS NULL OR ("
+            "jsonb_typeof(salary) = 'object'"
+            " AND jsonb_typeof(salary->'extra') = 'array'"
+            " AND (jsonb_typeof(salary->'value') = 'number'"
+            "      OR (jsonb_typeof(salary->'min') = 'number'"
+            "          AND jsonb_typeof(salary->'max') = 'number'))"
+            ") IS TRUE",
+            name="ck_shortlist_salary_shape",
+        ),
+        CheckConstraint("source IN ('you')", name="ck_shortlist_source"),
+        CheckConstraint("schema_version >= 1", name="ck_shortlist_schema_version"),
+    )
+
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    user_id: uuid.UUID = Field(
+        foreign_key="user.id", ondelete="CASCADE", nullable=False, index=True
+    )
+    # Nullable (wire jobId is optional). The composite FK to job(user_id, id)
+    # + partial dedup index are added in the migration, not here.
+    job_id: uuid.UUID | None = Field(default=None)
+    company: str
+    role: str
+    location: str
+    salary: dict[str, Any] | None = Field(
+        default=None,
+        sa_type=JSONB(none_as_null=True),  # type: ignore
+    )
+    match: int
+    saved: datetime = Field(
+        default_factory=get_datetime_utc,
+        sa_type=DateTime(timezone=True),  # type: ignore
+        sa_column_kwargs={"server_default": sa_text("now()")},
+    )
+    source: str = Field(default="you")
+    why: str | None = None
+    stale: bool | None = None
+    schema_version: int = Field(
+        default=1, nullable=False, sa_column_kwargs={"server_default": "1"}
+    )
+
+
 # Properties to return via API, id is always required
 class UserPublic(UserBase):
     id: uuid.UUID

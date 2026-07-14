@@ -26,6 +26,23 @@ PLAN (v3) says what we are building; this file says where we are. Update at ever
 
 ## Run manifests
 
+### sprint-03-run-1 (guard on 2026-07-13)
+
+- run_id: sprint-03-run-1
+- GOAL.md commit SHA as invoked: this guard-on commit (branch sprint-03-shortlist); repo HEAD at invocation 5a0b1bd (master, sprint-02 shipped)
+- approved-queue.md commit SHA: 9d3a784dc830ae3bf2653d7b6a7c5eb2f9670d27 (Wes-authored, queue_revision 1, unchanged)
+- S0 record: Wes invoked `/goal Complete the snapshotted current run in @GOAL.md` against the sprint-03 ADVISORY block = the go decision. Retro proposals PR-1..PR-4 ratified at default (adopt) into GOAL.md Proven patterns (this commit). Queue copy diffed vs approved-queue.md rev 1 at invocation: identical. Entry criteria met: sprint-02 shipped (merge b942a1f, master CI green at 07dd4bf), the job exemplar exists. Preflight: tree clean (only pre-existing .idea/*.iml).
+- Codex D1 fired pre-guard (MUST: fresh block), thread 019f5eaa-1626-7d02-b0f6-9b9d494efb77, verdict UNSOUND, 11 findings -> dispositions in docs/sprints/sprint-03-spec.md and the ledger. D1-11 confirmed: Codex D2 WILL fire pre-merge (first composite-FK-to-parent exemplar). D1-3 (duplicate-add response semantics) is a HUMAN-DECISION with no recorded default -> PO question at spec time.
+- Done-when conjuncts, verbatim from GOAL.md at that SHA:
+  1. the `shortlist_entry` table exists via a migration satisfying the binding conventions (tenant user_id, composite UNIQUE(user_id, id) anchor, FORCE RLS under app_runtime != owner, timestamptz) with the dedup UNIQUE(user_id, job_id) live
+  2. the composite FK (user_id, job_id) -> job(user_id, id) rejects a cross-tenant job_id at the DB (proven under app_runtime) with migration tests green
+  3. the shortlist contract operations are served from the database with their manifest entries flipped to implemented and contract fidelity green
+  4. the ownership-matrix tenancy tests pass (intruder_client cross-tenant reads/dedup-creates all fail as tenant-indistinguishable 404s)
+  5. frontend/e2e/core-journey.spec.ts is extended through login -> create job -> add to shortlist -> shortlist lists, green from a fresh seed and required in CI
+  6. the review ledger has no finding outside a terminal disposition
+  7. GOAL.md is retargeted to sprint-04-applications-resume-snapshot and committed
+
+
 (One entry per S1 guard-on: run_id, GOAL.md commit SHA, approved-queue.md commit SHA, Done-when conjuncts verbatim. The completion audit judges against the manifest, not against later edits.)
 
 ### sprint-02-run-2 (PO re-plan 2026-07-13, supersedes run-1 for the completion audit)

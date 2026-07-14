@@ -2593,6 +2593,16 @@ def _seed_shortlist() -> dict[UUID, ShortlistEntry]:
     return {entry.id: entry for entry in _seed_shortlist_platform_entries()}
 
 
+def demo_shortlist_seeds() -> list[ShortlistEntry]:
+    """Fresh copies of the demo shortlist fixtures (sprint-03).
+
+    Public accessor for the DB seed script + tests: the DB demo seed persists
+    these under the demo user, each linked to a seeded demo job by jobId so
+    the composite FK resolves.
+    """
+    return _seed_shortlist_platform_entries()
+
+
 # Live store. Never reassigned -- mutated in place. Routes read/write via
 # ``store.shortlist`` (add/dismiss) or ``store.SHORTLIST_BY_SEARCH`` (read-only
 # per-search views, including the platform one -- see docstring above).
