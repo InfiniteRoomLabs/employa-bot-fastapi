@@ -4,6 +4,7 @@ import { type HookState, useAsyncResource } from "./_use-async-resource"
 
 export function useJobsInbox(
   searchId?: string,
+  enabled = true,
 ): HookState<readonly JobInboxItem[]> {
-  return useAsyncResource(() => api.getJobsInbox(searchId), [searchId])
+  return useAsyncResource(() => api.getJobsInbox(searchId), [searchId], enabled)
 }

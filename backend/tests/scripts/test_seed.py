@@ -31,9 +31,13 @@ from app.scripts.seed import (
 
 def _delete_demo_user() -> None:
     with Session(engine) as session:
-        session.execute(
-            delete(User).where(User.email == settings.SEED_DEMO_EMAIL)  # type: ignore[arg-type]
-        )
+        demo = session.exec(
+            select(User).where(User.email == settings.SEED_DEMO_EMAIL)
+        ).first()
+        if demo is not None:
+            # job.user_id is ON DELETE CASCADE (SIM-2) -- deleting the user
+            # takes its jobs with it.
+            session.delete(demo)
         session.commit()
 
 

@@ -18,8 +18,9 @@ describe("AddAppScreen", () => {
     const user = userEvent.setup()
     renderScreen(<AddAppScreen />)
     await user.click(screen.getByRole("button", { name: /^Fetch/i }))
+    // The review step's parsed fields are editable inputs since sprint-02.
     expect(
-      screen.getByText(/Staff Engineer, Payments core/i),
+      screen.getByDisplayValue(/Staff Engineer, Payments core/i),
     ).toBeInTheDocument()
   })
 })

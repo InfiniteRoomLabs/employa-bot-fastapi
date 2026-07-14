@@ -1,10 +1,12 @@
 from collections.abc import Generator
+from contextlib import suppress
 from typing import Annotated
 
 from fastapi import Depends, HTTPException
 from fastapi.security import OAuth2PasswordBearer
 from jwt.exceptions import InvalidTokenError
 from pydantic import ValidationError
+from sqlalchemy import text
 from sqlmodel import Session
 
 from app.api.errors import UnauthorizedError
@@ -56,6 +58,39 @@ def get_current_user(session: SessionDep, token: TokenDep) -> User:
 
 
 CurrentUser = Annotated[User, Depends(get_current_user)]
+
+
+def get_tenant_session(
+    session: SessionDep, current_user: CurrentUser
+) -> Generator[Session]:
+    """Tenant-scoped DB session (plan v3 Tenancy; sprint-02 spec PIN-7).
+
+    Switches the request transaction onto the ``app_runtime`` role and sets
+    the transaction-local ``app.user_id`` GUC that row-level-security
+    policies key on. RLS is the systemic backstop; routes keep their
+    explicit ``user_id`` predicates as the first line.
+
+    ``SET LOCAL`` is transaction-scoped: a commit ends it, so tenant routes
+    commit once, at the end, and never run tenant queries after. The
+    ``RESET ROLE`` in teardown exists for the test world, where the request
+    shares one outer transaction with the test session (savepoint mode) and
+    the role switch would otherwise leak past the request; the ``suppress``
+    covers teardown on an already-aborted transaction.
+    """
+    connection = session.connection()
+    connection.execute(text("SET LOCAL ROLE app_runtime"))
+    connection.execute(
+        text("SELECT set_config('app.user_id', :uid, true)"),
+        {"uid": str(current_user.id)},
+    )
+    try:
+        yield session
+    finally:
+        with suppress(Exception):
+            session.connection().execute(text("RESET ROLE"))
+
+
+TenantSession = Annotated[Session, Depends(get_tenant_session)]
 
 
 def get_current_active_superuser(current_user: CurrentUser) -> User:

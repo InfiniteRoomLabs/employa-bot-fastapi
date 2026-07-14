@@ -1,8 +1,13 @@
-"""Seed a demo user for local/staging environments.
+"""Seed demo data for local/staging environments.
 
 Run as ``python -m app.scripts.seed [--reset] [--force]``. Seeds exactly one
 demo user carrying the REMY persona profile (ported verbatim from
-``app/store.py``'s ``_seed_current_user`` -- see that module for provenance).
+``app/store.py``'s ``_seed_current_user`` -- see that module for provenance),
+plus the seven demo job postings under that user (sprint-02): same fixed
+UUIDs as ``store.jobs`` so mock inbox links resolve against the DB-backed
+``getJob``. Job seeding REPLACES rows with those fixed ids (demo fixtures are
+owned by the seed); other jobs -- including ones a demo user captured through
+the UI -- are left alone unless ``--reset`` wipes the demo user wholesale.
 
 Safety (PIN-8, docs/sprints/sprint-01-spec.md): refuses to run outside
 ``ENVIRONMENT=local`` unless ``--force`` is passed, and that check happens
@@ -14,13 +19,14 @@ import logging
 import sys
 from collections.abc import Sequence
 
-from sqlmodel import Session, select
+from sqlmodel import Session, col, delete, select
 
-from app import crud
+from app import crud, store
 from app.core.config import settings
 from app.core.db import engine
 from app.core.security import get_password_hash
-from app.models import User, UserCreate
+from app.job_mapper import wire_job_to_row
+from app.models import Job, User, UserCreate
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -56,11 +62,27 @@ def _demo_user_create() -> UserCreate:
     )
 
 
+def seed_demo_jobs(session: Session, user: User) -> int:
+    """Persist the seven demo postings under ``user`` (idempotent, replacing).
+
+    Deletes any rows carrying the fixed demo ids (they may belong to a
+    previous demo-user incarnation), then inserts fresh copies. Runs as the
+    migration/owner role on purpose: seeding is bootstrap, not tenant
+    traffic, and the superuser bypasses RLS by definition.
+    """
+    seeds = store.demo_job_seeds()
+    session.connection().execute(delete(Job).where(col(Job.id).in_(list(seeds))))
+    for wire_job in seeds.values():
+        session.add(wire_job_to_row(wire_job, user_id=user.id))
+    session.commit()
+    return len(seeds)
+
+
 def seed_demo_user(session: Session, *, reset: bool = False) -> User:
     """Create or refresh the demo user. Idempotent: always leaves exactly one.
 
-    With ``reset=True``, the existing row is deleted first (later sprints
-    extend this to demo entities beyond the user).
+    With ``reset=True``, the existing row is deleted first; its jobs go with
+    it via the ``ON DELETE CASCADE`` on ``job.user_id`` (SIM-2).
     """
     existing = session.exec(
         select(User).where(User.email == settings.SEED_DEMO_EMAIL)
@@ -127,8 +149,9 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     logger.info("Seeding demo user (reset=%s)", args.reset)
     with Session(engine) as session:
-        seed_demo_user(session, reset=args.reset)
-    logger.info("Demo user seeded")
+        user = seed_demo_user(session, reset=args.reset)
+        job_count = seed_demo_jobs(session, user)
+    logger.info("Demo user seeded (with %d demo jobs)", job_count)
     return 0
 
 

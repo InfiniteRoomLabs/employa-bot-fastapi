@@ -8,6 +8,6 @@ export function useJob(id: string): HookState<Job> {
 }
 
 /** The full captured-job collection. */
-export function useJobs(): HookState<readonly Job[]> {
-  return useAsyncResource(() => api.getJobs(), [])
+export function useJobs(enabled = true): HookState<readonly Job[]> {
+  return useAsyncResource(() => api.getJobs(), [], enabled)
 }

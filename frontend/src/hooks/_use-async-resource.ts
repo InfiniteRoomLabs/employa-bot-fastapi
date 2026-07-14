@@ -24,6 +24,11 @@ export interface HookState<T> {
  * dependency arrays do. Callers passing mutable filter objects should
  * memoize them upstream.
  *
+ * `enabled` (default true) gates the fetch: a disabled hook still obeys the
+ * rules of hooks (always called) but never fires its thunk, so a screen that
+ * picks between two data sources can call both hooks and only pay for the one
+ * it uses. A disabled hook reports `isLoading: false` with no data/error.
+ *
  * Implementation notes:
  *   - `setIsLoading(true)` at the top of the effect is deliberate — when a
  *     dep changes we want consumers to observe loading immediately. The
@@ -34,10 +39,11 @@ export interface HookState<T> {
 export function useAsyncResource<T>(
   load: () => Promise<T>,
   deps: readonly unknown[],
+  enabled = true,
 ): HookState<T> {
   const [data, setData] = useState<T | undefined>(undefined)
   const [error, setError] = useState<MockApiError | undefined>(undefined)
-  const [isLoading, setIsLoading] = useState(true)
+  const [isLoading, setIsLoading] = useState(enabled)
   const [refetchTick, setRefetchTick] = useState(0)
 
   const refetch = useCallback(() => {
@@ -45,6 +51,11 @@ export function useAsyncResource<T>(
   }, [])
 
   useEffect(() => {
+    if (!enabled) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setIsLoading(false)
+      return
+    }
     let mounted = true
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsLoading(true)
@@ -74,7 +85,7 @@ export function useAsyncResource<T>(
     // rule cannot see through the variadic deps spread, so it's disabled
     // here.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [...deps, refetchTick])
+  }, [...deps, refetchTick, enabled])
 
   return { data, error, isLoading, refetch }
 }

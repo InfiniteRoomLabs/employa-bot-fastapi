@@ -49,6 +49,24 @@ STUB_USER = DbUser(
 )
 
 
+class NullTenantSession:
+    """Absorbs the DB side of dual-write mock ops in the DB-free world.
+
+    Since sprint-02, createApplication persists its minted job through
+    ``deps.get_tenant_session`` (PIN-1). Contract tests judge the WIRE
+    behavior against the store; the DB side is covered in
+    ``tests/api/routes/test_jobs.py``. This stub accepts the two calls the
+    dual-write makes and nothing else -- an unexpected DB call fails loudly
+    instead of silently opening a real connection.
+    """
+
+    def add(self, instance: object) -> None:
+        pass
+
+    def commit(self) -> None:
+        pass
+
+
 @pytest.fixture
 def store_client() -> Generator[TestClient]:
     """Authenticated client for the store-backed mock API (auth stubbed).
@@ -58,11 +76,13 @@ def store_client() -> Generator[TestClient]:
     """
     store.reset()
     app.dependency_overrides[deps.get_current_user] = lambda: STUB_USER
+    app.dependency_overrides[deps.get_tenant_session] = NullTenantSession
     try:
         with TestClient(app) as c:
             yield c
     finally:
         app.dependency_overrides.pop(deps.get_current_user, None)
+        app.dependency_overrides.pop(deps.get_tenant_session, None)
 
 
 @pytest.fixture
