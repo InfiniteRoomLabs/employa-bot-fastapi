@@ -268,6 +268,290 @@ class ShortlistEntry(SQLModel, table=True):
     )
 
 
+_STAGE_VALUES = (
+    "'saved', 'drafting', 'applied', 'screening', 'interview', 'offer',"
+    " 'won', 'rejected', 'ghosted', 'withdrew', 'dismissed', 'offer_rescinded'"
+)
+
+
+class Resume(SQLModel, table=True):
+    """Minimal resume (sprint-04 3a, plan v3 Phase B item 3): just enough for
+    the journey -- CRUD, the DEFAULT swap, and the APPLIED lock. Full resume
+    management (uploads/templates/projections/exports) is Release 0.2; their
+    ids stay plain uuid columns with NO FK (mock entities, spec PIN-18).
+
+    Lock semantics (PIN-17): ``used_in > 0`` or tag in {TAILORED, MASTER,
+    DEFAULT} refuses deleteResume app-side (409 resume-lock-conflict); the
+    resume_snapshot/application composite FKs are the DB backstop. The
+    at-most-one-DEFAULT-per-user invariant is a partial unique index in the
+    migration (uq_resume_user_default, PIN-5). ``fork_job_id`` carries the
+    forkResumeAsDraft provenance with a composite FK to job (migration-only,
+    DEBT-6). Wire mapping in ``app/resume_mapper.py``; wire ``version`` is a
+    display STRING (unlike Application.version).
+    """
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "id", name="uq_resume_user_id_id"),
+        CheckConstraint(
+            "tag IN ('MASTER', 'DEFAULT', 'VARIANT', 'TAILORED', 'DRAFT', 'FORMAT')",
+            name="ck_resume_tag",
+        ),
+        CheckConstraint("used_in >= 0", name="ck_resume_used_in"),
+        CheckConstraint("schema_version >= 1", name="ck_resume_schema_version"),
+    )
+
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    user_id: uuid.UUID = Field(
+        foreign_key="user.id", ondelete="CASCADE", nullable=False, index=True
+    )
+    name: str
+    subtitle: str
+    version: str
+    used_in: int = Field(default=0, nullable=False)
+    updated: datetime = Field(
+        default_factory=get_datetime_utc,
+        sa_type=DateTime(timezone=True),  # type: ignore
+        sa_column_kwargs={"server_default": sa_text("now()")},
+    )
+    tag: str
+    match: int | None = None
+    body: str | None = None
+    source_upload_id: uuid.UUID | None = Field(default=None)
+    template_id: uuid.UUID | None = Field(default=None)
+    target_role: str | None = None
+    scoring_enabled: bool | None = None
+    fork_job_id: uuid.UUID | None = Field(default=None)
+    schema_version: int = Field(
+        default=1, nullable=False, sa_column_kwargs={"server_default": "1"}
+    )
+
+
+class Application(SQLModel, table=True):
+    """An application (sprint-04, plan v3 Phase B item 3). Copies the job/
+    shortlist exemplars (tenant user_id + CASCADE, UNIQUE(user_id, id) anchor,
+    FORCE RLS in the migration, timestamptz, schema_version).
+
+    ``stage``/``version``/outcome fields are mutated ONLY by the single
+    stage-mutation DB function (spec PIN-1/PIN-19; app_runtime has no UPDATE
+    on this table). ``removed_at`` is the internal soft-remove for pre-commit
+    dismiss (PIN-14; never on the wire -- runtime hard-deletes are impossible
+    under append-only children). ``search_id`` has NO FK (searches stay mock
+    through 0.1, PIN-18). Composite FKs to job/resume/resume_snapshot live in
+    the migration (DEBT-6). Wire mapping in ``app/application_mapper.py``.
+    """
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "id", name="uq_application_user_id_id"),
+        CheckConstraint(f"stage IN ({_STAGE_VALUES})", name="ck_application_stage"),
+        CheckConstraint("version >= 1", name="ck_application_version"),
+        CheckConstraint(
+            "flag IS NULL OR flag IN ('stale', 'offer')",
+            name="ck_application_flag",
+        ),
+        CheckConstraint(
+            "outcome IS NULL OR outcome IN ('won', 'rejected', 'withdrawn')",
+            name="ck_application_outcome",
+        ),
+        CheckConstraint(
+            "outcome_reasons IS NULL OR (jsonb_typeof(outcome_reasons) = 'array'"
+            " AND jsonb_array_length(outcome_reasons) <= 8) IS TRUE",
+            name="ck_application_outcome_reasons",
+        ),
+        CheckConstraint(
+            "system_reasons IS NULL OR jsonb_typeof(system_reasons) = 'array' IS TRUE",
+            name="ck_application_system_reasons",
+        ),
+        CheckConstraint("schema_version >= 1", name="ck_application_schema_version"),
+    )
+
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    user_id: uuid.UUID = Field(
+        foreign_key="user.id", ondelete="CASCADE", nullable=False, index=True
+    )
+    job_id: uuid.UUID = Field(nullable=False)
+    resume_id: uuid.UUID | None = Field(default=None)
+    stage: str
+    version: int = Field(default=1, nullable=False)
+    created_at: datetime = Field(
+        default_factory=get_datetime_utc,
+        sa_type=DateTime(timezone=True),  # type: ignore
+        sa_column_kwargs={"server_default": sa_text("now()")},
+    )
+    flag: str | None = None
+    contact: str | None = None
+    coach_nudge: bool | None = None
+    resurrected: bool | None = None
+    outcome: str | None = None
+    outcome_at: datetime | None = Field(
+        default=None,
+        sa_type=DateTime(timezone=True),  # type: ignore
+    )
+    outcome_reason: str | None = None
+    outcome_reasons: list[str] | None = Field(
+        default=None,
+        sa_type=JSONB(none_as_null=True),  # type: ignore
+    )
+    system_reasons: list[str] | None = Field(
+        default=None,
+        sa_type=JSONB(none_as_null=True),  # type: ignore
+    )
+    submitted_snapshot_id: uuid.UUID | None = Field(default=None)
+    search_id: uuid.UUID | None = Field(default=None)
+    removed_at: datetime | None = Field(
+        default=None,
+        sa_type=DateTime(timezone=True),  # type: ignore
+    )
+    schema_version: int = Field(
+        default=1, nullable=False, sa_column_kwargs={"server_default": "1"}
+    )
+
+
+class StageTransition(SQLModel, table=True):
+    """Append-only stage history (sprint-04 3b, v3 Data-integrity #3/#4/#8).
+
+    enforce_append_only + PIN-19 in the migration make this table SELECT-only
+    for app_runtime: rows are written exclusively by the stage-mutation DB
+    function (owner-owned SECURITY DEFINER). ``seq`` is per-application
+    monotonic under the function's row lock (UNIQUE(user_id, application_id,
+    seq)). Undo writes a compensating row (source='user_correction' +
+    corrects_transition_id), never deletes (PIN-3). ``resume_id`` is a plain
+    historical column, validated at write time by the function.
+    """
+
+    __tablename__ = "stage_transition"
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "id", name="uq_stage_transition_user_id_id"),
+        UniqueConstraint(
+            "user_id", "application_id", "seq", name="uq_stage_transition_seq"
+        ),
+        CheckConstraint(
+            f"from_stage IS NULL OR from_stage IN ({_STAGE_VALUES})",
+            name="ck_stage_transition_from_stage",
+        ),
+        CheckConstraint(
+            f"to_stage IN ({_STAGE_VALUES})", name="ck_stage_transition_to_stage"
+        ),
+        CheckConstraint(
+            "source IN ('user', 'user_correction', 'user_reactivation', 'system')",
+            name="ck_stage_transition_source",
+        ),
+        CheckConstraint("seq >= 1", name="ck_stage_transition_seq_positive"),
+        CheckConstraint(
+            "reasons IS NULL OR (jsonb_typeof(reasons) = 'array'"
+            " AND jsonb_array_length(reasons) <= 8) IS TRUE",
+            name="ck_stage_transition_reasons",
+        ),
+        CheckConstraint(
+            "schema_version >= 1", name="ck_stage_transition_schema_version"
+        ),
+    )
+
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    user_id: uuid.UUID = Field(
+        foreign_key="user.id", ondelete="CASCADE", nullable=False, index=True
+    )
+    application_id: uuid.UUID = Field(nullable=False)
+    seq: int = Field(nullable=False)
+    from_stage: str | None = None
+    to_stage: str
+    source: str
+    reason: str | None = None
+    reasons: list[str] | None = Field(
+        default=None,
+        sa_type=JSONB(none_as_null=True),  # type: ignore
+    )
+    resume_id: uuid.UUID | None = Field(default=None)
+    corrects_transition_id: uuid.UUID | None = Field(default=None)
+    created_at: datetime = Field(
+        default_factory=get_datetime_utc,
+        sa_type=DateTime(timezone=True),  # type: ignore
+        sa_column_kwargs={"server_default": sa_text("now()")},
+    )
+    schema_version: int = Field(
+        default=1, nullable=False, sa_column_kwargs={"server_default": "1"}
+    )
+
+
+class ResumeSnapshot(SQLModel, table=True):
+    """Append-only immutable resume copy captured at APPLIED (D10, sprint-04
+    3b). SELECT-only for app_runtime (PIN-19); written exclusively by the
+    stage-mutation function in the SAME transaction as the applied transition
+    and the resume lock (PIN-2). UNIQUE(user_id, application_id): the mock
+    keys snapshots by application id (PIN-15). The composite FK to resume is
+    the delete backstop behind the 409 resume-lock-conflict (PIN-17).
+    """
+
+    __tablename__ = "resume_snapshot"
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "id", name="uq_resume_snapshot_user_id_id"),
+        UniqueConstraint(
+            "user_id", "application_id", name="uq_resume_snapshot_application"
+        ),
+        CheckConstraint(
+            "schema_version >= 1", name="ck_resume_snapshot_schema_version"
+        ),
+    )
+
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    user_id: uuid.UUID = Field(
+        foreign_key="user.id", ondelete="CASCADE", nullable=False, index=True
+    )
+    application_id: uuid.UUID = Field(nullable=False)
+    resume_id: uuid.UUID = Field(nullable=False)
+    name: str
+    body: str
+    template_version: str
+    captured_at: datetime = Field(
+        default_factory=get_datetime_utc,
+        sa_type=DateTime(timezone=True),  # type: ignore
+        sa_column_kwargs={"server_default": sa_text("now()")},
+    )
+    schema_version: int = Field(
+        default=1, nullable=False, sa_column_kwargs={"server_default": "1"}
+    )
+
+
+class UndoGrant(SQLModel, table=True):
+    """Persistent, restart-safe undo grant for markWon (v3 Data-integrity #7,
+    spec PIN-4). The row id IS the wire undoToken. Minted and consumed ONLY
+    inside the stage-mutation function (SELECT-only for app_runtime, PIN-19);
+    the claim is one atomic UPDATE on ``consumed_at IS NULL AND expires_at >=
+    statement_timestamp()`` -- all timestamps from PostgreSQL expressions.
+    ``corrects_transition_id`` names the won transition the undo compensates.
+    """
+
+    __tablename__ = "undo_grant"
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "id", name="uq_undo_grant_user_id_id"),
+        CheckConstraint("schema_version >= 1", name="ck_undo_grant_schema_version"),
+    )
+
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    user_id: uuid.UUID = Field(
+        foreign_key="user.id", ondelete="CASCADE", nullable=False, index=True
+    )
+    application_id: uuid.UUID = Field(nullable=False)
+    corrects_transition_id: uuid.UUID = Field(nullable=False)
+    created_at: datetime = Field(
+        default_factory=get_datetime_utc,
+        sa_type=DateTime(timezone=True),  # type: ignore
+        sa_column_kwargs={"server_default": sa_text("now()")},
+    )
+    expires_at: datetime = Field(
+        sa_type=DateTime(timezone=True),  # type: ignore
+    )
+    consumed_at: datetime | None = Field(
+        default=None,
+        sa_type=DateTime(timezone=True),  # type: ignore
+    )
+    schema_version: int = Field(
+        default=1, nullable=False, sa_column_kwargs={"server_default": "1"}
+    )
+
+
 # Properties to return via API, id is always required
 class UserPublic(UserBase):
     id: uuid.UUID
