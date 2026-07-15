@@ -4,7 +4,8 @@ PLAN (v3) says what we are building; this file says where we are. Update at ever
 
 ## Current state
 
-- Phase / run: sprint-04-applications-resume-snapshot / sprint-04-run-1 (status: COMPLETE -- shipped + self-advanced; merge 86158a8; CI verification at the merge SHA recorded below once green)
+- Phase / run: sprint-04-applications-resume-snapshot / sprint-04-run-1 (status: COMPLETE -- shipped + self-advanced; master CI fully green at 73bf226)
+- CI verification at the ship SHA 73bf226 (all first-try green, no INT-class fix): Test Backend (run 29454440296), Test Docker Compose (29454440213), Playwright incl. the extended core-journey through applied+snapshot (29454440258), Zizmor (29454440294) all success. The "core-journey required in CI" conjunct is closed against this run; conjunct 7's master-SHA evidence is complete.
 - Active branch: master (sprint-04 merged 86158a8; branch sprint-04-apps-resume-snapshot retained for history)
 - Last verified checkpoint: sprint-04 shipped and self-advanced to sprint-05 (merge 86158a8): D1 SOUND, panel closed (QA zero findings), D2 SOUND after two closure rounds (thread 019f67b4), full suite 456 + e2e 36/36 from clean volumes at the pre-merge tree. Survived the 2026-07-14 machine crash at the 1b1e17f boundary (preflight: NOT abandoned-dirty).
 - Next phase (sprint-05-fake-ai-seam) exact next action: SYNCHRONOUS S0 read-back with Wes (ADVISORY, HIGH-risk, fresh Goal block; the LAST implementation sprint before the terminal audit). At S0: diff the GOAL.md queue copy vs approved-queue.md rev 1, ratify PR-9..PR-12 (default adopt), heed the rubric warning (decide whether ai_run/match_report need a mutation function AT ALL), then resume preflight + /goal. Codex D1+D2 MUST fire. See the sprint-05 Goal block in GOAL.md.
