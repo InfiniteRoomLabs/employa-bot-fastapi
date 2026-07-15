@@ -7,13 +7,27 @@
  * (network-asserted to be served by DB-backed GET /api/v1/jobs, PIN-8) ->
  * survives a reload -> its detail page renders via DB-backed getJob.
  *
+ * Sprint-04 3c segment (AC-09, conjunct 7): the capture step's created
+ * application (drafting) -> lists on the DB-backed applications tracker ->
+ * legal transition to APPLIED (resumeId required, locks the seeded DEFAULT
+ * "Distributed-systems" resume) -> one illegal transition rejected
+ * (invalid_transition) -> the locked resume refuses delete (conflict,
+ * AC-07a) -> the materialized submitted-resume snapshot is visible via the
+ * API and the application-detail UI. The in-screen "move stage" quick
+ * actions (ApplicationsScreen.handleMoveNext/AppDetailScreen's stage
+ * tracker) are local-only mock state -- neither calls POST /transitions --
+ * so the persisted lifecycle is driven directly via `page.request` carrying
+ * the same Authorization bearer the real login form stored in
+ * localStorage (data/api.ts TOKEN_KEY), and the UI is asserted via
+ * reload/navigation after each mutation.
+ *
  * Runs serially in one worker: the steps are one story, and the second
  * login of the run (global-setup did the first) stays under the per-account
  * throttle only if we don't multiply it per worker.
  */
 
 import { expect, type Page, test } from "@playwright/test"
-import { envVal } from "./auth"
+import { API_ROOT, envVal } from "./auth"
 
 test.describe.configure({ mode: "serial" })
 
@@ -24,6 +38,7 @@ const COMPANY = `E2E Journey Co ${RUN_TAG}`
 const ROLE = `Journey Engineer ${RUN_TAG}`
 
 const JOBS_API = /\/api\/v1\/jobs$/
+const APPLICATIONS_API = /\/api\/v1\/applications$/
 
 async function gotoJobsAndWaitForApi(page: Page): Promise<void> {
   const jobsResponse = page.waitForResponse(
@@ -33,9 +48,43 @@ async function gotoJobsAndWaitForApi(page: Page): Promise<void> {
   expect((await jobsResponse).status()).toBe(200)
 }
 
+async function gotoApplicationsAndWaitForApi(page: Page): Promise<void> {
+  const appsResponse = page.waitForResponse(
+    (r) => APPLICATIONS_API.test(r.url()) && r.request().method() === "GET",
+  )
+  await page.goto("/applications")
+  expect((await appsResponse).status()).toBe(200)
+}
+
+/**
+ * The bearer token the real login form stored (data/api.ts TOKEN_KEY),
+ * reused so `page.request` calls hit the DB-backed API as the same demo
+ * tenant the UI is authenticated as.
+ */
+async function authHeaders(page: Page): Promise<Record<string, string>> {
+  const token = await page.evaluate(() => localStorage.getItem("access_token"))
+  if (!token) {
+    throw new Error(
+      "access_token missing from localStorage -- login must run first",
+    )
+  }
+  return {
+    Authorization: `Bearer ${token}`,
+    "Content-Type": "application/json",
+  }
+}
+
 test("login -> create job -> lists + persists -> shortlist -> shortlist lists", async ({
   page,
 }) => {
+  // The sprint-04 3c extension added a dozen-plus sequential page.request
+  // round-trips and page navigations to this one cumulative journey; under
+  // the full suite's parallel load (4 workers sharing this machine) that
+  // comfortably outran Playwright's 30s default per-test timeout even
+  // though the test finishes in ~17-19s solo. Budget generously rather than
+  // race the default.
+  test.setTimeout(90_000)
+
   // --- Login through the real form (no token injection). The DEMO user
   // (same tenant the smoke suite authenticates as, owns the seeded jobs);
   // creds carry fallbacks so the run never depends on a repo-root .env that
@@ -73,6 +122,7 @@ test("login -> create job -> lists + persists -> shortlist -> shortlist lists", 
   const created = await createResponse
   expect(created.status()).toBe(201)
   const createdBody = (await created.json()) as {
+    id: string
     jobId: string
     company: string
   }
@@ -120,4 +170,143 @@ test("login -> create job -> lists + persists -> shortlist -> shortlist lists", 
   await page.goto("/shortlist")
   expect((await shortlistGet).status()).toBe(200)
   await expect(page.getByText(COMPANY).first()).toBeVisible()
+
+  // ===========================================================================
+  // Sprint-04 3c: applications/tracker extension (AC-09, conjunct 7)
+  // ===========================================================================
+
+  const APP_ID = createdBody.id
+  const headers = await authHeaders(page)
+
+  // --- The created application (drafting) lists on the DB-backed tracker. --
+  await gotoApplicationsAndWaitForApi(page)
+  await expect(page.getByText(COMPANY).first()).toBeVisible()
+
+  // --- APPLIED requires a resumeId; use the seeded DEFAULT resume every
+  // fixture application's applied-hop locks (PIN-15, "Distributed-systems").
+  const resumesResp = await page.request.get(`${API_ROOT}/api/v1/resumes`, {
+    headers,
+  })
+  expect(resumesResp.status()).toBe(200)
+  const resumes = (await resumesResp.json()) as {
+    id: string
+    name: string
+    tag: string
+  }[]
+  const defaultResume = resumes.find((r) => r.tag === "DEFAULT")
+  if (!defaultResume) {
+    throw new Error("seed fixture missing: no DEFAULT-tagged resume")
+  }
+
+  // --- Legal transition: drafting -> applied (version 1 -> 2). -------------
+  const appliedResp = await page.request.post(
+    `${API_ROOT}/api/v1/applications/${APP_ID}/transitions`,
+    {
+      headers,
+      data: {
+        targetStage: "applied",
+        expectedVersion: 1,
+        source: "user",
+        resumeId: defaultResume.id,
+      },
+    },
+  )
+  expect(appliedResp.status()).toBe(200)
+  const appliedBody = (await appliedResp.json()) as {
+    application: {
+      stage: string
+      version: number
+      submittedSnapshotId: string | null
+    }
+    transition: { fromStage: string | null; toStage: string }
+  }
+  expect(appliedBody.application.stage).toBe("applied")
+  expect(appliedBody.application.submittedSnapshotId).toBeTruthy()
+  expect(appliedBody.transition.fromStage).toBe("drafting")
+  const SUBMITTED_SNAPSHOT_ID = appliedBody.application
+    .submittedSnapshotId as string
+  const appVersion = appliedBody.application.version // 2 after the applied hop
+
+  // --- The UI reflects the persisted transition after navigating fresh: the
+  // detail screen's résumé fact card flips to "locked (applied)". -----------
+  const detailGet = page.waitForResponse(
+    (r) =>
+      new RegExp(`/api/v1/applications/${APP_ID}$`).test(r.url()) &&
+      r.request().method() === "GET",
+  )
+  await page.goto(`/applications/${APP_ID}`)
+  expect((await detailGet).status()).toBe(200)
+  await expect(page.getByText("locked (applied)")).toBeVisible()
+
+  // --- ONE illegal transition rejected: applied -> offer skips screening/
+  // interview (LEGAL_TRANSITIONS, applications.py) -> 422 invalid_transition.
+  const illegalResp = await page.request.post(
+    `${API_ROOT}/api/v1/applications/${APP_ID}/transitions`,
+    {
+      headers,
+      data: {
+        targetStage: "offer",
+        expectedVersion: appVersion,
+        source: "user",
+      },
+    },
+  )
+  expect(illegalResp.status()).toBe(422)
+  const illegalBody = (await illegalResp.json()) as { kind: string }
+  expect(illegalBody.kind).toBe("invalid_transition")
+
+  // --- Still applied via a fresh GET (the rejected attempt did not mutate).
+  const freshGet = await page.request.get(
+    `${API_ROOT}/api/v1/applications/${APP_ID}`,
+    { headers },
+  )
+  expect(freshGet.status()).toBe(200)
+  const freshBody = (await freshGet.json()) as {
+    stage: string
+    version: number
+  }
+  expect(freshBody.stage).toBe("applied")
+  expect(freshBody.version).toBe(appVersion)
+
+  // --- Resume locked (AC-07a): DELETE the DEFAULT resume it just locked. ---
+  const deleteResp = await page.request.delete(
+    `${API_ROOT}/api/v1/resumes/${defaultResume.id}`,
+    { headers },
+  )
+  expect(deleteResp.status()).toBe(409)
+  const deleteBody = (await deleteResp.json()) as { kind: string }
+  expect(deleteBody.kind).toBe("conflict")
+
+  // --- Best-effort UI lock indication: the Resumes screen's own Delete
+  // button hits the same 409 and the resume is never removed from view. -----
+  const resumesDeleteResp = page.waitForResponse(
+    (r) =>
+      new RegExp(`/api/v1/resumes/${defaultResume.id}$`).test(r.url()) &&
+      r.request().method() === "DELETE",
+  )
+  await page.goto("/resumes")
+  await expect(page.getByText("Distributed-systems").first()).toBeVisible()
+  await page
+    .getByRole("button", { name: `Delete ${defaultResume.name}` })
+    .click()
+  expect((await resumesDeleteResp).status()).toBe(409)
+  await expect(page.getByText("Cannot delete")).toBeVisible()
+  await expect(page.getByText("Distributed-systems").first()).toBeVisible()
+
+  // --- Snapshot visible (load-bearing: discriminates the REAL materialized
+  // row from on-the-fly synthesis -- PIN-2 vs. the retired DEBT-5 fallback).
+  const snapshotResp = await page.request.get(
+    `${API_ROOT}/api/v1/applications/${APP_ID}/snapshot`,
+    { headers },
+  )
+  expect(snapshotResp.status()).toBe(200)
+  const snapshotBody = (await snapshotResp.json()) as { id: string }
+  expect(snapshotBody.id).toBe(SUBMITTED_SNAPSHOT_ID)
+
+  // --- And the UI renders the same submitted copy on the application detail.
+  await page.goto(`/applications/${APP_ID}`)
+  await page.getByRole("button", { name: /view submitted copy/i }).click()
+  await expect(
+    page.getByRole("dialog").getByText("Distributed-systems"),
+  ).toBeVisible()
 })

@@ -176,9 +176,59 @@ def test_mark_won_happy(
     assert grant.consumed_at is None
 
 
+def test_mark_won_from_a_second_active_stage(
+    db: Session,
+    db_client: TestClient,
+    seed_domain: SeededUsers,
+    owned_job: models.Job,
+) -> None:
+    """markWon is legal from ANY active stage, not just offer (lc-verify
+    finding 1): prove it from screening -- the route derives allowed_from
+    from the live row, so a second stage discriminates generic handling
+    from an offer-only special case."""
+    app_row = _insert_application(
+        db, user_id=seed_domain.test_user.id, job_id=owned_job.id, stage="screening"
+    )
+    resp = db_client.post(f"{B}/applications/{app_row.id}/mark-won", json={})
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["application"]["stage"] == "won"
+    assert body["application"]["outcome"] == "won"
+    tr = db.exec(
+        select(models.StageTransition).where(
+            models.StageTransition.application_id == app_row.id
+        )
+    ).one()
+    assert tr.from_stage == "screening"
+    assert tr.to_stage == "won"
+
+
 def test_mark_won_unknown_404(db_client: TestClient) -> None:
     resp = db_client.post(f"{B}/applications/{uuid.uuid4()}/mark-won", json={})
     assert resp.status_code == 404
+
+
+def test_mark_won_removed_row_404(
+    db: Session,
+    db_client: TestClient,
+    seed_domain: SeededUsers,
+    owned_job: models.Job,
+) -> None:
+    """A soft-removed application (PIN-14) is dead to markWon too, and the
+    404 is byte-identical to the unknown-id 404 (lc-verify finding 2)."""
+    app_row = _insert_application(
+        db, user_id=seed_domain.test_user.id, job_id=owned_job.id, stage="drafting"
+    )
+    dismissed = db_client.post(f"{B}/applications/{app_row.id}/dismiss", json={})
+    assert dismissed.status_code == 200
+    removed = db_client.post(f"{B}/applications/{app_row.id}/mark-won", json={})
+    unknown_id = uuid.uuid4()
+    unknown = db_client.post(f"{B}/applications/{unknown_id}/mark-won", json={})
+    assert removed.status_code == 404
+    assert unknown.status_code == 404
+    assert removed.text.replace(str(app_row.id), "<ID>") == unknown.text.replace(
+        str(unknown_id), "<ID>"
+    )
 
 
 def test_mark_won_already_archived_404(
