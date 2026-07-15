@@ -718,3 +718,23 @@ def test_budget_isolation_between_tenants(
     )
     assert resp.status_code == 200
     assert resp.json()["capRemainingUsd"] == 20.0
+
+
+def test_delete_scored_resume_409_via_fk_backstop(
+    db: Session, db_client: TestClient, seed_domain: SeededUsers
+) -> None:
+    """PIN-A14: a scored resume (referenced by ai_run + match_report, both
+    append-only) refuses deletion at the DB; the constraint-name
+    disambiguation maps it to the SAME 409 lock-conflict envelope. The
+    resume is an unlocked DRAFT with used_in=0, so ONLY the backstop can
+    fire -- this discriminates the FK path from the app-level check."""
+    user = seed_domain.test_user
+    job_id, resume_id = _mk_pair(db, user.id)
+    _mk_report(db, user.id, job_id, resume_id)
+    resp = db_client.delete(f"{B}/resumes/{resume_id}")
+    assert resp.status_code == 409
+    assert resp.json()["kind"] == "conflict"
+    # the row survived
+    assert db.exec(
+        select(models.Resume).where(models.Resume.id == resume_id)
+    ).first() is not None

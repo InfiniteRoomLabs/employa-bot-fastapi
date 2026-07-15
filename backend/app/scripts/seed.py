@@ -20,16 +20,28 @@ import argparse
 import logging
 import sys
 from collections.abc import Sequence
+from datetime import UTC, datetime
+from decimal import Decimal
 
 from sqlalchemy import text as sa_text
 from sqlmodel import Session, col, delete, select
 
 from app import crud, store
+from app.ai_flow import call_ai_reserve, call_ai_settle
 from app.core.config import settings
 from app.core.db import engine
 from app.core.security import get_password_hash
 from app.job_mapper import wire_job_to_row
-from app.models import Application, Job, Resume, ShortlistEntry, User, UserCreate
+from app.models import (
+    Application,
+    Job,
+    MatchReport,
+    Resume,
+    ShortlistEntry,
+    User,
+    UserAiBudget,
+    UserCreate,
+)
 from app.resume_mapper import wire_resume_to_row
 from app.schemas import Stage
 from app.shortlist_mapper import wire_shortlist_to_row
@@ -238,6 +250,81 @@ def seed_demo_applications(session: Session, user: User) -> int:
     return len(pairs)
 
 
+def seed_demo_ai(session: Session, user: User) -> int:
+    """Materialize the canonical match report (sprint-05, spec PIN-A13):
+    the demo budget row plus ONE function-walked settled run for the
+    canonical pair (JOB_ID_STRIPE, RESUME_ID_DISTRIBUTED), settling with the
+    MOCK fixture payload (score 92, canonical rubric/gaps/strengths).
+
+    Numbers, deliberately: fresh budget baseline 3.28 + the walked run's
+    0.14 = 3.42 spent (the mock's exact ``_INITIAL_MONTH_SPEND_USD``), so
+    previewDeepMatchScore shows the familiar 16.58 headroom. The report is
+    seeded at the FIXTURE score (92), not the fake provider's deterministic
+    95, so a live deep-run visibly supersedes it at version 2 -- the e2e
+    journey's discriminator (PIN-A15).
+
+    MUST run after ``seed_demo_jobs`` and ``seed_demo_resumes`` (the run
+    composite-FKs both). UPSERT-SKIP, ALL-OR-NOTHING keyed on the canonical
+    report: ai_run/ai_run_event/match_report are append-only even for the
+    owner (PIN-A14), so an existing graph is never edited -- only --reset
+    rebuilds it. The budget baseline lands only when this seed CREATES the
+    month row; a pre-existing row carries real spend and is left alone.
+    """
+    existing = session.exec(
+        select(MatchReport.id)
+        .where(MatchReport.user_id == user.id)
+        .where(MatchReport.job_id == store.JOB_ID_STRIPE)
+        .where(MatchReport.resume_id == store.RESUME_ID_DISTRIBUTED)
+    ).first()
+    if existing is not None:
+        return 0
+
+    month_start = datetime.now(UTC).date().replace(day=1)
+    budget = session.exec(
+        select(UserAiBudget)
+        .where(UserAiBudget.user_id == user.id)
+        .where(UserAiBudget.month_start == month_start)
+    ).first()
+    if budget is None:
+        session.add(
+            UserAiBudget(
+                user_id=user.id,
+                month_start=month_start,
+                cap_usd=settings.MONTHLY_AI_CAP_USD,
+                spent_usd=Decimal("3.28"),
+            )
+        )
+        session.flush()
+
+    session.connection().execute(
+        sa_text("SELECT set_config('app.user_id', :uid, true)"),
+        {"uid": str(user.id)},
+    )
+    reserved = call_ai_reserve(
+        session,
+        job_id=store.JOB_ID_STRIPE,
+        resume_id=store.RESUME_ID_DISTRIBUTED,
+        provider="fake",
+        model=settings.DEEP_MATCH_SCORE_MODEL,
+        max_usd=settings.DEEP_MATCH_SCORE_COST_USD,
+        cap_usd=settings.MONTHLY_AI_CAP_USD,
+        error_paths={},
+    )
+    call_ai_settle(
+        session,
+        run_id=reserved["run_id"],
+        outcome="succeeded",
+        actual_usd=settings.DEEP_MATCH_SCORE_COST_USD,
+        score=store.MATCH_REPORT_SCORE,
+        rubric=[row.model_dump(mode="json") for row in store.MATCH_REPORT_RUBRIC],
+        gaps=[gap.model_dump(mode="json") for gap in store.MATCH_REPORT_GAPS],
+        strengths=list(store.MATCH_REPORT_STRENGTHS),
+        error_paths={},
+    )
+    session.commit()
+    return 1
+
+
 def seed_demo_user(session: Session, *, reset: bool = False) -> User:
     """Create or refresh the demo user. Idempotent: always leaves exactly one.
 
@@ -318,13 +405,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         # below composite-FKs the DEFAULT resume (RESUME_ID_DISTRIBUTED).
         resume_count = seed_demo_resumes(session, user)
         application_count = seed_demo_applications(session, user)
+        # AI seam after jobs + resumes (the run composite-FKs both).
+        ai_count = seed_demo_ai(session, user)
     logger.info(
         "Demo user seeded (with %d demo jobs, %d shortlist entries, "
-        "%d resumes, %d applications)",
+        "%d resumes, %d applications, %d canonical match report)",
         job_count,
         shortlist_count,
         resume_count,
         application_count,
+        ai_count,
     )
     return 0
 
