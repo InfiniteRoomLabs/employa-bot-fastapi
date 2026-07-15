@@ -4,7 +4,9 @@ PLAN (v3) says what we are building; this file says where we are. Update at ever
 
 ## Current state
 
-- Phase / run: sprint-04-applications-resume-snapshot / sprint-04-run-1 (status: COMPLETE -- shipped + self-advanced; master CI fully green at 73bf226)
+- Phase / run: sprint-05-fake-ai-seam / sprint-05-run-1 (status: running -- guard on, branch sprint-05-fake-ai-seam)
+- Exact next action: Codex D1 plan attack (MUST: fresh block + high risk) against the committed Goal block; then S2 investigation of the match/scoring surface. See the sprint-05-run-1 manifest below.
+- sprint-04 (prior phase): COMPLETE -- shipped + self-advanced; master CI fully green at 73bf226.
 - CI verification at the ship SHA 73bf226 (all first-try green, no INT-class fix): Test Backend (run 29454440296), Test Docker Compose (29454440213), Playwright incl. the extended core-journey through applied+snapshot (29454440258), Zizmor (29454440294) all success. The "core-journey required in CI" conjunct is closed against this run; conjunct 7's master-SHA evidence is complete.
 - Active branch: master (sprint-04 merged 86158a8; branch sprint-04-apps-resume-snapshot retained for history)
 - Last verified checkpoint: sprint-04 shipped and self-advanced to sprint-05 (merge 86158a8): D1 SOUND, panel closed (QA zero findings), D2 SOUND after two closure rounds (thread 019f67b4), full suite 456 + e2e 36/36 from clean volumes at the pre-merge tree. Survived the 2026-07-14 machine crash at the 1b1e17f boundary (preflight: NOT abandoned-dirty).
@@ -29,6 +31,26 @@ PLAN (v3) says what we are building; this file says where we are. Update at ever
 - Resume preflight 2026-07-13: tree carried pre-run dirt only (Wes's `.idea/*.iml` modifications + untracked `AGENTS.md`, both predating activation commit 9d3a784; not sprint work, left untouched). No prior manifest, run never started -> NOT abandoned-dirty; direct start. Queue copy in GOAL.md diffed against approved-queue.md rev 1: identical.
 
 ## Run manifests
+
+### sprint-05-run-1 (guard on 2026-07-15)
+
+- run_id: sprint-05-run-1
+- GOAL.md commit SHA as invoked: fa52f1d (master); this guard-on commit carries the S0 ratification (branch sprint-05-fake-ai-seam)
+- approved-queue.md commit SHA: 9d3a784dc830ae3bf2653d7b6a7c5eb2f9670d27 (Wes-authored, queue_revision 1, unchanged)
+- S0 record: Wes invoked `/goal Complete the snapshotted current run in @GOAL.md` against the sprint-05 ADVISORY block = the go decision (the recorded sprint-02/03/04 pattern). Retro proposals PR-9..PR-12 ratified at their stated default (adopt) into GOAL.md Proven patterns (this commit). Queue copy diffed vs approved-queue.md rev 1 at invocation: identical (trailing newline only). Entry criteria met: sprint-04 shipped (merge 86158a8, ship 73bf226, master CI fully green, recorded fa52f1d); the append-only machinery (075675058c67), the composite-FK child exemplar (shortlist_entry 4317eb75f1cd), and the sprint-04 append-only child exemplar (resume_snapshot, 5f1fb22cd505) all exist on master. Rubric warning carried to S3: decide whether ai_run/match_report need a mutation function AT ALL (write-once tables likely need only INSERT + the resume_snapshot-style append-only shape). Preflight: NOT abandoned-dirty (prior session ended at checkpoint fa52f1d; only pre-existing `.idea/*.iml` dirt, left untouched).
+- Codex D1 fires immediately after this commit (MUST: fresh block + high risk -- reservation arithmetic, append-only ai_run); the append-only enforcement shape for ai_run (reservation->actual conversion vs REVOKE) is resolved at spec time with D1. Codex D2 WILL fire pre-merge (MUST: reservation-cap concurrency + append-only ai_run).
+- Done-when conjuncts, verbatim from GOAL.md at that SHA (the single AND-joined predicate, split at each AND):
+  1. the `ai_run` / `match_report` tables (+ the budget row) exist via a migration satisfying every binding convention (tenant user_id + composite UNIQUE(user_id, id) anchors, composite FKs on every DB-entity reference, FORCE RLS under app_runtime != owner, timestamptz, NUMERIC money, the queue row's append-only enforcement on ai_run) with migration tests green under app_runtime
+  2. the match/scoring contract operations are served from the database with their manifest entries flipped to implemented and contract fidelity green
+  3. previewDeepMatchScore is pure arithmetic with no provider call
+  4. runDeepMatchScore enforces the reservation cap, proven by a two-connection test where concurrent runs never exceed the cap
+  5. a retry after a simulated post-reservation failure returns the existing run via the idempotency key (no double charge)
+  6. the fake provider is deterministic and explicit-only (never a fallback) behind app/ai/
+  7. a fake score persists and renders in the browser
+  8. the ownership-matrix tenancy tests pass (intruder_client cross-tenant reads/triggers across every match/ai op all fail tenant-indistinguishably)
+  9. frontend/e2e/core-journey.spec.ts is extended through the match score, green from a fresh seed and required in CI
+  10. the review ledger has no finding outside a terminal disposition
+  11. GOAL.md is retargeted to gate-0.1-terminal-audit and committed
 
 ### sprint-04-run-1 (guard on 2026-07-14)
 
