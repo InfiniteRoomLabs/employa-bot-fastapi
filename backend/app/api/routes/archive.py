@@ -17,13 +17,12 @@ from __future__ import annotations
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import and_
 from sqlmodel import Session as SqlSession
 from sqlmodel import col, select
 
 from app import models
 from app.api.deps import CurrentUser, TenantSession, get_current_user
-from app.application_mapper import row_to_wire_view
+from app.application_mapper import joined_applications_query, row_to_wire_view
 from app.schemas import ApplicationView
 
 router = APIRouter(dependencies=[Depends(get_current_user)], tags=["archive"])
@@ -55,24 +54,9 @@ def get_archive(
     """
     wanted: tuple[str, ...] = ("won",) if kind == "won" else _PASSED_OUTCOMES
     rows = session.exec(
-        select(models.Application, models.Job, models.Resume)
-        .join(
-            models.Job,
-            and_(
-                col(models.Job.id) == col(models.Application.job_id),
-                col(models.Job.user_id) == current_user.id,
-            ),
+        joined_applications_query(current_user.id).where(
+            col(models.Application.outcome).in_(wanted)
         )
-        .outerjoin(
-            models.Resume,
-            and_(
-                col(models.Resume.id) == col(models.Application.resume_id),
-                col(models.Resume.user_id) == current_user.id,
-            ),
-        )
-        .where(models.Application.user_id == current_user.id)
-        .where(col(models.Application.removed_at).is_(None))
-        .where(col(models.Application.outcome).in_(wanted))
     ).all()
     return [
         row_to_wire_view(app_row, job_row, resume_row)

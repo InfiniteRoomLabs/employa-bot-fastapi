@@ -52,7 +52,6 @@ from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 
 from fastapi import APIRouter, Body, Depends, Query
 from pydantic import BaseModel
-from sqlalchemy import and_
 from sqlalchemy import text as sa_text
 from sqlalchemy.exc import DBAPIError
 from sqlmodel import col, select
@@ -66,6 +65,7 @@ from app.api.errors import (
     ValidationTaggedError,
 )
 from app.application_mapper import (
+    joined_applications_query,
     row_to_wire_snapshot,
     row_to_wire_transition,
     row_to_wire_view,
@@ -168,31 +168,6 @@ class DismissBody(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-def _joined_applications_query(current_user_id: UUID):  # type: ignore[no-untyped-def]
-    """Base SELECT joining application -> job (+ resume via LEFT JOIN), the
-    join's ON clauses carrying the app-level tenant predicate as the belt
-    (RLS on job/resume is the systemic backstop -- see PIN-7)."""
-    return (
-        select(models.Application, models.Job, models.Resume)
-        .join(
-            models.Job,
-            and_(
-                col(models.Job.id) == col(models.Application.job_id),
-                col(models.Job.user_id) == current_user_id,
-            ),
-        )
-        .outerjoin(
-            models.Resume,
-            and_(
-                col(models.Resume.id) == col(models.Application.resume_id),
-                col(models.Resume.user_id) == current_user_id,
-            ),
-        )
-        .where(models.Application.user_id == current_user_id)
-        .where(col(models.Application.removed_at).is_(None))
-    )
-
-
 @router.get(
     "/applications",
     operation_id="getApplications",
@@ -224,7 +199,7 @@ def get_applications(
             if app.searchId == store.SEARCH_ID_AI_INFRA
         ]
     rows = session.exec(
-        _joined_applications_query(current_user.id)
+        joined_applications_query(current_user.id)
         .where(col(models.Application.outcome).is_(None))
         .order_by(col(models.Application.created_at), col(models.Application.id))
     ).all()
@@ -250,7 +225,7 @@ def get_application(
     application is DB-backed now).
     """
     row = session.exec(
-        _joined_applications_query(current_user.id).where(models.Application.id == id)
+        joined_applications_query(current_user.id).where(models.Application.id == id)
     ).first()
     if row is None:
         raise NotFoundError(f"applications/{id}")
@@ -457,7 +432,7 @@ def transition_application(
     # (SET LOCAL role/GUC die at commit -- see get_tenant_session).
     session.expire_all()
     view_row = session.exec(
-        _joined_applications_query(current_user.id).where(models.Application.id == id)
+        joined_applications_query(current_user.id).where(models.Application.id == id)
     ).one()
     transition_row = session.exec(
         select(models.StageTransition)
@@ -594,7 +569,7 @@ def mark_won(
     # (SET LOCAL role/GUC die at commit -- see get_tenant_session).
     session.expire_all()
     view_row = session.exec(
-        _joined_applications_query(current_user.id).where(models.Application.id == id)
+        joined_applications_query(current_user.id).where(models.Application.id == id)
     ).one()
     response = MarkWonResult(
         application=row_to_wire_view(*view_row),
@@ -647,7 +622,7 @@ def undo_mark_won(
     )
     session.expire_all()
     view_row = session.exec(
-        _joined_applications_query(current_user.id).where(models.Application.id == id)
+        joined_applications_query(current_user.id).where(models.Application.id == id)
     ).one()
     response = row_to_wire_view(*view_row)
     session.commit()
@@ -702,7 +677,7 @@ def reactivate_application(
     )
     session.expire_all()
     view_row = session.exec(
-        _joined_applications_query(current_user.id).where(models.Application.id == id)
+        joined_applications_query(current_user.id).where(models.Application.id == id)
     ).one()
     response = row_to_wire_view(*view_row)
     session.commit()
@@ -735,9 +710,11 @@ def dismiss_application(
     at runtime; append-only children make that impossible by design).
     Post-APPLIED (any later stage): the ONE mutation function transitions to
     WITHDREW with ``outcome=withdrawn`` and the D16 reason chips, mock
-    parity. PIN-12 (deviation from the mock, recorded): BOTH branches now
-    bump ``version``/append a ``stage_transition`` row where the mock
-    silently did neither.
+    parity. PIN-12 (deviation from the mock, recorded) applies to the
+    post-APPLIED branch only: it bumps ``version`` and appends a
+    ``stage_transition`` row where the mock silently did neither. The
+    pre-commit branch soft-removes ONLY -- no version bump, no history row
+    (removal is not a stage change).
     """
     app_row = session.exec(
         select(models.Application)
@@ -804,7 +781,7 @@ def get_application_timeline(
     <source>" event instead. 404 on unknown id.
     """
     view_row = session.exec(
-        _joined_applications_query(current_user.id).where(models.Application.id == id)
+        joined_applications_query(current_user.id).where(models.Application.id == id)
     ).first()
     if view_row is None:
         raise NotFoundError(f"applications/{id}")

@@ -21,7 +21,10 @@ from __future__ import annotations
 from typing import Any
 from uuid import UUID
 
-from app import schemas
+from sqlalchemy import and_
+from sqlmodel import col, select
+
+from app import models, schemas
 from app.job_mapper import row_to_wire_job
 from app.models import Application as ApplicationRow
 from app.models import Job as JobRow
@@ -29,6 +32,34 @@ from app.models import Resume as ResumeRow
 from app.models import ResumeSnapshot as ResumeSnapshotRow
 from app.models import StageTransition as StageTransitionRow
 from app.resume_mapper import row_to_wire_resume
+
+
+def joined_applications_query(current_user_id: UUID):  # type: ignore[no-untyped-def]
+    """Base SELECT joining application -> job (+ resume via LEFT JOIN), the
+    join's ON clauses carrying the app-level tenant predicate as the belt
+    (RLS is the systemic backstop). Shared by the applications AND archive
+    routers (S6 SIM-2: one copy, so a join-semantics fix can never silently
+    drift between the two views). Excludes soft-removed rows (PIN-14).
+    """
+    return (
+        select(models.Application, models.Job, models.Resume)
+        .join(
+            models.Job,
+            and_(
+                col(models.Job.id) == col(models.Application.job_id),
+                col(models.Job.user_id) == current_user_id,
+            ),
+        )
+        .outerjoin(
+            models.Resume,
+            and_(
+                col(models.Resume.id) == col(models.Application.resume_id),
+                col(models.Resume.user_id) == current_user_id,
+            ),
+        )
+        .where(models.Application.user_id == current_user_id)
+        .where(col(models.Application.removed_at).is_(None))
+    )
 
 
 def wire_application_to_row(
