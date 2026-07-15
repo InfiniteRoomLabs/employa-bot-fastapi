@@ -105,6 +105,26 @@ def test_get_resumes_serves_own_rows(
         schemas.Resume.model_validate(r)
 
 
+def test_get_resumes_id_tiebreak_on_equal_updated(
+    db: Session, db_client: TestClient, seed_domain: SeededUsers
+) -> None:
+    """RV-4 closure: with IDENTICAL updated timestamps the list falls back to
+    the id tie-break, so ordering is deterministic under collision."""
+    same_instant = datetime.now(UTC)
+    rows = []
+    for name in ("Tie-A", "Tie-B", "Tie-C"):
+        wire = _wire_resume(name=name)
+        wire.updated = same_instant
+        row = wire_resume_to_row(wire, user_id=seed_domain.test_user.id)
+        db.add(row)
+        rows.append(row)
+    db.commit()
+    expected = [r.name for r in sorted(rows, key=lambda r: r.id.hex)]
+    body = db_client.get(f"{B}/resumes").json()
+    listed = [r["name"] for r in body if r["name"].startswith("Tie-")]
+    assert listed == expected
+
+
 def test_create_resume_defaults_and_persists(
     db: Session, db_client: TestClient, seed_domain: SeededUsers
 ) -> None:

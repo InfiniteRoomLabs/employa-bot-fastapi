@@ -414,8 +414,9 @@ class StageTransition(SQLModel, table=True):
     function (owner-owned SECURITY DEFINER). ``seq`` is per-application
     monotonic under the function's row lock (UNIQUE(user_id, application_id,
     seq)). Undo writes a compensating row (source='user_correction' +
-    corrects_transition_id), never deletes (PIN-3). ``resume_id`` is a plain
-    historical column, validated at write time by the function.
+    corrects_transition_id), never deletes (PIN-3). ``resume_id`` carries the
+    composite FK to resume like every other DB-entity reference (D2-1;
+    migration-only, MATCH SIMPLE) on top of the function's write-time check.
     """
 
     __tablename__ = "stage_transition"

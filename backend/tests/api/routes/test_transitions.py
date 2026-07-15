@@ -35,7 +35,7 @@ from uuid import NAMESPACE_URL, uuid5
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import text
-from sqlalchemy.exc import IntegrityError, OperationalError
+from sqlalchemy.exc import DBAPIError, IntegrityError, OperationalError
 from sqlmodel import Session, select
 
 from app import crud, models, schemas
@@ -524,25 +524,44 @@ def test_two_connection_route_race_exactly_one_winner() -> None:
         assert statuses == [200, 409], results
         winner = next(r for r in results if r[0] == 200)
 
-        with Session(engine) as s:
-            transitions = s.exec(
-                select(models.StageTransition).where(
-                    models.StageTransition.application_id == app_id
-                )
-            ).all()
-            assert len(transitions) == 1
-            refreshed = s.get(models.Application, app_id)
-            assert refreshed is not None
-            assert refreshed.version == 2
-            snaps = s.exec(
-                select(models.ResumeSnapshot).where(
-                    models.ResumeSnapshot.application_id == app_id
-                )
-            ).all()
-            if winner[1]["application"]["stage"] == "applied":
-                assert len(snaps) == 1
-            else:
-                assert len(snaps) == 0
+        # Final-state assertions run UNDER THE RUNTIME ROLE + the tenant GUC
+        # (the recorded queue default: "assert on DB state under the runtime
+        # role" -- Codex D2-3): a broken RLS/visibility configuration cannot
+        # hide behind an owner-session read. Connection invalidate()d after
+        # (PR-7 pool hygiene).
+        check = engine.connect()
+        try:
+            check.execute(text("SET LOCAL ROLE app_runtime"))
+            check.execute(
+                text("SELECT set_config('app.user_id', :uid, true)"),
+                {"uid": str(uid)},
+            )
+            n_transitions = check.execute(
+                text(
+                    "SELECT count(*) FROM stage_transition"
+                    " WHERE application_id = :aid"
+                ),
+                {"aid": app_id},
+            ).scalar()
+            assert n_transitions == 1
+            row = check.execute(
+                text("SELECT stage, version FROM application WHERE id = :aid"),
+                {"aid": app_id},
+            ).one()
+            assert row.version == 2
+            assert row.stage == winner[1]["application"]["stage"]
+            n_snaps = check.execute(
+                text(
+                    "SELECT count(*) FROM resume_snapshot"
+                    " WHERE application_id = :aid"
+                ),
+                {"aid": app_id},
+            ).scalar()
+            assert n_snaps == (
+                1 if winner[1]["application"]["stage"] == "applied" else 0
+            )
+        finally:
+            check.invalidate()
     finally:
         with Session(engine) as s:
             crud.delete_user_with_history(session=s, user_id=uid)
@@ -610,11 +629,47 @@ def test_two_connection_sql_level_row_lock_serializes() -> None:
         conn_b.rollback()
         conn_a.commit()  # the winner
 
-        with Session(engine) as s:
-            refreshed = s.get(models.Application, app_id)
-            assert refreshed is not None
-            assert refreshed.version == 2
-            assert refreshed.stage == "dismissed"
+        # D2-4: the LOSER retries in a fresh transaction AFTER the winner
+        # committed -- the guarded UPDATE now matches zero rows (version
+        # moved) and the function raises the version-conflict SQLSTATE
+        # (EMP09), leaving no second transition row. This completes the
+        # deterministic proof: contention, exactly one winner, loser aborts
+        # before any child write.
+        conn_b.execute(text("SET LOCAL ROLE app_runtime"))
+        conn_b.execute(
+            text("SELECT set_config('app.user_id', :uid, true)"),
+            {"uid": str(uid)},
+        )
+        with pytest.raises(DBAPIError) as excinfo:
+            _call(conn_b)
+        assert getattr(excinfo.value.orig, "sqlstate", None) == "EMP09"
+        conn_b.rollback()
+
+        check = engine.connect()
+        try:
+            check.execute(text("SET LOCAL ROLE app_runtime"))
+            check.execute(
+                text("SELECT set_config('app.user_id', :uid, true)"),
+                {"uid": str(uid)},
+            )
+            row = check.execute(
+                text("SELECT stage, version FROM application WHERE id = :aid"),
+                {"aid": app_id},
+            ).one()
+            assert row.version == 2
+            assert row.stage == "dismissed"
+            assert (
+                check.execute(
+                    text(
+                        "SELECT count(*) FROM stage_transition"
+                        " WHERE application_id = :aid"
+                    ),
+                    {"aid": app_id},
+                ).scalar()
+                == 1
+            )
+        finally:
+            check.invalidate()
     finally:
         for c in (conn_a, conn_b):
             try:

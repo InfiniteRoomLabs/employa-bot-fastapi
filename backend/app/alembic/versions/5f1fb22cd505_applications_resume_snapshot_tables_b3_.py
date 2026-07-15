@@ -199,6 +199,14 @@ def upgrade():
         " FOREIGN KEY (user_id, corrects_transition_id)"
         " REFERENCES stage_transition (user_id, id)"
     )
+    # D2-1: the historical resume reference is ALSO a DB-entity reference and
+    # carries the composite FK like every other one (MATCH SIMPLE, NULL for
+    # non-applied hops). Harmless to enforce: any resume named here was locked
+    # at APPLIED (used_in bump + snapshot FK), so it was already undeletable.
+    op.execute(
+        "ALTER TABLE stage_transition ADD CONSTRAINT fk_stage_transition_resume"
+        " FOREIGN KEY (user_id, resume_id) REFERENCES resume (user_id, id)"
+    )
     op.execute(
         "ALTER TABLE resume_snapshot ADD CONSTRAINT fk_resume_snapshot_application"
         " FOREIGN KEY (user_id, application_id) REFERENCES application (user_id, id)"

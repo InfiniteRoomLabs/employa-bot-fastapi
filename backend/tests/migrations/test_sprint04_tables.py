@@ -346,6 +346,41 @@ def test_composite_fk_is_the_backstop_under_app_runtime(
         _mk_application(conn, a, b_job)
 
 
+def test_transition_resume_fk_rejects_cross_tenant(
+    conn: Connection, tenants: tuple[uuid.UUID, uuid.UUID]
+) -> None:
+    """D2-1: the historical resume reference on stage_transition carries the
+    composite FK too -- a cross-tenant resume_id fails at the DB."""
+    a, b = tenants
+    app = _mk_application(conn, a, _mk_job(conn, a))
+    b_resume = _mk_resume(conn, b)
+    tid = uuid.uuid4()
+    with pytest.raises(DBAPIError, match="fk_stage_transition_resume|foreign key"):
+        conn.execute(
+            text(
+                "INSERT INTO stage_transition (id, user_id, application_id, seq,"
+                " from_stage, to_stage, source, resume_id)"
+                " VALUES (:id, :uid, :aid, 1, 'drafting', 'applied', 'user', :rid)"
+            ),
+            {"id": tid, "uid": a, "aid": app, "rid": b_resume},
+        )
+
+
+def test_snapshot_resume_fk_blocks_resume_delete(
+    conn: Connection, tenants: tuple[uuid.UUID, uuid.UUID]
+) -> None:
+    """RV-3 closure, exercised at the CONSTRAINT (not the app-level 409):
+    deleting a resume referenced by a resume_snapshot fails on
+    fk_resume_snapshot_resume even as the owner -- constraints are
+    role-independent, so this is the delete backstop behind PIN-17."""
+    a, _ = tenants
+    app = _mk_application(conn, a, _mk_job(conn, a))
+    resume = _mk_resume(conn, a)
+    _mk_snapshot(conn, a, app, resume)
+    with pytest.raises(DBAPIError, match="fk_resume_snapshot_resume"):
+        conn.execute(text("DELETE FROM resume WHERE id = :id"), {"id": resume})
+
+
 def test_corrects_transition_fk_self_reference(
     conn: Connection, tenants: tuple[uuid.UUID, uuid.UUID]
 ) -> None:
