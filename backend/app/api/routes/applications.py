@@ -618,6 +618,10 @@ def undo_mark_won(
         error_paths={
             "EMP04": f"applications/{id}/undo-mark-won",
             "EMP4A": f"applications/{id}/undo-mark-won",
+            # COR-O-2: the app can leave `won` (won -> offer_rescinded)
+            # between the grant claim and the guarded UPDATE; map the
+            # resulting EMP22 to a proper envelope instead of a bare id.
+            "EMP22": f"applications/{id}/undo-mark-won",
         },
     )
     session.expire_all()

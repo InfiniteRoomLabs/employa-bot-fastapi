@@ -51,9 +51,16 @@ LOCKED_TAGS = frozenset({ResumeTag.TAILORED, ResumeTag.MASTER, ResumeTag.DEFAULT
 # FK constraints that back-stop the app-level delete-lock check (PIN-17): any
 # OTHER IntegrityError on the same commit is a real bug, not a lock conflict,
 # and must re-raise (COR-2/SIM-1 -- same disambiguation discipline as
-# shortlist.py's dedup-index check).
+# shortlist.py's dedup-index check). Inbound references only (RV-2/D2-6: the
+# outbound fk_resume_fork_job can never fire on a DELETE of the referencing
+# row and was removed as a dead branch); fk_stage_transition_resume joined
+# the set when D2-1 added that composite FK.
 _DELETE_BACKSTOP_CONSTRAINTS = frozenset(
-    {"fk_application_resume", "fk_resume_snapshot_resume", "fk_resume_fork_job"}
+    {
+        "fk_application_resume",
+        "fk_resume_snapshot_resume",
+        "fk_stage_transition_resume",
+    }
 )
 
 
