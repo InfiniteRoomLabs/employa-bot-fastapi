@@ -10,12 +10,13 @@ outer transaction blocks the script's INSERT). Cleanup is explicit instead.
 from collections.abc import Generator
 
 import pytest
-from sqlmodel import Session, delete, select
+from sqlmodel import Session, col, delete, select
 
+from app import crud, store
 from app.core.config import settings
 from app.core.db import engine
 from app.core.security import verify_password
-from app.models import User
+from app.models import Job, User
 from app.scripts.seed import (
     DEMO_CITY,
     DEMO_COMP_FLOOR,
@@ -35,9 +36,9 @@ def _delete_demo_user() -> None:
             select(User).where(User.email == settings.SEED_DEMO_EMAIL)
         ).first()
         if demo is not None:
-            # job.user_id is ON DELETE CASCADE (SIM-2) -- deleting the user
-            # takes its jobs with it.
-            session.delete(demo)
+            # PIN-11: the teardown helper handles the append-only children a
+            # plain ORM delete cannot (job/shortlist still cascade as before).
+            crud.delete_user_with_history(session=session, user_id=demo.id)
         session.commit()
 
 
@@ -113,6 +114,31 @@ def test_seed_reset_leaves_other_users_untouched() -> None:
                 delete(User).where(User.email == bystander_email)  # type: ignore[arg-type]
             )
             session.commit()
+
+
+@pytest.mark.usefixtures("clean_demo_slate")
+def test_plain_reseed_after_full_seed_is_green() -> None:
+    """LC-1 regression (sprint-04 3c): seed_demo_jobs' old delete+recreate
+    crashed EVERY plain re-seed (incl. prestart on container restart) with a
+    ForeignKeyViolation once shortlist entries composite-FK'd the demo jobs.
+    Upsert-in-place must make a second full run green with stable job ids."""
+    assert main([]) == 0
+    with Session(engine) as session:
+        job_ids_first = set(
+            session.exec(
+                select(Job.id).where(col(Job.id).in_(list(store.demo_job_seeds())))
+            ).all()
+        )
+    assert main([]) == 0  # crashed before the LC-1 fix
+    users = _get_demo_users()
+    assert len(users) == 1
+    with Session(engine) as session:
+        job_ids_second = set(
+            session.exec(
+                select(Job.id).where(col(Job.id).in_(list(store.demo_job_seeds())))
+            ).all()
+        )
+    assert job_ids_second == job_ids_first  # rows refreshed IN PLACE
 
 
 @pytest.mark.usefixtures("clean_demo_slate")

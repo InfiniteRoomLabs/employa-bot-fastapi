@@ -112,6 +112,10 @@ class Settings(BaseSettings):
     SEED_DEMO_EMAIL: EmailStr = "wes.gilleland@gmail.com"
     SEED_DEMO_PASSWORD: str = "employa-demo-1"
 
+    # markWon's undo grace window, in seconds (mock default 300; sprint-04
+    # spec PIN-4/DEBT-3, W-1 convention -- every tunable through Settings).
+    UNDO_WINDOW_SECONDS: int = 300
+
     def _check_default_secret(self, var_name: str, value: str | None) -> None:
         if value == "changethis":
             message = (

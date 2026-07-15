@@ -1,24 +1,12 @@
-"""Behavior tests for the archive resource (ORI-009). No database.
+"""The archive resource (ORI-009) is fully DB-backed.
 
-Covers: outcome-bucketed reads, seeded counts, and the required `kind`
-query param.
+Since sprint-04 3a both ops previously covered here (getArchive,
+getArchiveCounts) are DB-backed (docs/sprints/sprint-04-spec.md PIN-16) --
+neither op has a mock-served remainder, so there is nothing left to test
+DB-free here. Fidelity, bucket membership, and count coverage now lives in
+``tests/api/routes/test_applications.py`` alongside the applications
+fidelity suite (the archive read is an outcome-bucketed SELECT over the
+same ``application`` table).
 """
 
 from __future__ import annotations
-
-from fastapi.testclient import TestClient
-
-from tests.contract.helpers import B
-
-
-def test_archive_buckets(store_client: TestClient) -> None:
-    assert len(store_client.get(f"{B}/archive", params={"kind": "won"}).json()) == 1
-    assert len(store_client.get(f"{B}/archive", params={"kind": "passed"}).json()) == 14
-
-
-def test_archive_counts_seeded(store_client: TestClient) -> None:
-    assert store_client.get(f"{B}/archive/counts").json() == {"won": 1, "passed": 14}
-
-
-def test_archive_kind_required(store_client: TestClient) -> None:
-    assert store_client.get(f"{B}/archive").status_code == 422

@@ -451,6 +451,25 @@ def _seed_resumes() -> dict[UUID, Resume]:
     }
 
 
+_DEMO_RESUME_IDS: tuple[UUID, ...] = (
+    RESUME_ID_MASTER,
+    RESUME_ID_DISTRIBUTED,  # tag DEFAULT -- every seeded applied-hop snapshot locks this one
+    RESUME_ID_PLATFORM,
+)
+
+
+def demo_resume_seeds() -> dict[UUID, Resume]:
+    """Fresh copies of a MINIMAL demo resume set (sprint-04 3c, PIN-15): the
+    DEFAULT resume (locked by every seeded fixture application's applied-hop
+    snapshot) plus two non-default variants, same fixed UUIDs as
+    ``_seed_resumes`` so mock resume-label references keep resolving.
+
+    Public accessor for the seed script (mirrors ``demo_job_seeds``).
+    """
+    all_resumes = _seed_resumes()
+    return {rid: all_resumes[rid] for rid in _DEMO_RESUME_IDS}
+
+
 def _seed_resume_uploads() -> dict[UUID, ResumeUpload]:
     return {
         UPLOAD_ID_SWE_2023: ResumeUpload(
@@ -3378,6 +3397,23 @@ APP_UUID_BY_SLUG: dict[str, UUID] = {
     "sentry": UUID("6aeb106c-d04d-4bde-8720-62637449921d"),
     "be-column": UUID("f19cde93-416f-44e6-8e84-1a453e354a63"),
 }
+
+
+def demo_application_seeds() -> list[tuple[Application, Job]]:
+    """(application wire, job wire) pairs for the seven slug-keyed fixture
+    applications (sprint-04 3c, PIN-15): the ones interviews.py/match.py's
+    mock cross-refs key by application id (``APP_UUID_BY_SLUG``), so a
+    DB-served getApplication/getApplicationTimeline must resolve them too.
+
+    Public accessor for the seed script; every entry is drawn verbatim from
+    ``_ACTIVE_SEEDS`` (none of the seven are archived, confirmed at spec
+    time), built through the same ``_mk_app_and_job`` the in-memory store
+    uses for fidelity.
+    """
+    slugged = set(APP_UUID_BY_SLUG.values())
+    return [
+        _mk_app_and_job(seed) for seed in _ACTIVE_SEEDS if UUID(seed.app) in slugged
+    ]
 
 
 def _tl_id(fixture_id: str) -> UUID:

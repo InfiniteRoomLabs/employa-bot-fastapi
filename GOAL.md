@@ -11,7 +11,7 @@ approved_plan: docs/plans/full-stack-implementation-plan-v3.md
 process_spec: docs/plans/loop-research/sprint-treadmill-process.md
 progress_log: docs/progress.md
 consecutive_clean_reviews: 0
-status: ready
+status: running
 ---
 
 # GOAL.md -- current executable work contract
@@ -67,6 +67,7 @@ Self-advance MAY NOT: create/split/merge/reorder phases, promote a checkpoint to
 - Auth: every mock router carries `dependencies=[Depends(get_current_user)]`; ONE raise site in deps.py emits the uniform 401; do NOT add 403 to `_STATUS_TO_KIND` (contract maps unauthorized->401); login is throttled (Settings.LOGIN_THROTTLE_*) -- e2e suites must log in ONCE per run (see frontend/e2e/global-setup.ts).
 - Known traps: `resume_lifecycle` must stay included before `resumes` in `api/main.py` (path shadowing); the backend test suite's seed tests DELETE the demo user during cleanup -- re-run `python -m app.scripts.seed` (or prestart) after running the suite against the dev DB; changelog-guard requires a CHANGELOG entry on master commits; commit guard forbids .env in commits (wire env defaults through compose.yml); stage files explicitly (no -a).
 - Append-only machinery: migration 075675058c67 provides `enforce_append_only(regclass)` + the `app_runtime` role -- new append-only tables call the SQL function and add behavioral tests under `SET LOCAL ROLE app_runtime` (pattern: backend/tests/migrations/test_migration_gates.py).
+- Composite-FK child exemplar (sprint-03, ratified PR-5..PR-8 at sprint-04 S0): `shortlist_entry` (migration 4317eb75f1cd) is the copy-template for child tables -- composite FK (user_id, parent_id) -> parent(user_id, id) via raw op.execute, MATCH SIMPLE for optional refs, partial unique for optional dedup. (PR-6) a route surfacing a DB constraint MUST disambiguate by constraint name (`exc.orig.diag.constraint_name`), never catch-all `except IntegrityError`, when >1 constraint can fire. (PR-7) two-connection/concurrency tests using session-level `SET ROLE` MUST invalidate() their connections (or use SET LOCAL) -- a pooled connection left as app_runtime breaks later owner-role inserts under FORCE RLS. (PR-8) a DB/mock split's no-match fallback is re-derived per resource, never mechanically inherited from a fully-mock op's shape.
 - Encoding: ASCII-only prose in docs (Spec-Kitty gate).
 - Review discipline: findings ledger lives in docs/progress.md; dispositions are fixed / disproved-with-evidence / waived-by-Wes / frozen-HUMAN-DECISION (illegal at gate-0.1). Fanned finder/verifier agents must WRITE their report to a file (a lost-in-transit Haiku report cost a re-run in sprint-01).
 
