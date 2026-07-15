@@ -4,10 +4,10 @@ PLAN (v3) says what we are building; this file says where we are. Update at ever
 
 ## Current state
 
-- Phase / run: sprint-04-applications-resume-snapshot / sprint-04-run-1 (status: running -- guard on 2026-07-14)
-- Active branch: sprint-04-apps-resume-snapshot (internal checkpoints 3a/3b/3c commit here; ONE final merge to master per v3 abandonment-safety)
-- Last verified checkpoint: S5+S6 COMPLETE (this commit carries the pre-merge ledger) -- 3a/3b/3c all landed (dca1119, a38a1e9, f92e338, 1b1e17f, 575f56e, S6 closures dcc5c56); S5: lint clean, backend 453, generate-client zero diff, clean-volume compose boot + fresh-seed full e2e 36/36; S6 panel closed (QA zero findings, correctness clean + 1 LOW fixed, simplification 2 fixed). Completed-sprint entry + full review ledger below. Survived the 2026-07-14 machine crash at the 1b1e17f boundary (preflight: NOT abandoned-dirty).
-- Exact next action: Codex D2 pre-merge audit (MUST: append-only mechanics + populated concurrency + the guarded-UPDATE exemplar) against this commit; close its findings; then S7: ONE merge to master, CI verification at the merge SHA, self-advance GOAL.md to sprint-05-fake-ai-seam.
+- Phase / run: sprint-04-applications-resume-snapshot / sprint-04-run-1 (status: COMPLETE -- shipped + self-advanced; merge 86158a8; CI verification at the merge SHA recorded below once green)
+- Active branch: master (sprint-04 merged 86158a8; branch sprint-04-apps-resume-snapshot retained for history)
+- Last verified checkpoint: sprint-04 shipped and self-advanced to sprint-05 (merge 86158a8): D1 SOUND, panel closed (QA zero findings), D2 SOUND after two closure rounds (thread 019f67b4), full suite 456 + e2e 36/36 from clean volumes at the pre-merge tree. Survived the 2026-07-14 machine crash at the 1b1e17f boundary (preflight: NOT abandoned-dirty).
+- Next phase (sprint-05-fake-ai-seam) exact next action: SYNCHRONOUS S0 read-back with Wes (ADVISORY, HIGH-risk, fresh Goal block; the LAST implementation sprint before the terminal audit). At S0: diff the GOAL.md queue copy vs approved-queue.md rev 1, ratify PR-9..PR-12 (default adopt), heed the rubric warning (decide whether ai_run/match_report need a mutation function AT ALL), then resume preflight + /goal. Codex D1+D2 MUST fire. See the sprint-05 Goal block in GOAL.md.
 - Resume preflight 2026-07-14: prior session ended at checkpoint commit e918403; tree carried only the pre-existing `.idea/*.iml` dirt (not sprint work, left untouched). No prior sprint-04 manifest -> fresh run, NOT abandoned-dirty; direct start. Queue copy in GOAL.md diffed against approved-queue.md rev 1: identical.
 - sprint-03 CI verification at the ship SHA 2567e4c (all first-try green, no INT-class fix): Test Backend (run 29306199586), Test Docker Compose (29306199563), Playwright incl. the extended core-journey job->shortlist (29306199566), Zizmor (29306199581) all success. The "core-journey required in CI" conjunct is closed against this run.
 - S7 ship evidence at the merge SHA 5b3e09c: backend 354 passed (POSTGRES_SERVER=localhost uv run pytest -q), lint clean, generate-client zero diff, frontend unit 323 passed; core-journey (login -> create job -> lists/persists -> shortlist -> shortlist lists) green 11.7s against the rebuilt compose stack with a fresh seed (7 demo jobs + 6 shortlist entries). CI verification at the master SHA recorded below once green.
@@ -119,7 +119,7 @@ PLAN (v3) says what we are building; this file says where we are. Update at ever
 
 (One entry per shipped sprint: outcomes with evidence, AC covered, review results, deviations, cost line. This section absorbs the CHANGELOG role for sprint work.)
 
-### sprint-04-applications-resume-snapshot (run sprint-04-run-1, S7 in progress; branch sprint-04-apps-resume-snapshot; SHA-bound rows cite their producing commit, and the entry is finalized -- header re-stamped with the MASTER merge SHA -- in the ship commit)
+### sprint-04-applications-resume-snapshot (run sprint-04-run-1, shipped 2026-07-15, merge 86158a8)
 
 B3 WHOLE: applications + minimal resume + snapshot as ONE slice (3a dca1119/a38a1e9, 3b f92e338, 3c 1b1e17f/575f56e, S6 closures dcc5c56). The release long pole; survived a mid-run machine crash (2026-07-14 wireless-driver reboot: /tmp state lost, tree held at the 1b1e17f checkpoint boundary -- commit discipline is the abandonment protection, proven). Outcomes vs the 9 run-manifest conjuncts:
 
@@ -131,7 +131,7 @@ B3 WHOLE: applications + minimal resume + snapshot as ONE slice (3a dca1119/a38a
 6. Ownership matrix (the sprint-02/03 accepted reading, D2-5): every ID-ADDRESSED op + nested id (transition resumeId, fork jobId, undo token, snapshot/timeline fetches) fails cross-tenant as a tenant-indistinguishable 404; collection ops (getApplications/getResumes/getArchive/getArchiveCounts) prove tenancy by EXCLUSION (intruder sees zero victim rows -- they have no foreign id to address, so 404 is not the applicable shape); QA panel seat independently attacked over LIVE HTTP with two real users incl. a leaked unexpired undo token -- ZERO findings; PIN-19 matrix + FORCE RLS introspected on all 5 tables.
 7. Journey extended + CI: core-journey now runs job -> shortlist -> application (tracker lists it) -> drafting->applied (DEFAULT resume required; submittedSnapshotId captured) -> applied->offer rejected 422 invalid_transition -> deleteResume 409 (resume locked) -> snapshot GET id == submittedSnapshotId (real row, not synthesis) + snapshot dialog renders. Solo 16.7s; full e2e 36/36 from a clean-volume stack + fresh seed at 575f56e. CI run at the MASTER merge SHA recorded below once green (evidence binding).
 8. Ledger closed: sprint-04 review ledger below, every finding terminal.
-9. Retarget: the self-advance commit following the master merge.
+9. Retarget: GOAL.md self-advanced to sprint-05-fake-ai-seam in this ship commit (frontmatter run sprint-05-run-1, status ready; the sprint-05 block scaffolded from the queue row + v3 Phase B item 4 -- a FRESH block, so Codex D1 MUST fire at its S0).
 
 AC covered: AC-01a..g, AC-02, AC-03/03b, AC-04a..c, AC-05, AC-06a..c, AC-07a/b, AC-08..11 (docs/sprints/sprint-04-spec.md).
 
@@ -173,7 +173,7 @@ Dispositions per process section 4. D1 dispositions detailed in docs/sprints/spr
 | D2-8 | Codex D2 | MED | closure cells lacked discriminating command evidence (D1 aggregate, RV-3, IMPL-BUGs) | fixed | per-finding pointers + constraint-level test + named regression tests (edce88f) |
 | D2-9 | Codex D2 | MED | undo-race row overclaimed the compensating-transition proof | fixed | wording separates round-trip semantics from race cardinality |
 | D2-10 | Codex D2 | LOW | entry cited a stale SHA and read as premature | fixed | header states the re-stamp-at-merge rule; pre-merge placement is the process requirement (sprint-03 D2-3) |
-| D2-verdict | Codex D2 | -- | closure round: 1..5 and 7..10 CLOSED (2 and 5 as sustained disputes); 6 re-audited after edce88f+this row | final verdict recorded below at ship | thread 019f67b4 |
+| D2-verdict | Codex D2 | -- | two closure rounds: findings 1..10 all CLOSED (2 and 5 as disputes Codex SUSTAINED with sprint-02/03 precedent; 6 after the e4b5c0e re-class + code fixes); conjuncts 1-7,9 PROVEN pre-merge, 8 PROVEN at e4b5c0e | SOUND for the single merge to master | thread 019f67b4-2dfa-7df0-a106-4230b1b14de4 |
 
 Retro (2 questions):
 Q1 -- Proven-patterns proposals (inert until ratified at sprint-05 S0; default: adopt; expire after 2 plannings):
