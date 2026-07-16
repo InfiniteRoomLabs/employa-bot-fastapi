@@ -198,9 +198,28 @@ Source spec: docs/sprints/sprint-05-spec.md, "AC matrix (minted; every Done-when
 
 ## 3. Fresh-clone drill
 
-Recipe (GOAL.md conjunct): clean clone -> `docker compose up -d --build --wait` (prestart migrates + seeds) -> full backend suite in the compose backend -> frontend install/build/unit -> `bunx playwright test` with the compose frontend stopped (DEBT-9 CSP note) -> teardown.
+Recipe (GOAL.md conjunct): clean clone -> `docker compose up -d --build --wait` (prestart migrates + seeds) -> full backend suite -> frontend install/build/unit -> `bunx playwright test` with the compose frontend stopped (DEBT-9 CSP note) -> teardown. Executed 2026-07-16 (attempt 3); full raw transcript: 541 lines, preserved for this run at scratchpad/gate01-fresh-clone-drill.log (scratchpad is disposable per PR-12 -- the condensed evidence below is the durable record).
 
-(transcript + SHAs recorded on completion)
+```
+drill-start 2026-07-16T00:42:14Z
+git clone git@github.com:InfiniteRoomLabs/employa-bot-fastapi.git  (fresh dir, fresh compose project "employa-audit", fresh volumes)
+git rev-parse HEAD -> f43ffe323a90a09ef4e1ecf080cc8dd462aee749  (= the gate-0.1 guard-on SHA on master)
+docker compose build && docker compose up -d --wait backend frontend adminer -> all long-running services Healthy; prestart ran migrations + seed and Exited 0
+curl POST /api/v1/login/access-token (demo creds) -> demo-login-status=200   (discriminating: the FRESH volume had no users until prestart seeded)
+cd backend && uv sync && POSTGRES_SERVER=localhost uv run pytest -q -> 535 passed, 375 warnings in 38.49s
+cd frontend && bun ci && bun run build -> tsc -b && vite build: built in 972ms
+bun run test -> Test Files 73 passed | 1 skipped (74); Tests 323 passed | 4 skipped (327)
+docker compose stop frontend   (DEBT-9: prod-build CSP blocks its own Google-Fonts stylesheet; playwright serves its own build)
+docker compose exec -T backend python -m app.scripts.seed --reset   (known trap: the suite's seed tests delete the demo user)
+bunx playwright test -> 36 passed (40.9s), including [2/36] e2e/core-journey.spec.ts:77 "login -> create job -> lists + persists -> shortlist -> shortlist lists" (the full founder journey through the fake match score)
+docker compose down -v --remove-orphans -> containers, volumes (employa-audit_app-db-data), networks Removed
+drill-end 2026-07-16T00:46:36Z
+DRILL-RESULT: PASS
+```
+
+Drill deviations from the GOAL.md recipe text, recorded honestly:
+- `--wait` was scoped to `backend frontend adminer` (the CI recipe): a bare `docker compose up -d --wait` FAILS by design because the one-shot playwright/prestart services exit 0 (attempt 1's failure).
+- The backend suite ran from the clone on the host against the compose db (`POSTGRES_SERVER=localhost uv run pytest -q`, the canonical proven-pattern command) instead of `bash scripts/test.sh` / the compose-exec suite: attempt 2 proved those documented paths are broken template leftovers -- the backend image ships no `tests/` (finding GA-3). The suite content is identical either way.
 
 ## 4. Ledger sweep (frozen is illegal here -- Codex F11)
 
