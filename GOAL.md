@@ -1,51 +1,46 @@
 ---
 goal_protocol: 1
 queue_revision: 1
-current_phase: sprint-05-fake-ai-seam
-current_checkpoint: ADVISORY
-current_run_id: sprint-05-run-1
-next_phase: gate-0.1-terminal-audit
+current_phase: gate-0.1-terminal-audit
+current_checkpoint: HUMAN DECISION
+current_run_id: gate-0.1-run-1
+next_phase: none
 terminal_phase: gate-0.1-terminal-audit
 approved_queue: docs/plans/loop-research/approved-queue.md
 approved_plan: docs/plans/full-stack-implementation-plan-v3.md
 process_spec: docs/plans/loop-research/sprint-treadmill-process.md
 progress_log: docs/progress.md
-consecutive_clean_reviews: 0
-status: running
+consecutive_clean_reviews: 1
+status: ready
 ---
 
 # GOAL.md -- current executable work contract
 
-Operator runbook: sprint-05 is ADVISORY and HIGH-RISK (reservation arithmetic; append-only ai_run; the LAST implementation sprint before the terminal audit). A SYNCHRONOUS S0 read-back is required (fresh Goal block -- Codex D1 MUST fire pre-guard; D2 MUST fire pre-merge: reservation-cap concurrency + append-only ai_run). At S0, diff this queue copy against approved-queue.md rev 1, ratify the sprint-04 retro proposals PR-9..PR-12 (default: adopt; see docs/progress.md sprint-04 retro) into Proven patterns, and heed the sprint-04 simplification rubric warning: decide at spec time whether ai_run/match_report need a mutation function AT ALL (write-once tables likely need only INSERT + the resume_snapshot-style append-only shape) -- reflexively copying sprint-04's function pattern would be scope creep. Then run the resume preflight and invoke `/goal Complete the snapshotted current run in @GOAL.md`. At S1 guard-on, append the run manifest to docs/progress.md and commit before any work.
+Operator runbook: this is the TERMINAL phase (gate-0.1-terminal-audit), a HUMAN DECISION checkpoint -- the Release 0.1 audit, NOT an implementation sprint. All five implementation sprints (01-05) have shipped: the founder journey (login -> job -> shortlist -> application+transitions+snapshot -> fake match score) is one abandonment-safe DB-backed vertical on master. The self-advance may NOT invent further work past this phase (Codex F11/terminal rule). At the audit: run the Codex release audit against the e2e journey + a fresh-clone drill + the incrementally-built AC traceability matrix; frozen ledger dispositions are ILLEGAL here (every open finding must reach fixed / disproved-with-evidence / waived-by-Wes). PASS -> set status: COMPLETE, remove the active work goal, summarize optional debt, stop -- NO retarget. FAIL -> status: BLOCKED with the failing evidence + a proposed repair scope written as options for Wes; the queue pre-approves ONE gate-0.1-repair transition (scoped to the audit's named failures only). A second FAIL is a HUMAN DECISION with no pre-approved path.
 
-## Goal -- Sprint 05: B4 fake AI seam
+## Goal -- Gate 0.1: Release 0.1 terminal audit
 
-> Do not stop until the fake-AI seam (ai_run + match_report + the reservation-capped scoring flow) is integrated on master and GOAL.md is retargeted.
-> 1. Investigation -- map the mock match/scoring surface (getMatchReport, previewDeepMatchScore, runDeepMatchScore, their wire schemas incl. nested resumeId/jobId ids, store fixtures, frontend consumers -- match-explorer screens) and any usage/aggregate ops that later read ai_run; confirm the sprint-04 exemplars to copy (resume_snapshot-style append-only child shape; PIN-19 privilege narrowing; the budget/locked-row pattern) and DECIDE whether ai_run/match_report need a mutation function at all (write-once records likely need only INSERT -- the sprint-04 rubric's explicit warning). Label CONFIRMED/INFERRED/UNKNOWN.
-> 2. Spec -- binding spec is plan v3 "Phase B" item 4 + Data-integrity #5/#6 (the reservation cap: a short transaction reserves a conservative max via `reserved += max WHERE spent + reserved + max <= cap` on a locked per-user budget row and inserts ai_run(reserved); the provider is called OUTSIDE the transaction; reservation converts to actual after; idempotency key + unique constraint so a retry after a failure returns the existing run -- no double charge) + the AI seam (`app/ai/` ABC + `fake.py` deterministic and explicit-only, never a fallback + `factory.py`; previewDeepMatchScore = pure arithmetic, no provider call) + match_report immutable-version + current-pointer semantics (no ambiguous "current") + NUMERIC money + timestamptz + the queue row's append-only ai_run (resolve the exact enforcement shape -- reservation->actual conversion vs REVOKE -- at spec time with D1); mint AC IDs; charter the panel seats (QA: "can intruder_client read or trigger scoring against another user's resume/job/report via any op or nested id -- all tenant-indistinguishable 404s -- and can any caller read another tenant's budget or runs?"; correctness/security (Opus): "does the reservation arithmetic hold under two connections -- cap never exceeded, exactly one reservation per idempotency key, retry returns the existing run without double-charging; does conversion happen outside the provider call's transaction; is ai_run append-only as specced; are match_report versions immutable with an unambiguous current pointer?"; simplification: "did ai_run/match_report copy the resume_snapshot exemplar, and was a mutation function correctly NOT built if the tables are write-once?").
-> 3. Implementation -- branch sprint-05-fake-ai-seam. ai_run (NUMERIC cost columns, timestamptz, status CHECK) + match_report + the per-user budget row under the binding conventions; the AI seam behind app/ai/ with AI_PROVIDER=fake; previewDeepMatchScore pure arithmetic; runDeepMatchScore through the reservation flow; manifest flips for the match/scoring ops; seed extends behind the gate; `frontend/e2e/core-journey.spec.ts` EXTENDED through the match score (fake provider) from a fresh seed.
-> 4. Reviews -- 3-seat panel per charters; ownership-matrix sweep (every new op + nested id); Codex D1 pre-guard (fresh block + high risk -- MUST); Codex D2 pre-merge (reservation-cap concurrency + append-only ai_run -- MUST). Ledger closed per process spec section 4 dispositions.
-> 5. Ship -- bash scripts/lint.sh + both suites + compose boot green; progress.md completed-sprint entry, retro (2 questions, <=10 lines), cost line; self-advance this file to gate-0.1-terminal-audit.
-> Done when: the `ai_run` / `match_report` tables (+ the budget row) exist via a migration satisfying every binding convention (tenant user_id + composite UNIQUE(user_id, id) anchors, composite FKs on every DB-entity reference, FORCE RLS under app_runtime != owner, timestamptz, NUMERIC money, the queue row's append-only enforcement on ai_run) with migration tests green under app_runtime AND the match/scoring contract operations are served from the database with their manifest entries flipped to implemented and contract fidelity green AND previewDeepMatchScore is pure arithmetic with no provider call AND runDeepMatchScore enforces the reservation cap, proven by a two-connection test where concurrent runs never exceed the cap AND a retry after a simulated post-reservation failure returns the existing run via the idempotency key (no double charge) AND the fake provider is deterministic and explicit-only (never a fallback) behind app/ai/ AND a fake score persists and renders in the browser AND the ownership-matrix tenancy tests pass (intruder_client cross-tenant reads/triggers across every match/ai op all fail tenant-indistinguishably) AND frontend/e2e/core-journey.spec.ts is extended through the match score, green from a fresh seed and required in CI AND the review ledger has no finding outside a terminal disposition AND GOAL.md is retargeted to gate-0.1-terminal-audit and committed.
-> Advisory questions and recorded defaults: see approved-queue.md sprint-05 (reservation conversion timing -> reserve conservative max in a short txn, call provider outside the txn, convert reservation->actual after (v3 Data-integrity #5/#6); idempotency key + unique constraint for retry safety).
-> Stop only for: a contract question mvp-api.yaml cannot answer (HUMAN DECISION); any change that would require editing mvp-api.yaml; an open review finding requiring a PO waiver (options + evidence written to the ledger); a release-blocking frozen finding.
+> Do not stop until the Release 0.1 audit returns a recorded PASS/FAIL verdict with evidence and status is set (COMPLETE on PASS, BLOCKED on FAIL). This phase INVENTS NO implementation work -- it audits what sprints 01-05 shipped.
+> 1. Assemble -- the incremental AC traceability matrix (AC IDs minted at each sprint's S3, already in docs/sprints/sprint-0N-spec.md; never retro-fabricated) mapped to the passing tests; the full founder journey frontend/e2e/core-journey.spec.ts (login -> job -> shortlist -> application -> applied+snapshot -> fake match score) as the demo of record.
+> 2. Fresh-clone drill -- from a clean clone: `docker compose up -d --build --wait` (prestart seeds), `bash scripts/test.sh` (or the compose-exec suite), then `bunx playwright test` with the compose frontend stopped (DEBT-9 CSP note). Record the transcript + SHAs.
+> 3. Codex release audit (MUST) -- the falsifiable question: "Should this ship -- does the evidence demonstrate the founder journey end to end, from a clean clone, with no conjunct satisfied by letter-not-spirit?" Aimed at the whole cumulative vertical, not one sprint.
+> 4. Ledger -- every finding open at this terminal phase reaches fixed / disproved-with-evidence / waived-by-Wes (frozen is ILLEGAL, Codex F11). Carried debt (DEBT-6/8/9/10/11) is triaged: release-blocking -> a permitted stop for Wes; non-blocking -> recorded as optional post-0.1 debt.
+> Done when (TERMINAL schema): the release audit returns PASS with its evidence recorded (fresh-clone drill transcript + SHAs, core-journey green in CI at the audited master SHA, the AC traceability matrix complete), every ledger finding is at fixed / disproved-with-evidence / waived-by-Wes (no frozen), AND status: COMPLETE is set with NO retarget. COMPLETE on a FAIL audit is ILLEGAL.
+> Advisory questions and recorded defaults: none -- this is HUMAN DECISION. The ship/no-ship call and any waiver are Wes's.
+> Stop only for: the PASS/FAIL ship decision (HUMAN DECISION); any release-blocking finding requiring a PO waiver (options + evidence written to the ledger); a FAIL audit (-> BLOCKED + the pre-approved gate-0.1-repair scope).
 
-## Completion evidence
+## Completion evidence (gate-0.1 terminal audit -- filled when the audit runs)
 
 | Predicate | Evidence (commit SHA + exact command + exit status + durable output) | Verification command |
 |---|---|---|
-| ai_run/match_report/budget migration under conventions | migration file(s) + tests green under app_runtime at the master SHA | cd backend && POSTGRES_SERVER=localhost uv run pytest tests/migrations -q |
-| reservation cap under concurrency + idempotent retry | two-connection test: cap never exceeded, one reservation per key, retry returns the existing run; asserted on DB state under the runtime role | POSTGRES_SERVER=localhost uv run pytest tests/api -q -k "reservation or budget or idempot" |
-| append-only ai_run (per the spec-resolved shape) | behavioral refusals under app_runtime | POSTGRES_SERVER=localhost uv run pytest tests/migrations -q -k "ai_run or append" |
-| preview is pure arithmetic | no provider invocation asserted (spy/fake counter) | POSTGRES_SERVER=localhost uv run pytest tests/api -q -k "preview" |
-| ops DB-backed + manifest flipped | contract + fidelity tests green; manifest diff | uv run pytest tests/contract -q && git show HEAD -- docs/operation-ownership.yaml |
-| tenancy ownership matrix | intruder tests green across every match/ai op | POSTGRES_SERVER=localhost uv run pytest tests/api -q -k "intruder or tenant" |
-| journey through match score | core-journey transcript from a fresh seed (AI_PROVIDER=fake) | cd frontend && bunx playwright test e2e/core-journey.spec.ts |
-| core-journey required in CI | CI run URL for the master SHA | gh run view <id> |
-| review ledger closed | ledger section in docs/progress.md | manual read |
-| retarget | GOAL.md diff in the ship commit | git show HEAD -- GOAL.md |
+| fresh-clone drill | clean-clone transcript: `docker compose up -d --build --wait` seeds; full suite + e2e green at the audited SHA | (recorded at audit) |
+| core-journey required in CI at the audited master SHA | CI run URL, playwright job green over the e2e dir | gh run view <id> |
+| AC traceability matrix complete | every AC (sprints 01-05, docs/sprints/*-spec.md) maps to a passing test | manual read of the matrix |
+| ledger has no frozen finding | all findings across sprints 01-05 at fixed / disproved-with-evidence / waived-by-Wes | manual read of docs/progress.md ledgers |
+| Codex release audit verdict | thread id + PASS/FAIL + evidence | (recorded at audit) |
+| terminal state set | status: COMPLETE on PASS (no retarget) / BLOCKED + repair scope on FAIL | git show HEAD -- GOAL.md |
 
-Evidence binding: every row names the commit SHA it was produced against; stale evidence is re-run at S7, not trusted. Master reachability is part of every row (Codex D1-1, sprint-01): evidence binds to the MASTER merge SHA.
+Evidence binding: every row names the commit SHA it was produced against. The sprint-05-run-1 completion evidence (bound to merge SHA 3125d4b) is preserved in docs/progress.md's sprint-05 completed-sprint entry, not here -- this table is the terminal audit's own.
 
 ### Self-advance (last Ship step, every run)
 
