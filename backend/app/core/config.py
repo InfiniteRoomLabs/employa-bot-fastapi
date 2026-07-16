@@ -1,5 +1,6 @@
 import secrets
 import warnings
+from decimal import Decimal
 from typing import Annotated, Any, Literal, Self
 
 from pydantic import (
@@ -115,6 +116,19 @@ class Settings(BaseSettings):
     # markWon's undo grace window, in seconds (mock default 300; sprint-04
     # spec PIN-4/DEBT-3, W-1 convention -- every tunable through Settings).
     UNDO_WINDOW_SECONDS: int = 300
+
+    # AI seam (sprint-05 spec PIN-A9/A11). AI_PROVIDER is explicit-only at
+    # the factory: "fake" is the declared default for the one provider that
+    # exists in Release 0.1, and any OTHER value fails closed (503) -- no
+    # code path falls back to fake. Money settings are Decimal end-to-end
+    # (DB NUMERIC(10,6)); defaults are the mock's exact values.
+    AI_PROVIDER: str = "fake"
+    MONTHLY_AI_CAP_USD: Decimal = Decimal("20.00")
+    DEEP_MATCH_SCORE_COST_USD: Decimal = Decimal("0.14")
+    DEEP_MATCH_SCORE_MODEL: str = "gemini-1.5-pro"
+    # Per-user runDeepMatchScore throttle (PIN-A10): checked BEFORE the
+    # reservation, so a throttled request never touches the budget.
+    DEEP_SCORE_THROTTLE_USER_PER_MINUTE: int = 10
 
     def _check_default_secret(self, var_name: str, value: str | None) -> None:
         if value == "changethis":

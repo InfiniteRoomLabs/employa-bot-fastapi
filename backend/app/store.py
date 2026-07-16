@@ -1688,8 +1688,6 @@ def reset() -> None:
     credentials.clear()
     credentials.update(_seed_credentials())
     # Phase-2 agents: add ``<res>.clear(); <res>.update(_seed_<res>())`` here.
-    global month_spend_usd
-
     searches.clear()
     searches.update(_seed_searches())
 
@@ -1719,8 +1717,6 @@ def reset() -> None:
             SEARCH_ID_AI_INFRA: _seed_shortlist_ai_infra_entries(),
         }
     )
-
-    month_spend_usd = _INITIAL_MONTH_SPEND_USD
 
     _active, _arch, _derived_jobs = _seed_application_state()
     applications.clear()
@@ -2699,24 +2695,12 @@ MATCH_REPORT_STRENGTHS: list[str] = [
 # deep match score budget (D8b / D9a -- monthly LLM cap)
 # ---------------------------------------------------------------------------
 #
-# Ported from fixtures.ts LLM_TASK_COST_USD['deep-match-score'] and
-# SETTINGS_USAGE_TOTALS. The routing model ('gemini-1.5-pro') is fixtures.ts
-# SETTINGS_ROUTING's 'Match scoring' row -- used as the CostPreviewItem/
-# AiRunEnvelope model label even though execution is the synthetic FakeProvider.
-
-DEEP_MATCH_SCORE_COST_USD = 0.14
-DEEP_MATCH_SCORE_MODEL = "gemini-1.5-pro"
-MONTHLY_CAP_USD = 20.00
-_INITIAL_MONTH_SPEND_USD = 3.42
-
-# Mutable running monthly spend. Bumped by each successful runDeepMatchScore.
-month_spend_usd: float = _INITIAL_MONTH_SPEND_USD
-
-
-def cap_remaining_usd() -> float:
-    """Remaining monthly-cap headroom in USD (D8b), floored at 0."""
-    return round(max(0.0, MONTHLY_CAP_USD - month_spend_usd), 2)
-
+# The deep-match-score budget block that lived here (DEEP_MATCH_SCORE_*,
+# MONTHLY_CAP_USD, month_spend_usd, cap_remaining_usd) moved to Settings +
+# the user_ai_budget table in sprint-05 (spec PIN-A11/A12): costs/cap are
+# env-tunable via app.core.config, and spend is a per-tenant DB row mutated
+# only by the budget functions. The seed's mock-parity baseline (3.42
+# spent) lives in app/scripts/seed.py.
 
 # ---------------------------------------------------------------------------
 # applications / archive / transitions / timelines / interviews / snapshots

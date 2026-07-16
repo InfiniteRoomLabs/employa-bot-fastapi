@@ -358,21 +358,21 @@ operations:
 
   getMatchReport:
     slice: 3
-    status: planned
+    status: implemented
     ai: false
     consumer: useMatchReport / match report screen
-    tests: [contract-fidelity]
+    tests: [contract-fidelity, ownership-404]
 
   previewDeepMatchScore:
     slice: 3
-    status: planned
+    status: implemented
     ai: false
     consumer: previewDeepMatchScore / deep-score cost-preview dialog (D8b / D21)
-    tests: [contract-fidelity]
+    tests: [contract-fidelity, ownership-404]
 
   runDeepMatchScore:
     slice: 3
-    status: planned
+    status: implemented
     ai: true
     consumer: runDeepMatchScore / deep-score action (D8 / D9a)
     tests: [contract-fidelity, ownership-404, ai-envelope, provider-unavailable, cap-reached, rate-limited]

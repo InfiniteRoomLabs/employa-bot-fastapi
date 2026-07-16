@@ -60,6 +60,11 @@ _DELETE_BACKSTOP_CONSTRAINTS = frozenset(
         "fk_application_resume",
         "fk_resume_snapshot_resume",
         "fk_stage_transition_resume",
+        # sprint-05 (PIN-A14): a scored resume is referenced by its runs and
+        # reports -- both append-only, so the reference can never be cleared
+        # at runtime; deletion refuses with the same 409 lock conflict.
+        "fk_ai_run_resume",
+        "fk_match_report_resume",
     }
 )
 

@@ -159,3 +159,42 @@ def test_seed_reset_recreates_login_capable_user() -> None:
         settings.SEED_DEMO_PASSWORD, recreated[0].hashed_password
     )
     assert verified
+
+
+@pytest.mark.usefixtures("clean_demo_slate")
+def test_seed_materializes_canonical_match_report() -> None:
+    """Sprint-05 PIN-A13: the canonical pair gets a function-walked settled
+    run with the FIXTURE payload (score 92, headroom 16.58 -- mock parity),
+    and a plain re-seed neither duplicates the graph nor moves the budget."""
+    from decimal import Decimal
+
+    from app.models import AiRun, MatchReport, UserAiBudget
+
+    assert main([]) == 0
+    demo = _get_demo_users()[0]
+    with Session(engine) as session:
+        report = session.exec(
+            select(MatchReport)
+            .where(MatchReport.user_id == demo.id)
+            .where(MatchReport.job_id == store.JOB_ID_STRIPE)
+            .where(MatchReport.resume_id == store.RESUME_ID_DISTRIBUTED)
+        ).one()
+        assert report.score == store.MATCH_REPORT_SCORE  # 92, NOT the fake 95
+        assert report.version == 1
+        assert len(report.rubric) == 4
+        budget = session.exec(
+            select(UserAiBudget).where(UserAiBudget.user_id == demo.id)
+        ).one()
+        assert budget.spent_usd == Decimal("3.42")  # 3.28 baseline + 0.14 run
+        assert budget.reserved_usd == Decimal("0")
+
+    assert main([]) == 0  # plain re-seed: all-or-nothing skip
+    with Session(engine) as session:
+        runs = session.exec(
+            select(AiRun).where(AiRun.user_id == demo.id)
+        ).all()
+        assert len(runs) == 1
+        budget = session.exec(
+            select(UserAiBudget).where(UserAiBudget.user_id == demo.id)
+        ).one()
+        assert budget.spent_usd == Decimal("3.42")

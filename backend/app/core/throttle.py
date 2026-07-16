@@ -60,6 +60,19 @@ def login_attempt_allowed(*, account: str, ip: str) -> bool:
         return not over
 
 
+def deep_score_attempt_allowed(*, user_id: str) -> bool:
+    """Record one runDeepMatchScore attempt; False when the per-user window
+    is exhausted (sprint-05 spec PIN-A10). Checked BEFORE the reservation so
+    a throttled request never touches the budget."""
+    now = time.monotonic()
+    with _lock:
+        return not _over_limit(
+            f"deepscore:{user_id}",
+            settings.DEEP_SCORE_THROTTLE_USER_PER_MINUTE,
+            now,
+        )
+
+
 def reset() -> None:
     """Test hook: drop all windows."""
     with _lock:

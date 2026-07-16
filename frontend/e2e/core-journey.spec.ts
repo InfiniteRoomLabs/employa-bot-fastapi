@@ -309,4 +309,89 @@ test("login -> create job -> lists + persists -> shortlist -> shortlist lists", 
   await expect(
     page.getByRole("dialog").getByText("Distributed-systems"),
   ).toBeVisible()
+
+  // ==== Sprint-05 extension: deep match score through the fake provider ===
+  // Match Explorer's default view is the seeded canonical pair
+  // (JOB_ID_STRIPE / RESUME_ID_DISTRIBUTED); there is no click-path into it
+  // with a specific pair (DEC-058), so navigate directly. The seed
+  // materialized report v1 at the FIXTURE score 92 (backend PIN-A13); the
+  // deterministic fake provider scores this pair 95 (baseline 92 + 3), so
+  // 95 is the run's discriminator: absent from a fresh seed, produced by
+  // runDeepMatchScore, persisted as the new current version, and rendered
+  // after reload.
+  const MATCH_REPORT_API = /\/api\/v1\/match-report\?/
+  const reportResp = page.waitForResponse(
+    (r) => MATCH_REPORT_API.test(r.url()) && r.request().method() === "GET",
+  )
+  await page.goto("/resumes/match-explorer")
+  const reportR = await reportResp
+  expect(reportR.status()).toBe(200)
+  const reportBody = (await reportR.json()) as {
+    score: number
+    resumeId: string
+    jobId: string
+  }
+  // Fresh seed -> 92 (the seeded fixture report). A re-run against a
+  // not-reseeded stack legitimately sees the prior run's 95; the strict
+  // fresh-seed absence proof also lives in the backend seed test
+  // (test_seed_materializes_canonical_match_report).
+  expect([92, 95]).toContain(reportBody.score)
+  await expect(
+    page.getByRole("heading", { name: "Rubric", exact: true }),
+  ).toBeVisible()
+  await expect(
+    page.getByRole("heading", { name: "Strengths", exact: true }),
+  ).toBeVisible()
+
+  // --- Preview (pure arithmetic; network-asserted), then approve-and-run.
+  const previewResp = page.waitForResponse(
+    (r) =>
+      /\/preview-deep-score$/.test(r.url()) && r.request().method() === "POST",
+  )
+  await page.getByRole("button", { name: /re-run deep score/i }).click()
+  const previewR = await previewResp
+  expect(previewR.status()).toBe(200)
+  const previewBody = (await previewR.json()) as {
+    totalUsd: number
+    overCap: boolean
+  }
+  expect(previewBody.overCap).toBe(false)
+  expect(previewBody.totalUsd).toBeGreaterThan(0)
+
+  const runResp = page.waitForResponse(
+    (r) => /\/deep-score$/.test(r.url()) && r.request().method() === "POST",
+  )
+  await page.getByRole("button", { name: /approve and run/i }).click()
+  const runR = await runResp
+  expect(runR.status()).toBe(200)
+  const runBody = (await runR.json()) as {
+    score: number
+    costUsd: number
+    aiRun: { provider: string; status: string; synthetic: boolean }
+  }
+  expect(runBody.score).toBe(95) // deterministic fake: min(99, 92 + 3)
+  expect(runBody.aiRun.provider).toBe("fake")
+  expect(runBody.aiRun.status).toBe("succeeded")
+  expect(runBody.aiRun.synthetic).toBe(true)
+
+  // --- The success toast reports the run's score.
+  await expect(page.getByText("Deep score: 95")).toBeVisible()
+
+  // --- Persistence: the implemented read op now serves the NEW current
+  // version (95 supersedes the seeded 92 at version 2).
+  const afterResp = await page.request.get(
+    `${API_ROOT}/api/v1/match-report?resumeId=${reportBody.resumeId}&jobId=${reportBody.jobId}`,
+    { headers },
+  )
+  expect(afterResp.status()).toBe(200)
+  const afterBody = (await afterResp.json()) as { score: number }
+  expect(afterBody.score).toBe(95)
+
+  // --- And a reload renders the persisted score (not stale client state).
+  const reloadReportResp = page.waitForResponse(
+    (r) => MATCH_REPORT_API.test(r.url()) && r.request().method() === "GET",
+  )
+  await page.reload()
+  expect((await reloadReportResp).status()).toBe(200)
+  await expect(page.locator(".match-pill__score").first()).toHaveText("95")
 })

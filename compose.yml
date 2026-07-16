@@ -68,6 +68,9 @@ services:
       - SECRET_KEY=${SECRET_KEY?Variable not set}
       - FIRST_SUPERUSER=${FIRST_SUPERUSER?Variable not set}
       - FIRST_SUPERUSER_PASSWORD=${FIRST_SUPERUSER_PASSWORD?Variable not set}
+      # Explicit for the e2e journey (sprint-05 PIN-A15): the fake provider
+      # is configuration, never a fallback (spec PIN-A9).
+      - AI_PROVIDER=${AI_PROVIDER:-fake}
       - SMTP_HOST=${SMTP_HOST}
       - SMTP_USER=${SMTP_USER}
       - SMTP_PASSWORD=${SMTP_PASSWORD}
@@ -101,6 +104,9 @@ services:
       - SECRET_KEY=${SECRET_KEY?Variable not set}
       - FIRST_SUPERUSER=${FIRST_SUPERUSER?Variable not set}
       - FIRST_SUPERUSER_PASSWORD=${FIRST_SUPERUSER_PASSWORD?Variable not set}
+      # Explicit for the e2e journey (sprint-05 PIN-A15): the fake provider
+      # is configuration, never a fallback (spec PIN-A9).
+      - AI_PROVIDER=${AI_PROVIDER:-fake}
       - SMTP_HOST=${SMTP_HOST}
       - SMTP_USER=${SMTP_USER}
       - SMTP_PASSWORD=${SMTP_PASSWORD}
