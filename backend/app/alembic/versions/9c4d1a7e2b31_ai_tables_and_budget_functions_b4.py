@@ -60,7 +60,7 @@ CREATE FUNCTION ai_reserve_run(
 ) RETURNS jsonb
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public
+SET search_path = public, pg_temp
 AS $fn$
 DECLARE
     v_tenant uuid;
@@ -181,7 +181,7 @@ CREATE FUNCTION ai_settle_run(
 ) RETURNS jsonb
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public
+SET search_path = public, pg_temp
 AS $fn$
 DECLARE
     v_tenant uuid;
@@ -203,6 +203,9 @@ BEGIN
         OR p_rubric IS NULL OR p_gaps IS NULL OR p_strengths IS NULL) THEN
         RAISE EXCEPTION 'succeeded settlement requires cost and payload'
             USING ERRCODE = 'EMP34';
+    END IF;
+    IF p_actual_usd IS NOT NULL AND p_actual_usd < 0 THEN
+        RAISE EXCEPTION 'actual cost may not be negative' USING ERRCODE = 'EMP34';
     END IF;
 
     SELECT * INTO v_run
@@ -286,7 +289,7 @@ CREATE OR REPLACE FUNCTION delete_user_with_history(p_user_id uuid)
 RETURNS boolean
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public
+SET search_path = public, pg_temp
 AS $fn$
 BEGIN
     ALTER TABLE stage_transition DISABLE TRIGGER append_only_guard;

@@ -364,7 +364,14 @@ def test_function_privileges_and_definition(conn: Connection) -> None:
             {"fn": fn},
         ).one()
         assert row.prosecdef is True
-        assert any("search_path=public" in c for c in row.proconfig or [])
+        # F1 (correctness seat): pg_temp MUST be pinned (last) so a caller
+        # with TEMP privilege cannot shadow public tables and defeat the cap.
+        # Substring "search_path=public" alone passed for both the safe and
+        # the unsafe value -- assert the exact pinned config.
+        assert row.proconfig == ["search_path=public, pg_temp"], (
+            fn,
+            row.proconfig,
+        )
         assert "app_runtime=X" in (row.acl or "")
         # no PUBLIC grant: an ACL entry granting to PUBLIC starts with '=X'
         assert "{=X" not in (row.acl or "") and ",=X" not in (row.acl or "")
@@ -383,6 +390,53 @@ def test_runtime_cannot_create_in_public_schema(conn: Connection) -> None:
         text("SELECT has_schema_privilege('app_runtime', 'public', 'CREATE')")
     ).scalar_one()
     assert ok is False
+
+
+def test_temp_table_shadow_cannot_defeat_the_cap(
+    conn: Connection, tenants: tuple[uuid.UUID, uuid.UUID]
+) -> None:
+    """F1 regression (correctness seat, HIGH): with pg_temp pinned LAST, a
+    caller who forges a same-named TEMP user_ai_budget with an inflated cap
+    cannot fool ai_reserve_run's guard -- the function reads the REAL public
+    row. Before the fix (bare 'search_path = public') the temp table was
+    searched first and a real over-reservation was created."""
+    owner, _ = tenants
+    job = _mk_job(conn, owner)
+    resume = _mk_resume(conn, owner)
+    # a real budget row with almost no headroom
+    _guc(conn, owner)
+    first = _reserve(conn, job, resume, max_usd="19.94", cap_usd="20.00")
+    _settle(conn, first["run_id"], "succeeded", actual_usd="19.94")
+    real_budget_id = conn.execute(
+        text("SELECT id FROM user_ai_budget WHERE user_id = :u"), {"u": owner}
+    ).scalar_one()
+
+    # forge a temp shadow with the SAME id but a 9999 cap, as app_runtime
+    conn.execute(text("SET LOCAL ROLE app_runtime"))
+    conn.execute(
+        text(
+            "CREATE TEMP TABLE user_ai_budget (id uuid, user_id uuid,"
+            " month_start date, cap_usd numeric, reserved_usd numeric,"
+            " spent_usd numeric)"
+        )
+    )
+    conn.execute(
+        text(
+            "INSERT INTO user_ai_budget"
+            " SELECT :bid, :uid, now()::date, 9999, 0, 0"
+        ),
+        {"bid": real_budget_id, "uid": owner},
+    )
+    job2 = None
+    conn.execute(text("RESET ROLE"))
+    job2 = _mk_job(conn, owner)
+    _guc(conn, owner)
+    conn.execute(text("SET LOCAL ROLE app_runtime"))
+    # the guard reads the REAL 0.06 headroom, not the temp 9999 -> refused
+    # (the raise aborts the txn; the conn fixture rolls back at teardown)
+    with pytest.raises(DBAPIError) as ei:
+        _reserve(conn, job2, resume, max_usd="5.00", cap_usd="20.00")
+    assert _sqlstate(ei.value) == "EMP30"
 
 
 # --------------------------------------------- AC-02: append-only + RLS
@@ -582,6 +636,33 @@ def test_actual_cost_above_reservation_refused(
     with pytest.raises(DBAPIError) as ei:
         _settle(conn, walked["run_id"], "succeeded", actual_usd="0.20")
     assert _sqlstate(ei.value) == "EMP34"
+
+
+def test_negative_actual_cost_refused_zero_mutation(
+    conn: Connection, tenants: tuple[uuid.UUID, uuid.UUID]
+) -> None:
+    """D2-2: a negative actual cost is refused (EMP34 guard + the
+    ck_ai_run_event_cost_nonneg CHECK belt); the reservation is untouched.
+    A SAVEPOINT isolates the refused settle so the outer reservation survives
+    for the post-check."""
+    owner, _ = tenants
+    walked = _walk_one_run(conn, owner, settle_outcome=None)
+    before = _budget(conn, owner)
+    sp = conn.begin_nested()
+    with pytest.raises(DBAPIError) as ei:
+        _settle(conn, walked["run_id"], "succeeded", actual_usd="-0.01")
+    assert _sqlstate(ei.value) == "EMP34"
+    sp.rollback()
+    # nothing settled: the run is still open, the reservation still held
+    assert _budget(conn, owner) == before == (Decimal("0"), Decimal("0.14"))
+    n_events = conn.execute(
+        text(
+            "SELECT count(*) FROM ai_run_event WHERE run_id = :r"
+            " AND kind IN ('succeeded', 'failed')"
+        ),
+        {"r": walked["run_id"]},
+    ).scalar_one()
+    assert n_events == 0
 
 
 # --------------------------------------------- AC-05/AC-06: reservation cap,
@@ -802,8 +883,27 @@ def test_two_connection_same_triple_second_adopts(
         assert got_b["adopted"] is True
         assert got_b["run_id"] == got_a["run_id"]
 
-        _guc(setup, owner)
+        # D2-3: committed cardinality asserted UNDER THE RUNTIME ROLE on a
+        # fresh connection -- exactly one run, one reserved event, one
+        # idempotency key, exact balances.
+        _as_runtime(setup, owner)
+        runs = setup.execute(
+            text("SELECT id, idempotency_key FROM ai_run WHERE user_id = :u"),
+            {"u": owner},
+        ).all()
+        assert len(runs) == 1
+        assert runs[0].id == uuid.UUID(got_a["run_id"])
+        assert len({r.idempotency_key for r in runs}) == 1
+        reserved_events = setup.execute(
+            text(
+                "SELECT count(*) FROM ai_run_event"
+                " WHERE run_id = :r AND kind = 'reserved'"
+            ),
+            {"r": got_a["run_id"]},
+        ).scalar_one()
+        assert reserved_events == 1
         assert _budget(setup, owner) == (Decimal("0"), Decimal("0.14"))
+        setup.execute(text("RESET ROLE"))
         setup.execute(text("SELECT delete_user_with_history(:u)"), {"u": owner})
         setup.commit()
     finally:
