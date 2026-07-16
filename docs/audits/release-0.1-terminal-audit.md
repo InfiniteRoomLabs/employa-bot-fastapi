@@ -6,7 +6,14 @@ The falsifiable question (Codex release audit, per the trigger-function row): "S
 
 ## Verdict
 
-(recorded at the end of the run)
+**FAIL** (Codex release audit, thread 019f6865-95f7-7e12-b00b-294099f32d69, 2026-07-15). Four exact named failures -- all traceability/proof-path defects, none a demonstrated product defect; the cumulative founder journey itself was ruled PROVEN ("discriminating ... this proves the cumulative vertical"):
+
+1. `sprint-04 AC-07b`: missing concurrent opposite-direction `setDefaultResume` swap test (MEDIUM, blocking).
+2. `sprint-04 AC-08`: missing `intruder_client` tenancy tests for `getArchive` and `getArchiveCounts` (MEDIUM, blocking).
+3. `gate-0.1 fresh-clone drill`: the mandated `scripts/test.sh` / compose-exec backend test path is broken -- the image ships no `tests/`; the host-recipe substitution proved the suite but not the mandated path (MEDIUM, blocking, letter-not-spirit).
+4. `gate-0.1 AC traceability matrix complete`: false while GA-1/GA-2 remain GAP rows (HIGH, blocking; the corollary of 1-2).
+
+Terminal state per GOAL.md: **status: BLOCKED**; repair limited to the named failures via the pre-approved gate-0.1-repair transition; the go/no-go on that repair (or any waiver) is Wes's. COMPLETE on a FAIL audit is illegal and was not set.
 
 ## 1. Demo of record
 
@@ -267,4 +274,31 @@ Note: the sprint-04 QA panel's live-HTTP two-user attack transcripts (panel-qa.m
 
 ## 6. Codex release audit
 
-(thread id, findings, dispositions, verdict recorded here)
+Thread 019f6865-95f7-7e12-b00b-294099f32d69 (gpt release auditor, read-only sandbox over this tree; the drill transcript + CI runs supplied as the live evidence per PR-15). Verdict: **FAIL**, first statement. Findings and rulings verbatim-condensed:
+
+| Finding | Severity | Ruling |
+|---|---|---|
+| GA-1 concurrent default-swap test never written (AC-07b promises it) | MED | BLOCKING -- "static reasoning plus single-request tests are not the promised concurrency proof" |
+| GA-2 getArchive/getArchiveCounts lack per-op intruder tests (AC-08 says ALL 20 ops) | MED | BLOCKING -- shared query + FORCE RLS "reduce product risk but do not satisfy the literal all-operations ownership matrix" |
+| GA-3 mandated scripts/test.sh / compose-exec path broken (image ships no tests/) | MED | BLOCKING -- "exactly a letter-not-spirit substitution"; the host recipe proved the suite, not the mandated path |
+| AC matrix "complete" conjunct | HIGH | BLOCKING while GA-1/GA-2 are GAP rows (corollary) |
+| Founder journey implementation evidence | -- | PASS, non-blocking -- core-journey ruled discriminating end to end (unique content, reloads, illegal transition, snapshot identity, resume lock, 92->95 provider discriminator); noted: partly API-driven with UI read-back, not wholly UI-driven |
+| Fresh-clone product execution | -- | PASS, non-blocking apart from GA-3; correct audited SHA f43ffe3; docs-only commits after it change no product code |
+| "Required in CI" reading | INFO | NON-BLOCKING -- satisfied under the manifests' historically accepted process meaning (workflow runs the whole e2e dir; ship records demonstrably withheld on red runs); must never be represented as branch-protection enforcement |
+| Carried debt (11 items) | LOW/MED | NON-BLOCKING -- "none independently defeats the demonstrated cumulative vertical" |
+
+No reply-round dispute was raised by the lead: GA-1/GA-2/GA-3 were this audit's own pre-disclosed findings, and the process rule (disputed severity = release-blocking, section 4) makes a severity dispute pointless by construction. The verdict stands as issued.
+
+## 7. Repair scope -- options for Wes (HUMAN DECISION)
+
+The queue pre-approves ONE gate-0.1-repair transition, scoped to the four named failures only, returning to the terminal audit when its conjuncts close. A second FAIL after that repair is a HUMAN DECISION with no pre-approved path. The options:
+
+**Option A -- run gate-0.1-repair (recommended; one short session, test-only + docs-only diffs, no product code):**
+1. GA-1: write the concurrent opposite-direction `setDefaultResume` swap test (two connections, no deadlock, exactly one DEFAULT after) -- copy the existing two-connection shape (test_two_connection_route_race_exactly_one_winner) with PR-7 connection hygiene.
+2. GA-2: write `test_get_archive_excludes_other_tenant` + `test_get_archive_counts_excludes_other_tenant` (exclusion shape, per the accepted D2-5 collection-op reading).
+3. GA-3: retire the broken paths honestly -- point repo-root `scripts/test.sh` and CLAUDE.md's compose-exec instructions at the canonical host recipe (`cd backend && POSTGRES_SERVER=localhost uv run pytest -q` against the compose db). Shipping `tests/` in the production image is the alternative and is NOT recommended (test deps in a prod image).
+4. Flip the two matrix GAP rows to yes; re-run the Codex terminal audit against the repaired tree.
+
+**Option B -- waive some or all:** `waived-by-Wes` is a legal terminal disposition. Any subset of the four can be waived with the waiver recorded in the ledger (e.g. waive GA-3 as docs debt and repair only the two tests); the re-run audit then judges the waived state.
+
+**Option C -- hold:** leave the run BLOCKED and decide later. Nothing regresses; master is green and the drill evidence stands.

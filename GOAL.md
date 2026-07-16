@@ -11,7 +11,7 @@ approved_plan: docs/plans/full-stack-implementation-plan-v3.md
 process_spec: docs/plans/loop-research/sprint-treadmill-process.md
 progress_log: docs/progress.md
 consecutive_clean_reviews: 1
-status: running
+status: BLOCKED
 ---
 
 # GOAL.md -- current executable work contract
@@ -33,12 +33,12 @@ Operator runbook: this is the TERMINAL phase (gate-0.1-terminal-audit), a HUMAN 
 
 | Predicate | Evidence (commit SHA + exact command + exit status + durable output) | Verification command |
 |---|---|---|
-| fresh-clone drill | clean-clone transcript: `docker compose up -d --build --wait` seeds; full suite + e2e green at the audited SHA | (recorded at audit) |
-| core-journey required in CI at the audited master SHA | CI run URL, playwright job green over the e2e dir | gh run view <id> |
-| AC traceability matrix complete | every AC (sprints 01-05, docs/sprints/*-spec.md) maps to a passing test | manual read of the matrix |
-| ledger has no frozen finding | all findings across sprints 01-05 at fixed / disproved-with-evidence / waived-by-Wes | manual read of docs/progress.md ledgers |
-| Codex release audit verdict | thread id + PASS/FAIL + evidence | (recorded at audit) |
-| terminal state set | status: COMPLETE on PASS (no retarget) / BLOCKED + repair scope on FAIL | git show HEAD -- GOAL.md |
+| fresh-clone drill | PASS at f43ffe3 (fresh GitHub clone, fresh compose project + volumes): prestart seeds -> demo login 200 -> backend `POSTGRES_SERVER=localhost uv run pytest -q` 535 passed -> frontend build + 323 unit passed -> `bunx playwright test` 36/36 incl. core-journey -> `down -v` clean; condensed transcript in docs/audits/release-0.1-terminal-audit.md section 3. CAVEAT (audit failure 3): the GOAL-mandated `scripts/test.sh` / compose-exec path is broken (image ships no tests/, GA-3); the suite ran via the canonical host recipe | docs/audits/release-0.1-terminal-audit.md section 3 |
+| core-journey required in CI at the audited master SHA | all four workflows green at f83684b (Playwright run 29460780470 over the whole e2e dir), 1e61182, f43ffe3; NO branch-protection rule exists -- satisfied under the accepted process meaning per the Codex ruling (INFO, non-blocking) | gh run view 29460780470 |
+| AC traceability matrix complete | 75 ACs traced in docs/audits/release-0.1-terminal-audit.md section 2; 73 fully mapped, 2 GAP rows (sprint-04 AC-07b, AC-08) -> conjunct FAILED (audit failure 4) | manual read of the matrix |
+| ledger has no frozen finding | all findings across sprints 01-05 at fixed / disproved-with-evidence / waived-by-Wes; `grep frozen docs/progress.md` -> zero disposition cells. The four gate-0.1 audit findings are OPEN pending Wes (the failing evidence of the BLOCKED state, per the FAIL path) | manual read of docs/progress.md ledgers |
+| Codex release audit verdict | thread 019f6865-95f7-7e12-b00b-294099f32d69: **FAIL**, 4 exact named failures (GA-1, GA-2, GA-3, matrix-complete); journey/debt/CI-reading ruled non-blocking; full record in docs/audits/release-0.1-terminal-audit.md section 6 | read the audit doc |
+| terminal state set | status: BLOCKED + repair options for Wes (audit doc section 7); COMPLETE not set (illegal on FAIL); NO retarget | git show HEAD -- GOAL.md |
 
 Evidence binding: every row names the commit SHA it was produced against. The sprint-05-run-1 completion evidence (bound to merge SHA 3125d4b) is preserved in docs/progress.md's sprint-05 completed-sprint entry, not here -- this table is the terminal audit's own.
 
