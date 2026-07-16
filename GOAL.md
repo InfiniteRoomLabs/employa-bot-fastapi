@@ -11,7 +11,7 @@ approved_plan: docs/plans/full-stack-implementation-plan-v3.md
 process_spec: docs/plans/loop-research/sprint-treadmill-process.md
 progress_log: docs/progress.md
 consecutive_clean_reviews: 1
-status: ready
+status: running
 ---
 
 # GOAL.md -- current executable work contract
@@ -67,6 +67,9 @@ Self-advance MAY NOT: create/split/merge/reorder phases, promote a checkpoint to
 - Composite-FK child exemplar (sprint-03, ratified PR-5..PR-8 at sprint-04 S0): `shortlist_entry` (migration 4317eb75f1cd) is the copy-template for child tables -- composite FK (user_id, parent_id) -> parent(user_id, id) via raw op.execute, MATCH SIMPLE for optional refs, partial unique for optional dedup. (PR-6) a route surfacing a DB constraint MUST disambiguate by constraint name (`exc.orig.diag.constraint_name`), never catch-all `except IntegrityError`, when >1 constraint can fire. (PR-7) two-connection/concurrency tests using session-level `SET ROLE` MUST invalidate() their connections (or use SET LOCAL) -- a pooled connection left as app_runtime breaks later owner-role inserts under FORCE RLS. (PR-8) a DB/mock split's no-match fallback is re-derived per resource, never mechanically inherited from a fully-mock op's shape.
 - Encoding: ASCII-only prose in docs (Spec-Kitty gate).
 - Review discipline: findings ledger lives in docs/progress.md; dispositions are fixed / disproved-with-evidence / waived-by-Wes / frozen-HUMAN-DECISION (illegal at gate-0.1). Fanned finder/verifier agents must WRITE their report to a file (a lost-in-transit Haiku report cost a re-run in sprint-01).
+- SECURITY DEFINER search_path (sprint-05, ratified PR-13 at gate-0.1 S0): any SECURITY DEFINER function that reads a table an app_runtime caller could shadow MUST pin `SET search_path = public, pg_temp` (pg_temp LAST), and its introspection test MUST assert the exact proconfig value, not a substring -- a bare `= public` lets a TEMP-privileged caller shadow-read (panel F1). The sprint-04 functions (application_stage_transition, application_soft_remove) still carry bare `= public` -> DEBT-11.
+- Reserve-then-settle exemplar (sprint-05, ratified PR-14 at gate-0.1 S0): the two-function shape (short reserve txn -> provider OUTSIDE any txn -> settle txn, with arm_tenant_transaction re-arming role+GUC after the mid-request commit) is the copy-template for any future "reserve external work, then record the result" flow; app/ai_flow.py is the exemplar.
+- Review-tier limits (sprint-05, ratified PR-15 at gate-0.1 S0, process): Codex's sandbox cannot reach the compose postgres, so its audits run static-only -- keep a live-SQL correctness seat as a MUST on any sprint touching SECURITY DEFINER / privilege boundaries; never treat a green Codex D2 as covering runtime behavior it could not execute.
 
 ## Approved queue (copy of approved-queue.md rev 1)
 

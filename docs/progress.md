@@ -4,8 +4,8 @@ PLAN (v3) says what we are building; this file says where we are. Update at ever
 
 ## Current state
 
-- Phase / run: gate-0.1-terminal-audit (status: ready -- TERMINAL, HUMAN DECISION; the release audit, no further implementation sprints)
-- Exact next action: run the Gate 0.1 terminal audit -- core-journey.spec.ts required in CI (already is), fresh-clone drill, incremental AC traceability matrix; the Codex release audit asks "should this ship end-to-end from a clean clone with no conjunct satisfied by letter-not-spirit?" PASS -> status: COMPLETE (no retarget); FAIL -> status: BLOCKED + the pre-approved gate-0.1-repair transition. Frozen dispositions are ILLEGAL here (Codex F11).
+- Phase / run: gate-0.1-terminal-audit, run gate-0.1-run-1 (status: running -- TERMINAL, HUMAN DECISION; the release audit, no further implementation sprints)
+- Exact next action: execute the audit steps in order -- (1) AC traceability matrix (docs/audits/release-0.1-terminal-audit.md), (2) fresh-clone drill with transcript + SHAs, (3) Codex release audit ("should this ship end-to-end from a clean clone with no conjunct satisfied by letter-not-spirit?"), (4) ledger sweep + carried-debt triage (DEBT-1..11; frozen ILLEGAL, Codex F11). PASS -> status: COMPLETE (no retarget); FAIL -> status: BLOCKED + the pre-approved gate-0.1-repair transition.
 - sprint-05 (prior phase): COMPLETE -- shipped (merge 3125d4b) + self-advanced to gate-0.1-terminal-audit (ship commit f83684b). D1 SOUND (14 closed), 3-seat panel (QA zero findings, correctness F1 HIGH fixed + F2 Phase-C, simplification 9/10), sweep 8/8, D2 SOUND (4 closed). Backend 535 + migrations 51 + e2e 36/36 green. CI verification at the ship SHA f83684b (all four first-try green): Test Backend (run 29460780433), Test Docker Compose (29460780467), Playwright incl. the extended core-journey through the fake match score (29460780470), Zizmor (29460780475) all success. The "core-journey required in CI" conjunct (9) is closed against this run; conjunct 9's master-SHA evidence is complete.
 - sprint-04 (earlier): COMPLETE -- master CI fully green at 73bf226.
 - CI verification at the ship SHA 73bf226 (all first-try green, no INT-class fix): Test Backend (run 29454440296), Test Docker Compose (29454440213), Playwright incl. the extended core-journey through applied+snapshot (29454440258), Zizmor (29454440294) all success. The "core-journey required in CI" conjunct is closed against this run; conjunct 7's master-SHA evidence is complete.
@@ -32,6 +32,18 @@ PLAN (v3) says what we are building; this file says where we are. Update at ever
 - Resume preflight 2026-07-13: tree carried pre-run dirt only (Wes's `.idea/*.iml` modifications + untracked `AGENTS.md`, both predating activation commit 9d3a784; not sprint work, left untouched). No prior manifest, run never started -> NOT abandoned-dirty; direct start. Queue copy in GOAL.md diffed against approved-queue.md rev 1: identical.
 
 ## Run manifests
+
+### gate-0.1-run-1 (guard on 2026-07-15)
+
+- run_id: gate-0.1-run-1
+- GOAL.md commit SHA as invoked: 1e61182 (master; the sprint-05 CI-verification commit); this guard-on commit carries the S0 ratification
+- approved-queue.md commit SHA: 9d3a784dc830ae3bf2653d7b6a7c5eb2f9670d27 (Wes-authored, queue_revision 1, unchanged; md5 9a86bf93f21392979f492ecb3198e3e6)
+- S0 record: Wes invoked `/goal Complete the snapshotted current run in @GOAL.md` against the gate-0.1 TERMINAL block = the go decision for the audit run (the recorded sprint-02..05 pattern). This phase is HUMAN DECISION: the audit runs autonomously, the ship/no-ship call and any waiver are Wes's. Retro proposals PR-13..PR-15 ratified at their stated default (adopt) into GOAL.md Proven patterns (this commit). Queue copy in GOAL.md diffed vs approved-queue.md rev 1 at invocation: identical. Entry criteria met: all five implementation sprints shipped (sprint-05 merge 3125d4b, ship f83684b); master CI fully green at BOTH f83684b (Test Backend 29460780433, Docker Compose 29460780467, Playwright 29460780470, Zizmor 29460780475) and HEAD 1e61182 (Test Backend 29461039673, Docker Compose 29461039742, Playwright 29461039680, Zizmor 29461039684). Preflight: NOT abandoned-dirty (tree carries only the pre-existing `.idea/*.iml` dirt + the untracked disposable `scratchpad/`; no gate-0.1 work exists; fresh run, direct start).
+- The Codex release audit MUST fire (per the trigger function row: release audit). Frozen dispositions are ILLEGAL in this run (Codex F11). This phase INVENTS NO implementation work; a FAIL routes to the pre-approved gate-0.1-repair scope only.
+- Done-when conjuncts, verbatim from GOAL.md at that SHA (TERMINAL schema):
+  1. the release audit returns PASS with its evidence recorded (fresh-clone drill transcript + SHAs, core-journey green in CI at the audited master SHA, the AC traceability matrix complete)
+  2. every ledger finding is at fixed / disproved-with-evidence / waived-by-Wes (no frozen)
+  3. status: COMPLETE is set with NO retarget (COMPLETE on a FAIL audit is ILLEGAL; FAIL -> status: BLOCKED + the pre-approved gate-0.1-repair scope as options for Wes)
 
 ### sprint-05-run-1 (guard on 2026-07-15)
 
