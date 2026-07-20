@@ -40,9 +40,7 @@ class FakeAiProvider(AiProvider):
     def deep_match_score(self, request: DeepMatchInput) -> DeepMatchOutcome:
         if request.baseline_score is not None:
             score = min(99, request.baseline_score + 3)
-            strengths = list(request.baseline_strengths) or list(
-                _FALLBACK_STRENGTHS
-            )
+            strengths = list(request.baseline_strengths) or list(_FALLBACK_STRENGTHS)
             gap_texts = list(request.baseline_gaps) or list(_FALLBACK_GAPS)
         else:
             score = _FALLBACK_SCORE

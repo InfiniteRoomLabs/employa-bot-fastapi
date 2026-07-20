@@ -14,18 +14,25 @@ served; a DB-only row is. Drift: wire -> row -> wire round-trips.
 
 from __future__ import annotations
 
+import threading
 import uuid
 from collections.abc import Generator
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
 from sqlmodel import Session, select
 
-from app import models, schemas, store
+from app import crud, models, schemas, store
+from app.core import security
+from app.core.config import settings
+from app.core.db import engine
 from app.job_mapper import wire_job_to_row
+from app.main import app
+from app.models import UserCreate
 from app.resume_mapper import row_to_wire_resume, wire_resume_to_row
 from tests.conftest import SeededUsers
+from tests.utils.utils import random_email, random_lower_string
 
 B = "/api/v1"
 
@@ -551,3 +558,89 @@ def test_wire_round_trip_preserves_shape() -> None:
         row = wire_resume_to_row(resume, user_id=uuid.uuid4())
         back = row_to_wire_resume(row)
         assert back.model_dump(mode="json") == resume.model_dump(mode="json")
+
+
+# ------------------------------------------------- default-swap race (GA-1)
+
+
+def test_two_connection_default_swap_no_deadlock_one_default() -> None:
+    """Two CONCURRENT opposite-direction setDefaultResume requests (each
+    promoting the resume the other would demote) -> both complete without
+    deadlock and exactly one DEFAULT survives (PIN-5; gate-0.1 GA-1).
+
+    The user-row ``FOR UPDATE`` lock is the serialization point: both
+    requests succeed 200 in some order, and whichever commits second holds
+    DEFAULT. Runs on a THROWAWAY committed user outside the rollback fixture
+    (threaded requests need rows visible across connections), mirroring the
+    lifecycle race tests; teardown via delete_user_with_history (PIN-11).
+    """
+    with Session(engine) as s:
+        user = crud.create_user(
+            session=s,
+            user_create=UserCreate(
+                email=random_email(), password=random_lower_string()
+            ),
+        )
+        uid = user.id
+        res_a = wire_resume_to_row(
+            _wire_resume(name="Swap A", tag=schemas.ResumeTag.DEFAULT),
+            user_id=uid,
+        )
+        res_b = wire_resume_to_row(
+            _wire_resume(name="Swap B", tag=schemas.ResumeTag.VARIANT),
+            user_id=uid,
+        )
+        s.add(res_a)
+        s.add(res_b)
+        s.commit()
+        id_a, id_b = res_a.id, res_b.id
+        session_version = user.session_version
+
+    auth_token = security.create_access_token(
+        uid,
+        expires_delta=timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES),
+        session_version=session_version,
+    )
+    headers = {"Authorization": f"Bearer {auth_token}"}
+    results: list[tuple[int, object]] = []
+    lock = threading.Lock()
+
+    try:
+        with TestClient(app) as c:
+            c.headers.update(headers)
+
+            def _promote(target: uuid.UUID) -> None:
+                resp = c.post(f"{B}/resumes/{target}/set-default")
+                with lock:
+                    results.append((resp.status_code, resp.json()))
+
+            t1 = threading.Thread(target=_promote, args=(id_b,))
+            t2 = threading.Thread(target=_promote, args=(id_a,))
+            t1.start()
+            t2.start()
+            t1.join(timeout=20)
+            t2.join(timeout=20)
+            assert not t1.is_alive() and not t2.is_alive(), (
+                "deadlock: a swap request never completed"
+            )
+
+        statuses = sorted(r[0] for r in results)
+        assert statuses == [200, 200], results
+
+        with Session(engine) as s:
+            defaults = s.exec(
+                select(models.Resume)
+                .where(models.Resume.user_id == uid)
+                .where(models.Resume.tag == "DEFAULT")
+            ).all()
+            assert len(defaults) == 1, [
+                (r.id, r.tag)
+                for r in s.exec(
+                    select(models.Resume).where(models.Resume.user_id == uid)
+                ).all()
+            ]
+            assert defaults[0].id in (id_a, id_b)
+    finally:
+        with Session(engine) as s:
+            crud.delete_user_with_history(session=s, user_id=uid)
+            s.commit()

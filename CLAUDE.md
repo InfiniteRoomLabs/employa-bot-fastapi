@@ -33,13 +33,13 @@ bash scripts/lint.sh                     # mypy (strict) + ty + ruff check + ruf
 bash scripts/format.sh                   # ruff autofix + format
 ```
 
-DB-backed tests need postgres up. With the stack running, prefer:
+DB-backed tests need postgres up. With the stack running, run the suite on the HOST against the compose db (the backend image ships no `tests/` -- there is no in-container suite):
 
 ```bash
-docker compose exec backend bash scripts/tests-start.sh -x   # extra args forwarded to pytest
+POSTGRES_SERVER=localhost uv run pytest -q        # from backend/; extra args go straight to pytest
 ```
 
-From the repo root, `bash scripts/test.sh` builds and runs the whole stack from scratch, tests, then tears it down.
+From the repo root, `bash scripts/test.sh` builds and boots the stack from scratch, runs that same host suite, then tears everything down.
 
 Heads-up: the test suite's session fixture deletes **all users** in the dev DB at teardown; `docker compose up -d prestart` re-seeds `FIRST_SUPERUSER`.
 

@@ -361,3 +361,65 @@ def test_application_wire_round_trip_preserves_shape() -> None:
     row = wire_application_to_row(app, user_id=uuid.uuid4())
     back = row_to_wire_application(row)
     assert back.model_dump(mode="json") == app.model_dump(mode="json")
+
+
+# -------------------------------------------- archive tenancy (gate-0.1 GA-2)
+
+
+def test_get_archive_excludes_other_tenant(
+    db: Session, intruder_client: TestClient, seed_domain: SeededUsers
+) -> None:
+    """getArchive proves tenancy by EXCLUSION (the accepted D2-5 collection-op
+    shape): archived victim rows in both buckets are invisible to the
+    intruder. Closes gate-0.1 GA-2 for getArchive."""
+    won_job = _wire_job(company="ArchWonVictimCo")
+    rej_job = _wire_job(company="ArchRejVictimCo")
+    _insert_job(db, won_job, seed_domain.test_user.id)
+    _insert_job(db, rej_job, seed_domain.test_user.id)
+    won_app = _insert_application(
+        db,
+        user_id=seed_domain.test_user.id,
+        job_id=won_job.id,
+        stage="won",
+        version=2,
+        outcome="won",
+    )
+    rej_app = _insert_application(
+        db,
+        user_id=seed_domain.test_user.id,
+        job_id=rej_job.id,
+        stage="rejected",
+        version=2,
+        outcome="rejected",
+    )
+    victim_ids = {str(won_app.id), str(rej_app.id)}
+    for kind in ("won", "passed"):
+        resp = intruder_client.get(f"{B}/archive", params={"kind": kind})
+        assert resp.status_code == 200, resp.text
+        assert victim_ids.isdisjoint({a["id"] for a in resp.json()})
+
+
+def test_get_archive_counts_excludes_other_tenant(
+    db: Session, intruder_client: TestClient, seed_domain: SeededUsers
+) -> None:
+    """getArchiveCounts proves tenancy by EXCLUSION: the victim's archived
+    rows contribute nothing to the intruder's counts. Closes gate-0.1 GA-2
+    for getArchiveCounts."""
+    for company, stage, outcome in (
+        ("CntWonVictimCo", "won", "won"),
+        ("CntRejVictimCo", "rejected", "rejected"),
+        ("CntWdVictimCo", "withdrew", "withdrawn"),
+    ):
+        job = _wire_job(company=company)
+        _insert_job(db, job, seed_domain.test_user.id)
+        _insert_application(
+            db,
+            user_id=seed_domain.test_user.id,
+            job_id=job.id,
+            stage=stage,
+            version=2,
+            outcome=outcome,
+        )
+    resp = intruder_client.get(f"{B}/archive/counts")
+    assert resp.status_code == 200, resp.text
+    assert resp.json() == {"won": 0, "passed": 0}

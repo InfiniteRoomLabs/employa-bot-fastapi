@@ -94,9 +94,7 @@ def _current_month_budget(
     ).first()
 
 
-def _own_job(
-    session: TenantSession, user_id: UUID, job_id: UUID
-) -> models.Job | None:
+def _own_job(session: TenantSession, user_id: UUID, job_id: UUID) -> models.Job | None:
     return session.exec(
         select(models.Job)
         .where(models.Job.id == job_id)
