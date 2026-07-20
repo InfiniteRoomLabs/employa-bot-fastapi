@@ -11,34 +11,31 @@ approved_plan: docs/plans/full-stack-implementation-plan-v3.md
 process_spec: docs/plans/loop-research/sprint-treadmill-process.md
 progress_log: docs/progress.md
 consecutive_clean_reviews: 1
-status: BLOCKED
+status: COMPLETE
 ---
 
 # GOAL.md -- current executable work contract
 
 Operator runbook: this is the TERMINAL phase (gate-0.1-terminal-audit), a HUMAN DECISION checkpoint -- the Release 0.1 audit, NOT an implementation sprint. All five implementation sprints (01-05) have shipped: the founder journey (login -> job -> shortlist -> application+transitions+snapshot -> fake match score) is one abandonment-safe DB-backed vertical on master. The self-advance may NOT invent further work past this phase (Codex F11/terminal rule). At the audit: run the Codex release audit against the e2e journey + a fresh-clone drill + the incrementally-built AC traceability matrix; frozen ledger dispositions are ILLEGAL here (every open finding must reach fixed / disproved-with-evidence / waived-by-Wes). PASS -> set status: COMPLETE, remove the active work goal, summarize optional debt, stop -- NO retarget. FAIL -> status: BLOCKED with the failing evidence + a proposed repair scope written as options for Wes; the queue pre-approves ONE gate-0.1-repair transition (scoped to the audit's named failures only). A second FAIL is a HUMAN DECISION with no pre-approved path.
 
-## Goal -- Gate 0.1: Release 0.1 terminal audit
+## Release 0.1: COMPLETE (terminal audit PASS, 2026-07-20)
 
-> Do not stop until the Release 0.1 audit returns a recorded PASS/FAIL verdict with evidence and status is set (COMPLETE on PASS, BLOCKED on FAIL). This phase INVENTS NO implementation work -- it audits what sprints 01-05 shipped.
-> 1. Assemble -- the incremental AC traceability matrix (AC IDs minted at each sprint's S3, already in docs/sprints/sprint-0N-spec.md; never retro-fabricated) mapped to the passing tests; the full founder journey frontend/e2e/core-journey.spec.ts (login -> job -> shortlist -> application -> applied+snapshot -> fake match score) as the demo of record.
-> 2. Fresh-clone drill -- from a clean clone: `docker compose up -d --build --wait` (prestart seeds), `bash scripts/test.sh` (or the compose-exec suite), then `bunx playwright test` with the compose frontend stopped (DEBT-9 CSP note). Record the transcript + SHAs.
-> 3. Codex release audit (MUST) -- the falsifiable question: "Should this ship -- does the evidence demonstrate the founder journey end to end, from a clean clone, with no conjunct satisfied by letter-not-spirit?" Aimed at the whole cumulative vertical, not one sprint.
-> 4. Ledger -- every finding open at this terminal phase reaches fixed / disproved-with-evidence / waived-by-Wes (frozen is ILLEGAL, Codex F11). Carried debt (DEBT-6/8/9/10/11) is triaged: release-blocking -> a permitted stop for Wes; non-blocking -> recorded as optional post-0.1 debt.
-> Done when (TERMINAL schema): the release audit returns PASS with its evidence recorded (fresh-clone drill transcript + SHAs, core-journey green in CI at the audited master SHA, the AC traceability matrix complete), every ledger finding is at fixed / disproved-with-evidence / waived-by-Wes (no frozen), AND status: COMPLETE is set with NO retarget. COMPLETE on a FAIL audit is ILLEGAL.
-> Advisory questions and recorded defaults: none -- this is HUMAN DECISION. The ship/no-ship call and any waiver are Wes's.
-> Stop only for: the PASS/FAIL ship decision (HUMAN DECISION); any release-blocking finding requiring a PO waiver (options + evidence written to the ledger); a FAIL audit (-> BLOCKED + the pre-approved gate-0.1-repair scope).
+No approved phases remain in queue rev 1; no active work goal exists; NO retarget. The audit record is docs/audits/release-0.1-terminal-audit.md: original verdict FAIL (4 traceability failures, no product defect), Wes-authorized gate-0.1-repair (two passes; the re-audit caught the first pass's incomplete GA-3), re-audit PASS at master 9116800 (thread 019f6865). The founder journey was ruled proven-discriminating end to end from a clean clone. The ship/no-ship call on Release 0.1 itself is Wes's, made on that record.
+
+Optional post-0.1 debt (all triaged non-blocking; full table in the audit doc section 5): DEBT-1 in-memory throttle; DEBT-2 vite-dev CSP; DEBT-4 a11y findings; DEBT-5 mock-search fixture pools (retire with searches in 0.2); DEBT-6 autogenerate hand-strip; DEBT-7 none_as_null callout; DEBT-8 move-stage quick-action mockups; DEBT-9 prod-build font CSP; DEBT-10 real-provider settlement reconciliation (Phase-C entry criterion); DEBT-11 sprint-04 SECURITY DEFINER bare search_path (first post-0.1 fix per PR-13); DEBT-12 candidate: CI runs no lint job (the format drift the repair disclosed was invisible to master CI).
+
+Next work, when Wes ratifies it: the Release 0.2 browser-extension queue (docs/plans/browser-extension-plan-v1.md, DEC-EXT-001..004 recorded; entry criterion -- this COMPLETE state -- now satisfied), and the AI-integration / email-channel plans drafted from their deliberation syntheses.
 
 ## Completion evidence (gate-0.1 terminal audit -- filled when the audit runs)
 
 | Predicate | Evidence (commit SHA + exact command + exit status + durable output) | Verification command |
 |---|---|---|
-| fresh-clone drill | PASS at f43ffe3 (fresh GitHub clone, fresh compose project + volumes): prestart seeds -> demo login 200 -> backend `POSTGRES_SERVER=localhost uv run pytest -q` 535 passed -> frontend build + 323 unit passed -> `bunx playwright test` 36/36 incl. core-journey -> `down -v` clean; condensed transcript in docs/audits/release-0.1-terminal-audit.md section 3. CAVEAT (audit failure 3): the GOAL-mandated `scripts/test.sh` / compose-exec path is broken (image ships no tests/, GA-3); the suite ran via the canonical host recipe | docs/audits/release-0.1-terminal-audit.md section 3 |
+| fresh-clone drill | PASS at f43ffe3 (fresh GitHub clone, fresh compose project + volumes): prestart seeds -> demo login 200 -> backend `POSTGRES_SERVER=localhost uv run pytest -q` 535 passed -> frontend build + 323 unit passed -> `bunx playwright test` 36/36 incl. core-journey -> `down -v` clean; condensed transcript in docs/audits/release-0.1-terminal-audit.md section 3. GA-3 caveat RESOLVED by the repair: scripts/test.sh, CLAUDE.md, and backend/README.md now document the canonical host recipe (test-local.sh deleted) | docs/audits/release-0.1-terminal-audit.md sections 3 + 8 |
 | core-journey required in CI at the audited master SHA | all four workflows green at f83684b (Playwright run 29460780470 over the whole e2e dir), 1e61182, f43ffe3; NO branch-protection rule exists -- satisfied under the accepted process meaning per the Codex ruling (INFO, non-blocking) | gh run view 29460780470 |
-| AC traceability matrix complete | 75 ACs traced in docs/audits/release-0.1-terminal-audit.md section 2; 73 fully mapped, 2 GAP rows (sprint-04 AC-07b, AC-08) -> conjunct FAILED (audit failure 4) | manual read of the matrix |
-| ledger has no frozen finding | all findings across sprints 01-05 at fixed / disproved-with-evidence / waived-by-Wes; `grep frozen docs/progress.md` -> zero disposition cells. The four gate-0.1 audit findings are OPEN pending Wes (the failing evidence of the BLOCKED state, per the FAIL path) | manual read of docs/progress.md ledgers |
-| Codex release audit verdict | thread 019f6865-95f7-7e12-b00b-294099f32d69: **FAIL**, 4 exact named failures (GA-1, GA-2, GA-3, matrix-complete); journey/debt/CI-reading ruled non-blocking; full record in docs/audits/release-0.1-terminal-audit.md section 6 | read the audit doc |
-| terminal state set | status: BLOCKED + repair options for Wes (audit doc section 7); COMPLETE not set (illegal on FAIL); NO retarget | git show HEAD -- GOAL.md |
+| AC traceability matrix complete | 75/75 mapped after gate-0.1-repair (the two GAP rows name their repair tests); conjunct SATISFIED at 9116800 | manual read of the matrix |
+| ledger has no frozen finding | all findings across sprints 01-05 at fixed / disproved-with-evidence / waived-by-Wes; `grep frozen docs/progress.md` -> zero disposition cells. The four gate-0.1 audit findings (GA-1..4) are fixed via the Wes-authorized repair (evidence in their ledger rows); zero open, zero frozen | manual read of docs/progress.md ledgers |
+| Codex release audit verdict | thread 019f6865-95f7-7e12-b00b-294099f32d69: original FAIL (4 named failures) -> Wes-authorized repair (2 passes) -> re-audit **PASS** at master 9116800, "new blocking findings: none"; full record in audit doc sections 6-9 | read the audit doc |
+| terminal state set | status: COMPLETE on the PASS re-audit; active work goal removed; optional debt summarized; NO retarget | git show HEAD -- GOAL.md |
 
 Evidence binding: every row names the commit SHA it was produced against. The sprint-05-run-1 completion evidence (bound to merge SHA 3125d4b) is preserved in docs/progress.md's sprint-05 completed-sprint entry, not here -- this table is the terminal audit's own.
 

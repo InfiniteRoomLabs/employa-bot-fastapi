@@ -318,4 +318,6 @@ Verification at the repair tree: `POSTGRES_SERVER=localhost uv run pytest -q` ->
 
 ## 9. Re-audit verdict
 
-(recorded after the Codex reply round)
+**PASS** (same thread 019f6865-95f7-7e12-b00b-294099f32d69, 2026-07-20, judged against master 9116800). Two reply rounds: round 1 FAIL (GA-1/2/4 CLOSED; GA-3 still open -- backend/README.md and scripts/test-local.sh residues the first repair pass missed and this audit's own claim misstated); round 2 PASS after both residues closed. Verbatim final dispositions: AC-07b CLOSED (concurrent opposite-direction swaps discriminatingly tested); AC-08 CLOSED (explicit intruder exclusion coverage on both archive ops); drill path CLOSED (live contributor instructions use the working host recipe; broken legacy script deleted; remaining references are historical records); matrix CLOSED (75/75). "New blocking findings: none. The repaired tree at 9116800 satisfies the terminal audit's four named failures without introducing new implementation scope."
+
+Terminal state: **status: COMPLETE** set in GOAL.md with NO retarget. The ship/no-ship call on Release 0.1 itself remains Wes's, made on this record.
