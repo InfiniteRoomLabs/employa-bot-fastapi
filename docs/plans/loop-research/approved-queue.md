@@ -2,9 +2,9 @@
 
 Edited ONLY by Wes (PO). Every edit bumps `queue_revision`. Agents may read this file and copy rows verbatim into GOAL.md; they may never edit it. Governing process: `docs/plans/loop-research/sprint-treadmill-process.md`. Binding spec: `docs/plans/full-stack-implementation-plan-v3.md`.
 
-queue_revision: 1
-approved_by: Wes, 2026-07-13 (in-session approval of queue rev 1 as presented)
-terminal_phase: gate-0.1-terminal-audit
+queue_revision: 2
+approved_by: Wes, 2026-07-13 (rev 1); Wes, 2026-07-20 (rev 2 -- in-session approval of the Release 0.2 extension rows as presented in docs/plans/browser-extension-plan-v1.md section 9)
+terminal_phase: gate-0.2-terminal-audit
 
 ## PO decisions recorded at rev 1
 
@@ -13,6 +13,7 @@ terminal_phase: gate-0.1-terminal-audit
 3. No AUTONOMOUS rows exist at rev 1. Autonomy is earned via the sprint-03 promotion path, never granted by fiat.
 4. The v3 binding auth conventions are owned by sprint-01 packet P7 (Codex F6); no binding convention is left ownerless.
 5. gate-0.1-repair is pre-approved but may run ONLY after a FAIL terminal audit, scoped to the audit's named failures.
+6. (rev 2) Release 0.2 = the browser-extension increment per docs/plans/browser-extension-plan-v1.md; the four PO rulings DEC-EXT-001..004 are recorded there (2026-07-20) and are binding on every ext-* row. gate-0.2-repair mirrors the gate-0.1-repair rule.
 
 ## The queue
 
@@ -25,6 +26,13 @@ terminal_phase: gate-0.1-terminal-audit
 | sprint-05 | B4 fake AI seam | fake score persists + renders; reservation-cap two-connection test; journey extended to match score | ADVISORY | high: reservation arithmetic; append-only ai_run | high | D1+D2 |
 | gate-0.1 | Terminal audit | core-journey.spec.ts required in CI; fresh-clone drill | HUMAN DECISION, TERMINAL | -- | -- | release audit |
 | gate-0.1-repair | Pre-approved repair: may run ONLY after a FAIL audit, scoped to the audit's named failures, no new scope; returns to the terminal audit | audit's named failures closed with evidence | ADVISORY | -- | varies | per trigger function (derived from what the repair diff touches) |
+| ext-01 | Release 0.2: rulings + contract 89->93 | drift+manifest green; empty-regen-diff proof | HUMAN DECISION at S0, then ADVISORY | blocker: first contract revision under governance | med | D1 (fresh block) |
+| ext-02 | Token infrastructure + settings UI | exact RLS artifacts + both-direction probes + lifecycle suite green | ADVISORY | blocker: first pre-principal credential exemplar | high | D1+D2 |
+| ext-03 | Capture backend + Job relaxation | populated-migration proofs + dedup race + quota boundary + 5 ripple suites green | ADVISORY | blocker: only populated-table migration of the increment | high | D1+D2 |
+| ext-04 | MV3 extension client + extension CI | client CI green + minimizer fixtures + manual compose capture evidence | ADVISORY | blocker: first MV3 exemplar | med | D1 |
+| ext-05 | Integration hardening + chained e2e | 3 consecutive fresh-seed journey runs + token-leak + XSS sweeps + ledger terminal | ADVISORY | -- | med | none unless tripwire |
+| gate-0.2 | Terminal release audit | EXT AC matrix + fresh-clone drill + release audit | HUMAN DECISION, TERMINAL | -- | -- | release audit |
+| gate-0.2-repair | Pre-approved repair, only after a FAIL, scoped to named failures | named failures closed | ADVISORY | -- | varies | per trigger |
 
 ## Advisory questions + recorded defaults
 
@@ -50,3 +58,4 @@ A question with no recorded default is a HUMAN DECISION. ADVISORY phases apply t
 ## Change log
 
 - rev 1 (2026-07-13): initial queue, approved by Wes in session. Derived from plan v3 Release 0.1 with the two structural PO decisions above (0+A merge, B3 atomic).
+- rev 2 (2026-07-20): Release 0.2 extension rows (ext-01..gate-0.2-repair) appended per docs/plans/browser-extension-plan-v1.md. Approved by Wes in session ("LGTM" on the plan + explicit direction to commit); the edit was executed by the session agent at his direction with the row content he reviewed verbatim -- recorded here because the standing rule is Wes-only edits.
