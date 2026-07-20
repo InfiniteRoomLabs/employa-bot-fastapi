@@ -175,19 +175,19 @@ If you use GitHub Actions the tests will run automatically.
 
 ### Test running stack
 
-If your stack is already up and you just want to run the tests, you can use:
+If your stack is already up and you just want to run the tests, run them on the HOST against the compose db (the backend image intentionally ships no `tests/`, so there is no in-container suite):
 
 ```bash
-docker compose exec backend bash scripts/tests-start.sh
+cd backend && POSTGRES_SERVER=localhost uv run pytest
 ```
 
-That `/app/scripts/tests-start.sh` script just calls `pytest` after making sure that the rest of the stack is running. If you need to pass extra arguments to `pytest`, you can pass them to that command and they will be forwarded.
-
-For example, to stop on first error:
+Extra arguments go straight to `pytest`. For example, to stop on first error:
 
 ```bash
-docker compose exec backend bash scripts/tests-start.sh -x
+cd backend && POSTGRES_SERVER=localhost uv run pytest -x
 ```
+
+(`scripts/tests-start.sh` is the CI/host wrapper `test-backend.yml` uses -- it waits for the DB, then calls `pytest` with coverage. It only works where `tests/` exists, i.e. on the host, never via `docker compose exec`.)
 
 ### Test Coverage
 
